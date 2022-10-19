@@ -26,8 +26,10 @@ p = AcousticScenarioParameters(
 
 def main():
 
+    # Get acoustic scenario, signals (`room.mic_array.signals`), and VAD
     room, vad = ut.build_room(p)
 
+    # Plot signals (and VAD)
     ut.plot_mic_sigs(room, vad)
 
     stop = 1

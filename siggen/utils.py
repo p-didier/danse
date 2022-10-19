@@ -1,14 +1,16 @@
 
+import copy
+import librosa
+import resampy
+import numpy as np
+import pickle, gzip
+from numba import njit
+import scipy.signal as sig
 import pyroomacoustics as pra
 import matplotlib.pyplot as plt
-import resampy
-from . import classes
-from numba import njit
-import numpy as np
-import librosa
+from danse.siggen import classes
 from scipy.spatial.transform import Rotation as rot
-import pickle, gzip
-import scipy.signal as sig
+
 
 def build_room(p: classes.AcousticScenarioParameters):
     """
@@ -80,6 +82,9 @@ def build_room(p: classes.AcousticScenarioParameters):
 
     room.compute_rir()
     room.simulate()
+
+    # Truncate signals (no need for reverb tail)
+    room.mic_array.signals = room.mic_array.signals[:, :int(p.fs * p.sigDur)]
 
     # Extract 1 set of desired source RIRs per node
     rirsNodes = []
@@ -211,21 +216,26 @@ def export_asc(room: pra.room.ShoeBox, path):
 
 
 def oracleVAD(x,tw,thrs,Fs):
-    # oracleVAD -- Oracle Voice Activity Detection (VAD) function. Returns the
-    # oracle VAD for a given speech (+ background noise) signal <x>.
-    # Based on the computation of the short-time signal energy.
-    #
-    # >>> Inputs:
-    # -x [N*1 float vector, -] - Time-domain signal.
-    # -tw [float, s] - VAD window length.
-    # -thrs [float, [<x>]^2] - Energy threshold.
-    # -Fs [int, samples/s] - Sampling frequency.
-    # >>> Outputs:
-    # -oVAD [N*1 binary vector] - Oracle VAD corresponding to <x>.
+    """
+    Oracle Voice Activity Detection (VAD) function. Returns the
+    oracle VAD for a given speech (+ background noise) signal <x>.
+    Based on the computation of the short-time signal energy.
+    
+    Parameters
+    ----------
+    -x [N*1 float vector, -] - Time-domain signal.
+    -tw [float, s] - VAD window length.
+    -thrs [float, [<x>]^2] - Energy threshold.
+    -Fs [int, samples/s] - Sampling frequency.
+    
+    Returns
+    -------
+    -oVAD [N*1 binary vector] - Oracle VAD corresponding to <x>.
 
-    # (c) Paul Didier - 13-Sept-2021
-    # SOUNDS ETN - KU Leuven ESAT STADIUS
-    # ------------------------------------
+    (c) Paul Didier - 13-Sept-2021
+    SOUNDS ETN - KU Leuven ESAT STADIUS
+    ------------------------------------
+    """
 
     # Check input format
     x = np.array(x)     # Ensure it is an array
@@ -263,11 +273,13 @@ def oracleVAD(x,tw,thrs,Fs):
 
 @njit
 def compute_VAD(chunk_x,thrs):
-    # JIT-ed time-domain VAD computation
-    #
-    # (c) Paul Didier - 6-Oct-2021
-    # SOUNDS ETN - KU Leuven ESAT STADIUS
-    # ------------------------------------
+    """
+    JIT-ed time-domain VAD computation
+    
+    (c) Paul Didier - 6-Oct-2021
+    SOUNDS ETN - KU Leuven ESAT STADIUS
+    ------------------------------------
+    """
     # Compute short-term signal energy
     E = np.mean(np.abs(chunk_x)**2)
     # Assign VAD value
@@ -276,3 +288,160 @@ def compute_VAD(chunk_x,thrs):
     else:
         VADout = 0
     return VADout
+
+
+def build_wasn(room: pra.room.ShoeBox, vad, p: classes.WASNparameters):
+    """
+    Build WASN from parameters (including asynchronicities and topology).
+    """
+
+    # Create network topological map (inter-node links)
+    neighbors = get_topo(p.topologyType, p.nNodes)
+
+    myWASN = []
+    for k in range(p.nNodes):
+        # Apply asynchronicities
+        sigs, t, fsSRO = apply_asynchronicity_at_node(
+            y=room.mic_array.signals[p.sensorToNodeIndices == k, :].T,
+            fs=p.fs,
+            sro=p.SROperNode[k],
+            sto=0.
+        )
+        # Create node
+        node = classes.Node(
+            nSensors=p.nSensorPerNode[k],
+            fs=fsSRO,
+            data=sigs,
+            timeStamps=t,
+            neighborsIdx=neighbors[k],
+            vad=vad[:, k, :]
+        )
+        # Add to WASN
+        myWASN.append(node)
+
+    return myWASN
+
+
+def apply_asynchronicity_at_node(y, fs, sro=0., sto=0.):
+    """
+    Apply asynchronicities (SROs and STOs) to the signals
+    at the current node.
+
+    Parameters
+    ----------
+    y : [N x M] np.ndarray (float)
+        Time-domain signal(s) at node's `M` sensor(s).
+    fs : float or int
+        Nominal sampling frequency of node [Hz].
+    sro : float or int
+        Sampling rate offset with respect to
+        the reference node in the WASN [PPM].
+    sto : float
+        Sampling time offset with respect to
+        the reference node in the WASN [s].
+
+    Returns
+    -------
+    xResamp : [N x M] np.ndarray (float)
+        Resampled (and truncated /or/ padded) signals
+    t : [N x 1] np.ndarray (float)
+        Corresponding resampled time stamp vector.
+    fsSRO : float
+        True (SRO-affected nominal) sampling frequency [Hz].
+    """
+
+    yAsync = np.zeros_like(y)
+    nSensors = y.shape[-1]
+    for ii in range(nSensors):
+        ycurr = y[:, ii]
+        # Apply SRO
+        yAsync[:, ii], t, fsSRO = resample_for_sro(ycurr, fs, sro)
+        # Apply STO
+        #TODO
+
+    return yAsync, t, fsSRO
+
+
+def get_topo(topoType, K):
+    """
+    Create inter-node connections matrix 
+    depending on the type of WASN topology,
+    and prepare corresponding lists of node-
+    specific neighbors.
+
+    Parameters
+    ----------
+    topoType : str 
+        Topology type.
+    K : int
+        Number of nodes in the WASN.
+
+    Returns
+    -------
+    neighbors : [K x 1] list of [variable-dim x 1] np.ndarray (int)
+        Node-specific lists of neighbor nodes indices.
+    """
+
+    # Connectivity matrix. 
+    # If `{topo}_{i,j} == 0`: nodes `i` and `j` are not connected.
+    # If `{topo}_{i,j} == 1`: nodes `i` and `j` can communicate with each other.
+    # TODO vvv oriented graph
+    # If `{topo}_{i,j} == 2`: nodes `i` can send data to node `j` but not vice-versa.
+    # If `{topo}_{i,j} == 3`: nodes `j` can send data to node `i` but not vice-versa.
+    if topoType == 'fully-connected':
+        topo = np.ones((K, K), dtype=int)
+    else:
+        raise ValueError(f'Topology type "{topoType}" not implemented yet.')
+
+    # Get node-specific lists of neighbor nodes indices
+    allNodes = np.arange(K)
+    neighbors = [allNodes[(topo[:, k] > 0) & (allNodes != k)] for k in range(K)]
+
+    return neighbors
+
+
+
+def resample_for_sro(x, baseFs, SROppm):
+    """Resamples a vector given an SRO and a base sampling frequency.
+
+    Parameters
+    ----------
+    x : [N x 1] np.ndarray (float)
+        Time-domain signal to be resampled.
+    baseFs : float or int
+        Base sampling frequency [samples/s].
+    SROppm : float
+        SRO [ppm].
+
+    Returns
+    -------
+    xResamp : [N x 1] np.ndarray (float)
+        Resampled signal
+    t : [N x 1] np.ndarray (float)
+        Corresponding resampled time stamp vector.
+    fsSRO : float
+        Re-sampled signal's sampling frequency [Hz].
+    """
+
+    fsSRO = baseFs * (1 + SROppm / 1e6)
+    if baseFs != fsSRO:
+        xResamp = resampy.core.resample(x, baseFs, fsSRO)
+    else:
+        xResamp = copy.copy(x)
+
+    t = np.arange(len(xResamp)) / fsSRO
+
+    if len(xResamp) >= len(x):
+        xResamp = xResamp[:len(x)]
+        t = t[:len(x)]
+    else:
+        # Extend time stamps vector
+        dt = t[1] - t[0]
+        tadd = np.linspace(t[-1]+dt, t[-1]+dt*(len(x) - len(xResamp)), len(x) - len(xResamp))
+        t = np.concatenate((t, tadd))
+        # Append zeros
+        xResamp = np.concatenate((xResamp, np.zeros(len(x) - len(xResamp))))
+
+    return xResamp, t, fsSRO
+
+
