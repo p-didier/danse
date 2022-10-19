@@ -761,19 +761,62 @@ def account_for_flags(yLocalCurr, k, dv: DANSEvariables, p: DANSEparameters, t):
                 dv.bufferFlags[k][dv.DANSEiter[k], q] * p.broadcastLength
             # ↑↑↑ if `bufferFlags[k][i[k], q] == 0`, `extraPhaseShiftFactor = 0` and no additional phase shift is applied
             if dv.bufferFlags[k][dv.DANSEiter[k], q] != 0:
-                flagIterations[k].append(dv.DANSEiter[k])  # keep flagging iterations in memory
-                flagInstants[k].append(t)       # keep flagging instants in memory
+                dv.flagIterations[k].append(dv.DANSEiter[k])  # keep flagging iterations in memory
+                dv.flagInstants[k].append(t)       # keep flagging instants in memory
         else:
             # From `process_incoming_signals_buffers`: "Not enough samples anymore due to cumulated SROs effect, skip update"
             skipUpdate = True
     # Save uncompensated \tilde{y} for coherence-drift-based SRO estimation
-    ytildeHatUncomp[k][:, dv.DANSEiter[k], :] = copy.copy(ytildeHat[k][:, dv.DANSEiter[k], :])
-    yyHuncomp[k][dv.DANSEiter[k], :, :, :] = np.einsum('ij,ik->ijk', ytildeHatUncomp[k][:, dv.DANSEiter[k], :], ytildeHatUncomp[k][:, i[k], :].conj())
+    dv.yTildeHatUncomp[k][:, dv.DANSEiter[k], :] = copy.copy(dv.yTildeHat[k][:, dv.DANSEiter[k], :])
+    dv.yyHuncomp[k][dv.DANSEiter[k], :, :, :] = np.einsum(
+        'ij,ik->ijk',
+        dv.yTildeHatUncomp[k][:, dv.DANSEiter[k], :],
+        dv.yTildeHatUncomp[k][:, dv.DANSEiter[k], :].conj()
+    )
     # Compensate SROs
-    if params.compensateSROs:
+    if p.compensateSROs:
         # Complete phase shift factors
-        phaseShiftFactors[k] += extraPhaseShiftFactor
+        dv.phaseShiftFactors[k] += extraPhaseShiftFactor
         if k == 0:  # Save for plotting
-            phaseShiftFactorThroughTime[dv.DANSEiter[k]:] = phaseShiftFactors[k][yLocalCurr.shape[-1] + q]
+            dv.phaseShiftFactorThroughTime[dv.DANSEiter[k]:] = dv.phaseShiftFactors[k][yLocalCurr.shape[-1] + q]
         # Apply phase shift factors
-        ytildeHat[k][:, dv.DANSEiter[k], :] *= np.exp(-1 * 1j * 2 * np.pi / p.DFTsize * np.outer(np.arange(numFreqLines), phaseShiftFactors[k]))
+        dv.yTildeHat[k][:, dv.DANSEiter[k], :] *=\
+            np.exp(-1 * 1j * 2 * np.pi / p.DFTsize *\
+                np.outer(np.arange(dv.nPosFreqs), dv.phaseShiftFactors[k]))
+
+    return dv, skipUpdate
+
+
+def spatial_covariance_matrix_update(y, Ryy, Rnn, beta, vad):
+    """Helper function: performs the spatial covariance matrices updates.
+    
+    Parameters
+    ----------
+    y : [N x M] np.ndarray (real or complex)
+        Current input data chunk (if complex: in the frequency domain).
+    Ryy : [N x M x M] np.ndarray (real or complex)
+        Previous Ryy matrices (for each time frame /or/ each frequency line).
+    Rnn : [N x M x M] np.ndarray (real or complex)
+        Previous Rnn matrices (for each time frame /or/ each frequency line).
+    beta : float (0 <= beta <= 1)
+        Exponential averaging forgetting factor.
+    vad : bool
+        If True (=1), Ryy is updated. Otherwise, Rnn is updated.
+    
+    Returns
+    -------
+    Ryy : [N x M x M] np.ndarray (real or complex)
+        New Ryy matrices (for each time frame /or/ each frequency line).
+    Rnn : [N x M x M] np.ndarray (real or complex)
+        New Rnn matrices (for each time frame /or/ each frequency line).
+    yyH : [N x M x M] np.ndarray (real or complex)
+        Instantaneous correlation outer product.
+    """
+    yyH = np.einsum('ij,ik->ijk', y, y.conj())
+
+    if vad:
+        Ryy = beta * Ryy + (1 - beta) * yyH  # update signal + noise matrix
+    else:     
+        Rnn = beta * Rnn + (1 - beta) * yyH  # update noise-only matrix
+
+    return Ryy, Rnn, yyH

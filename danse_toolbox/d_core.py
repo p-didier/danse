@@ -212,8 +212,75 @@ def update_and_estimate(yk, tCurr, fs, k,
     # Construct `\tilde{y}_k` in frequency domain
     dv, yLocalCurr = build_ytilde(yk, tCurr, fs, k, dv, params)
     # Account for buffer flags
-    account_for_flags(yLocalCurr, k, dv, params, tCurr)
+    dv, skipUpdate = account_for_flags(yLocalCurr, k, dv, params, tCurr)
+    # Ryy and Rnn updates
+    dv.Ryytilde[k], dv.Rnntilde[k], dv.yyH[k][dv.DANSEiter[k], :, :, :] =\
+        spatial_covariance_matrix_update(
+            dv.yTildeHat[k][:, dv.DANSEiter[k], :],
+            dv.Ryytilde[k],
+            dv.Rnntilde[k],
+            dv.expAvgBeta[k],
+            dv.oVADframes[dv.DANSEiter[k]]
+        )
+    
+    # Check quality of autocorrelations estimates 
+    # -- once we start updating, do not check anymore.
+    if not dv.startUpdates[k] and \
+        dv.numUpdatesRyy[k] > np.amax(dv.dimYTilde) and \
+            dv.numUpdatesRnn[k] > np.amax(dv.dimYTilde):
+        dv.startUpdates[k] = True
 
+    if dv.startUpdates[k] and not params.bypassFilterUpdates and not skipUpdate:
+        if k == params.referenceSensor and dv.nInternalFilterUpdates[k] == 0:
+            # Save first update instant (for, e.g., SRO plot)
+            firstDANSEupdateRefSensor = tCurr
+        # No `for`-loop versions 
+        if params.performGEVD:    # GEVD update
+            dv.wTilde[k][:, dv.DANSEiter[k] + 1, :], _ = perform_gevd_noforloop(
+                dv.Ryytilde[k],
+                dv.Rnntilde[k],
+                params.GEVDrank,
+                params.referenceSensor
+            )
+        else:                       # regular update (no GEVD)
+            dv.wTilde[k][:, dv.DANSEiter[k] + 1, :] = perform_update_noforloop(
+                dv.Ryytilde[k],
+                dv.Rnntilde[k],
+                params.referenceSensor
+            )
+        # Count the number of internal filter updates
+        dv.nInternalFilterUpdates[k] += 1  
+
+        # TODO: improve this ugly bit vvvv
+        # # Useful export for enhancement metrics computations
+        # if dv.nInternalFilterUpdates[k] >= s.minFiltUpdatesForMetricsComputation and\
+        #     tStartForMetrics[k] is None:
+        #     if s.asynchronicity.compensateSROs and s.asynchronicity.estimateSROs == 'CohDrift':
+        #         # Make sure SRO compensation has started
+        #         if nInternalFilterUpdates[k] > s.asynchronicity.cohDriftMethod.startAfterNupdates:
+        #             tStartForMetrics[k] = t
+        #     else:
+        #         tStartForMetrics[k] = t
+    else:
+        # Do not update the filter coefficients
+        dv.wTilde[k][:, dv.DANSEiter[k] + 1, :] = dv.wTilde[k][:, dv.DANSEiter[k], :]
+        if skipUpdate:
+            print(f'Node {k+1}: {dv.DANSEiter[k] + 1}^th update skipped.')
+    if params.bypassFilterUpdates:
+        print('!! User-forced bypass of filter coefficients updates !!')
+
+    # ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓  Update external filters (for broadcasting)  ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
+    dv.wTildeExt[k] = dv.expAvgBeta[k] * dv.wTildeExt[k] +\
+        (1 - dv.expAvgBeta[k]) *  dv.wTildeExtTarget[k]
+    # Update targets
+    # TODO:TODO:TODO:TODO: stopped here on 19.10.2022
+    # if tCurr - lastExternalFiltUpdateInstant[k] >= s.timeBtwExternalFiltUpdates:
+    #     wTildeExternalTarget[k] = (1 - alphaExternalFilters) * wTildeExternalTarget[k] + alphaExternalFilters * wTilde[k][:, i[k] + 1, :yLocalCurr.shape[-1]]
+    #     # Update last external filter update instant [s]
+    #     lastExternalFiltUpdateInstant[k] = tCurr
+    #     if s.printouts.externalFilterUpdates:    # inform user
+    #         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {s.timeBtwExternalFiltUpdates}s)')
+    # ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑  Update external filters (for broadcasting)  ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 
 
     stop = 1
@@ -399,3 +466,88 @@ def dist_fct_approx(wHat, h, f, R, jitted=True):
     wIR_out /= R
 
     return wIR_out
+
+
+def perform_gevd_noforloop(Ryy, Rnn, rank=1, refSensorIdx=0):
+    """GEVD computations for DANSE, `for`-loop free.
+    
+    Parameters
+    ----------
+    Ryy : [M x N x N] np.ndarray (complex)
+        Autocorrelation matrix between the sensor signals.
+    Rnn : [M x N x N] np.ndarray (complex)
+        Autocorrelation matrix between the noise signals.
+    rank : int
+        GEVD rank approximation.
+    refSensorIdx : int
+        Index of the reference sensor (>=0).
+
+    Returns
+    -------
+    w : [M x N] np.ndarray (complex)
+        GEVD-DANSE filter coefficients.
+    Qmat : [M x N x N] np.ndarray (complex)
+        Hermitian conjugate inverse of the generalized eigenvectors matrix of the pencil {Ryy, Rnn}.
+    Xmat : [M x N x N] np.ndarray (complex)
+        Qeneralized eigenvectors matrix of the pencil {Ryy, Rnn}.
+    """
+    # ------------ for-loop-free estimate ------------
+    n = Ryy.shape[-1]
+    nFreqs = Ryy.shape[0]
+    # Reference sensor selection vector 
+    Evect = np.zeros((n,))
+    Evect[refSensorIdx] = 1
+
+    sigma = np.zeros((nFreqs, n))
+    Xmat = np.zeros((nFreqs, n, n), dtype=complex)
+
+    # t0 = time.perf_counter()
+    for kappa in range(nFreqs):
+        # Perform generalized eigenvalue decomposition -- as of 2022/02/17: scipy.linalg.eigh() seemingly cannot be jitted nor vectorized
+        sigmacurr, Xmatcurr = sla.eigh(Ryy[kappa, :, :], Rnn[kappa, :, :], check_finite=False, driver='gvd')
+        # Flip Xmat to sort eigenvalues in descending order
+        idx = np.flip(np.argsort(sigmacurr))
+        sigma[kappa, :] = sigmacurr[idx]
+        Xmat[kappa, :, :] = Xmatcurr[:, idx]
+
+    Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0,2,1]))
+    # GEVLs tensor
+    Dmat = np.zeros((nFreqs, n, n))
+    for ii in range(rank):
+        Dmat[:, ii, ii] = np.squeeze(1 - 1/sigma[:, ii])
+    # LMMSE weights
+    Qhermitian = np.transpose(Qmat.conj(), axes=[0,2,1])
+    w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
+
+    return w, Qmat
+
+
+def perform_update_noforloop(Ryy, Rnn, refSensorIdx=0):
+    """Regular DANSE update computations, `for`-loop free.
+    No GEVD involved here.
+    
+    Parameters
+    ----------
+    Ryy : [M x N x N] np.ndarray (complex)
+        Autocorrelation matrix between the sensor signals.
+    Rnn : [M x N x N] np.ndarray (complex)
+        Autocorrelation matrix between the noise signals.
+    refSensorIdx : int
+        Index of the reference sensor (>=0).
+
+    Returns
+    -------
+    w : [M x N] np.ndarray (complex)
+        Regular DANSE filter coefficients.
+    """
+    # Reference sensor selection vector
+    Evect = np.zeros((Ryy.shape[-1],))
+    Evect[refSensorIdx] = 1
+
+    # Cross-correlation matrix update 
+    ryd = np.matmul(Ryy - Rnn, Evect)
+    # Update node-specific parameters of node k
+    Ryyinv = np.linalg.inv(Ryy)
+    w = np.matmul(Ryyinv, ryd[:,:,np.newaxis])
+    w = w[:, :, 0]  # get rid of singleton dimension
+    return w

@@ -12,14 +12,11 @@ from danse.siggen import classes
 from scipy.spatial.transform import Rotation as rot
 
 
-def build_room(p: classes.AcousticScenarioParameters):
+def build_room(p: classes.WASNparameters):
     """
     Builds room, adds nodes and sources, simulates RIRs
     and computes microphone signals.
     """
-
-    # Random generator
-    rng = np.random.default_rng(p.seed)
 
     # Room
     room = pra.ShoeBox(
@@ -32,14 +29,13 @@ def build_room(p: classes.AcousticScenarioParameters):
 
     for k in range(p.nNodes):
         # Generate node and sensors
-        r = rng.uniform(size=(3,)) * (p.rd - 2 * p.minDistToWalls)\
+        r = np.random.uniform(size=(3,)) * (p.rd - 2 * p.minDistToWalls)\
             + p.minDistToWalls # node centre coordinates
         sensorsCoords = generate_array_pos(
                     r,
                     p.nSensorPerNode[k],
                     p.arrayGeometry,
-                    p.interSensorDist,
-                    rng
+                    p.interSensorDist
                     )
         room.add_microphone_array(sensorsCoords.T)
 
@@ -56,7 +52,7 @@ def build_room(p: classes.AcousticScenarioParameters):
         y = (y - np.mean(y)) / np.std(y)  # whiten
         desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
         ssrc = pra.soundsource.SoundSource(
-            position=rng.uniform(size=(3,))* (p.rd - 2 * p.minDistToWalls)\
+            position=np.random.uniform(size=(3,))* (p.rd - 2 * p.minDistToWalls)\
                 + p.minDistToWalls, # source coordinates
             signal=y
         )
@@ -74,7 +70,7 @@ def build_room(p: classes.AcousticScenarioParameters):
         y = (y - np.mean(y)) / np.std(y)    # whiten
         y *= 10 ** (-p.baseSNR / 20)        # gain
         ssrc = pra.soundsource.SoundSource(
-            position=rng.uniform(size=(3,))* (p.rd - 2 * p.minDistToWalls)\
+            position=np.random.uniform(size=(3,))* (p.rd - 2 * p.minDistToWalls)\
                 + p.minDistToWalls, # source coordinates
             signal=y
         )
@@ -130,7 +126,7 @@ def plot_mic_sigs(room: pra.room.ShoeBox, vad=None):
     plt.show()
 
 
-def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, randGenerator, force2D=False):
+def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, force2D=False):
     """Define node positions based on node position, number of nodes, and array type
 
     Parameters
@@ -138,8 +134,6 @@ def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, randGenerator, force2D
     nodeCoords : [J x 3] array of real floats.
         Nodes coordinates in 3-D space [m].
     TODO:
-    randGenerator : NumPy random generator.
-        Random generator with pre-specified seed.
     force2D : bool.
         If true, projects the sensor coordinates on the z=0 plane.
 
@@ -159,7 +153,7 @@ def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, randGenerator, force2D
         sensorCoordsBeforeRot[:,0] = x
         
         # Rotate in 3D through randomized rotation vector 
-        rotvec = randGenerator.uniform(low=0, high=1, size=(3,))
+        rotvec = np.random.uniform(low=0, high=1, size=(3,))
         if force2D:
             rotvec[1:2] = 0
         sensorCoords = np.zeros_like(sensorCoordsBeforeRot)
@@ -172,7 +166,7 @@ def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, randGenerator, force2D
         for ii in range(Mk):
             flag = False
             while not flag:
-                r = randGenerator.uniform(low=0, high=radius, size=(3,))
+                r = np.random.uniform(low=0, high=radius, size=(3,))
                 if np.sqrt(r[0]**2 + r[1]**2 + r[2]**2) <= radius:
                     sensorCoords[ii, :] = r + nodeCoords - radius/2
                     flag = True
@@ -316,6 +310,7 @@ def build_wasn(room: pra.room.ShoeBox, vad, p: classes.WASNparameters):
             neighborsIdx=neighbors[k],
             vad=vad[:, k, :]
         )
+        
         # Add to WASN
         myWASN.append(node)
 

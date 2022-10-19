@@ -27,7 +27,6 @@ class AcousticScenarioParameters:
     #
     nNodes: int = 1        # number of nodes in scenario
     nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node
-    seed: int = 12345      # random generators seed
 
 
 @dataclass
@@ -53,3 +52,5 @@ class Node:
     timeStamps: np.ndarray = np.array([])
     neighborsIdx: np.ndarray = np.array([])
     vad: np.ndarray = np.array([])
+    beta: float = 1.    # exponential averaging (forgetting factor)
+                        # for Ryy and Rnn updates at this node

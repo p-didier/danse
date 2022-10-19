@@ -11,6 +11,7 @@ PATHTOROOT = pathToRoot
 SIGNALSPATH = f'{PATHTOROOT}/02_data/00_raw_signals'
 
 import numpy as np
+import random
 from danse.siggen.classes import *
 import danse.siggen.utils as sig_ut
 import danse.danse_toolbox.d_base as base
@@ -32,16 +33,20 @@ class TestParameters:
     #
     wasn: WASNparameters = WASNparameters()
     danseParams: DANSEparameters = DANSEparameters()
+    #
+    seed: int = 12345
 
     def __post_init__(self):
+        np.random.seed(self.seed)  # set random seed
+        random.seed(self.seed)  # set random seed
+        #
         self.testid = f'J{self.wasn.nNodes}Mk{list(self.wasn.nSensorPerNode)}Nn{self.wasn.nNoiseSources}Nd{self.wasn.nDesiredSources}T60_{int(self.wasn.t60)*1e3}ms'
 
 
 def main():
 
     p = TestParameters(
-        selfnoiseSNR=-99,
-        referenceSensor=0,
+        selfnoiseSNR=-99,  # TODO:
         wasn=WASNparameters(
             rd=np.array([5, 5, 5]),
             fs=16000,
@@ -53,6 +58,7 @@ def main():
             SROperNode=np.array([0., 0.])
         ),
         danseParams=DANSEparameters(
+            referenceSensor=0,
             DFTsize=1024,
             WOLAovlp=.5
         )
@@ -82,6 +88,10 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
             Ns=p.danseParams.Ns,
             t=wasn[k].timeStamps
         )
+
+        # Derive exponential averaging for Ryy and Rnn
+        wasn[k].beta = np.exp(np.log(0.5) / \
+            (p.danseParams.t_expAvg50p * wasn[k].fs / p.danseParams.Ns))
 
     # Launch DANSE
     out = core.danse(wasn, p.danseParams)
