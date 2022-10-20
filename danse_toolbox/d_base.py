@@ -4,18 +4,19 @@
 # ~created on 19.10.2022 by Paul Didier
 
 import copy
-from platform import node
 import numpy as np
+from numba import njit
+import scipy.linalg as sla
 from danse.danse_toolbox.d_classes import *
-from danse.danse_toolbox.d_core import dist_fct_approx
 from scipy.signal._arraytools import zero_ext
 
 
 def prep_sigs_for_FFT(y, N, Ns, t):
     """
-    Zero-padding and signals length adaptation to ensure correct FFT/IFFT operation.
-    Based on FFT implementation by `scipy.signal` module.
-    -- Based on `prep_for_ffts` by Paul Didier (`01_algorithms/01_NR/02_distributed/danse_utilities/setup.py`)
+    Zero-padding and signals length adaptation to ensure correct
+    FFT/IFFT operation. Based on FFT implementation by `scipy.signal` module.
+    -- Based on `prep_for_ffts` by Paul Didier
+    (`01_algorithms/01_NR/02_distributed/danse_utilities/setup.py`).
     
     Parameters
     ----------
@@ -40,22 +41,28 @@ def prep_sigs_for_FFT(y, N, Ns, t):
         frame-extension (step 2 below).
     """
 
-    # 1) Extend signal on both ends to ensure that the first frame is centred on t = 0 -- see <scipy.signal.stft>'s `boundary` argument (default: `zeros`)
+    # 1) Extend signal on both ends to ensure that the first frame is centred
+    # at t = 0 -- see <scipy.signal.stft>'s `boundary` argument
+    # (default: `zeros`).
     y = zero_ext(y, N // 2, axis=0)
     # --- Also adapt timeInstants vector
-    dt = np.diff(t)[0]   # delta t between each time instant   # TODO what if clock jitter?
-    tpre = np.linspace(start= - dt * (N // 2), stop=-dt, num=N // 2)
-    tpost = np.linspace(start= t[-1] + dt, stop=t[-1] + dt * (N // 2), num=N // 2)
+    # TODO: what if clock jitter?
+    dt = np.diff(t)[0]   # delta t between each time instant
+    tpre = np.linspace(start=-dt*(N//2), stop=-dt, num=N//2)
+    tpost = np.linspace(start=t[-1]+dt, stop=t[-1]+dt*(N//2), num=N//2)
     t = np.concatenate((tpre, t, tpost), axis=0)
 
-    # 2) Zero-pad signal if necessary to include an integer number of frames in the signal
+    # 2) Zero-pad signal if necessary to include an
+    # integer number of frames in the signal.
     nadd = 0
     if not (y.shape[0] - N) % Ns == 0:
-        nadd = (-(y.shape[0] - N) % Ns) % N  # see <scipy.signal.stft>'s `padded` argument (default: `True`)
+        # vvv See <scipy.signal.stft>'s `padded` argument (default: `True`)
+        nadd = (-(y.shape[0] - N) % Ns) % N
         print(f'Padding {nadd} zeros to the signals in order to fit FFT size')
         y = np.concatenate((y, np.zeros([nadd, y.shape[-1]])), axis=0)
         # Adapt time vector too
-        tzp = np.linspace(start=t[-1] + dt, stop=t[-1] + dt * nadd, num=nadd)     # TODO what if clock jitter?
+        # TODO: what if clock jitter?
+        tzp = np.linspace(start=t[-1] + dt, stop=t[-1] + dt * nadd, num=nadd)
         t = np.concatenate((t, tzp), axis=0)
         if not (y.shape[0] - N) % Ns == 0:   # double-check
             raise ValueError('There is a problem with the zero-padding...')
@@ -67,43 +74,32 @@ def prep_sigs_for_FFT(y, N, Ns, t):
     return yout, tout, nadd
 
 
-def initialize_events(timeInstants, N, Ns, L, bd, efficient=False):
-    """Returns the matrix the columns of which to loop over in SRO-affected simultaneous DANSE.
-    For each event instant, the matrix contains the instant itself (in [s]),
-    the node indices concerned by this instant, and the corresponding event
-    flag: "0" for broadcast, "1" for update, "2" for end of signal. 
+def initialize_events(timeInstants, p: DANSEparameters):
+    """
+    Returns the matrix the columns of which to loop over in SRO-affected
+    simultaneous DANSE. For each event instant, the matrix contains the instant
+    itself (in [s]), the node indices concerned by this instant, and the
+    corresponding event type ("bc" for broadcast, "up" for update).
     
     Parameters
     ----------
     timeInstants : [Nt x Nn] np.ndarray (floats)
-        Time instants corresponding to the samples of each of the Nn nodes in the network.
-    N : int
-        Number of samples used for compression / for updating the DANSE filters.
-    Ns : int
-        Number of new samples per time frame (used in SRO-free sequential DANSE with frame overlap) (Ns < N).
-    L : int
-        Number of (compressed) signal samples to be broadcasted at a time to other nodes.
-    bd : str
-        Inter-node data broadcasting domain:
-        -- 'wholeChunk_td': broadcast whole chunks of compressed signals in the time-domain,
-        -- 'wholeChunk_fd': broadcast whole chunks of compressed signals in the WOLA-domain,
-        -- 'fewSamples_td': linear-convolution approximation of WOLA compression process, broadcast L ≪ Ns samples at a time.
-    efficient : bool
-        If True, create "efficient" events. Only changing the `bd == 'fewSamples_td'` case.
-        Avoids generation of unnecessary one-sample broadcast events --> saves a lot of computation time.
+        Time instants corresponding to the samples of each of the `Nn` nodes.
+    p : DANSEparameters object
+        Parameters.
 
     Returns
     -------
-    outputEvents : [Ne x 1] list of [3 x 1] np.ndarrays containing lists of floats
-        Event instants matrix. One column per event instant.
-    fs : [Nn x 1] list of floats
-        Sampling frequency of each node.
-    --------------------- vvv UNUSED vvv ---------------------
-    initialTimeBiases : [Nn x 1] np.ndarray (floats)
-        [s] Initial time difference between first update at node `row index`
-        and latest broadcast instant at node `column index` (diagonal elements are
-        all set to zero: there is no bias w.r.t. locally recorded data).
+    outputEvents : [Ne x 1] list of DANSEeventInstant objects
+        Event instants matrix.
     """
+
+    # Useful renaming (compact code)
+    Ndft = p.DFTsize
+    Ns = p.Ns 
+    Lbc = p.broadcastLength
+    bcType = p.broadcastType
+    efficient = p.efficientSpSBC
 
     # Make sure time stamps matrix is indeed a matrix, correctly oriented
     if timeInstants.ndim != 2:
@@ -121,87 +117,112 @@ def initialize_events(timeInstants, N, Ns, L, bd, efficient=False):
     fs = np.zeros(nNodes)
     for k in range(nNodes):
         deltas = np.diff(timeInstants[:, k])
-        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e6))))  # allowing computer precision errors down to 1e-4*mean delta.
+        # vvv Allowing computer precision errors down to 1e-4*mean delta.
+        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e6))))
         if len(np.unique(np.round(deltas, precision))) > 1:
             raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: {len(np.unique(np.round(deltas, precision)))} different sample intervals detected for node {k+1}.')
-        fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)  # np.round(): not going below 1PPM precision for typical fs >= 8 kHz
+        # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.
+        fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)
 
-    # Total signal duration [s] per node (after truncation during signal generation)
+    # Total signal duration [s] per node
+    # (after truncation during signal generation).
     Ttot = timeInstants[-1, :]
     
-    # Get expected DANSE update instants
-    numUpdatesInTtot = np.floor(Ttot * fs / Ns)   # expected number of DANSE update per node over total signal length
-    updateInstants = [np.arange(np.ceil(N / Ns), int(numUpdatesInTtot[k])) * Ns/fs[k] for k in range(nNodes)]  # expected DANSE update instants
-    #                               ^ note that we only start updating when we have enough samples
+    # Expected number of DANSE update per node over total signal length
+    numUpInTtot = np.floor(Ttot * fs / Ns)
+    # Expected DANSE update instants
+    upInstants = [
+        np.arange(np.ceil(Ndft / Ns),
+        int(numUpInTtot[k])) * Ns/fs[k] for k in range(nNodes)
+    ]  
+    # ^ note that we only start updating when we have enough samples.
     
-    numBroadcastsInTtot = np.floor(Ttot * fs / L)   # expected number of broadcasts per node over total signal length
+    # Expected number of broadcasts per node over total signal length
+    numBcInTtot = np.floor(Ttot * fs / Lbc)
     # Get expected broadcast instants
-    if 'wholeChunk' in bd:
-        broadcastInstants = [np.arange(N/L, int(numBroadcastsInTtot[k])) * L/fs[k] for k in range(nNodes)]
-        #                              ^ note that we only start broadcasting when we have enough samples to perform compression
-    elif 'fewSamples' in bd:
+    if 'wholeChunk' in bcType:
+        bcInstants = [
+            np.arange(Ndft/Lbc, int(numBcInTtot[k])) * Lbc/fs[k]\
+                for k in range(nNodes)
+        ]
+        # ^ note that we only start broadcasting when we have enough
+        # samples to perform compression.
+    elif 'fewSamples' in bcType:
         if efficient:
             # Combine update instants
-            combinedUpdateInstants = list(updateInstants[0])
+            combinedUpInstants = list(upInstants[0])
             for k in range(nNodes):
                 if k > 0:
-                    for ii in range(len(updateInstants[k])):
-                        if updateInstants[k][ii] not in combinedUpdateInstants:
-                            combinedUpdateInstants.append(updateInstants[k][ii])
-            combinedUpdateInstants = np.sort(np.array(combinedUpdateInstants))
-            broadcastInstants = [combinedUpdateInstants for _ in range(nNodes)]  # same BC instants for all nodes
+                    for ii in range(len(upInstants[k])):
+                        if upInstants[k][ii] not in combinedUpInstants:
+                            combinedUpInstants.append(upInstants[k][ii])
+            combinedUpInstants = np.sort(np.array(combinedUpInstants))
+            # Same BC instants for all nodes
+            bcInstants = [combinedUpInstants for _ in range(nNodes)]
         else:
-            broadcastInstants = [np.arange(1, int(numBroadcastsInTtot[k])) * L/fs[k] for k in range(nNodes)]
-            #                              ^ note that we start broadcasting sooner: when we have `L` samples, enough for linear convolution
+            bcInstants = [
+                np.arange(1, int(numBcInTtot[k])) * Lbc/fs[k]\
+                    for k in range(nNodes)
+            ]
+            # ^ note that we start broadcasting sooner:
+            # when we have `L` samples, enough for linear convolution.
 
     # Build event matrix
-    outputEvents = build_events_matrix(updateInstants, broadcastInstants)
+    outputEvents = build_events_matrix(upInstants, bcInstants)
 
     return outputEvents, fs
 
 
-def build_events_matrix(updateInstants, broadcastInstants):
-    """Sub-function of `get_events_matrix`, building the events matrix
+def build_events_matrix(upInstants, bcInstants):
+    """
+    Sub-function of `get_events_matrix`, building the events matrix
     from the update and broadcast instants.
     
     Parameters
     ----------
-    updateInstants : [nNodes x 1] list of np.ndarrays (float)
+    upInstants : [nNodes x 1] list of np.ndarrays (float)
         Update instants per node [s].
-    broadcastInstants : [nNodes x 1] list of np.ndarrays (float)
+    bcInstants : [nNodes x 1] list of np.ndarrays (float)
         Broadcast instants per node [s].
 
     Returns
     -------
-    outputEvents : [Ne x 1] list of [3 x 1] np.ndarrays containing lists of floats
-        Event instants matrix. One column per event instant.
+    outputEvents : [Ne x 1] list of DANSEeventInstant objects
+        Event instants matrix.
     """
 
-    nNodes = len(updateInstants)
+    nNodes = len(upInstants)
 
-    numUniqueUpdateInstants = sum([len(np.unique(updateInstants[k])) for k in range(nNodes)])
+    numUniqueUpInstants = sum(
+        [len(np.unique(upInstants[k])) for k in range(nNodes)]
+    )
     # Number of unique broadcast instants across the WASN
-    numUniqueBroadcastInstants = sum([len(np.unique(broadcastInstants[k])) for k in range(nNodes)])
+    numUniqueBcInstants = sum(
+        [len(np.unique(bcInstants[k])) for k in range(nNodes)]
+    )
     # Number of unique update _or_ broadcast instants across the WASN
-    numEventInstants = numUniqueBroadcastInstants + numUniqueUpdateInstants
+    numEventInstants = numUniqueBcInstants + numUniqueUpInstants
 
     # Arrange into matrix
-    flattenedUpdateInstants = np.zeros((numUniqueUpdateInstants, 3))
-    flattenedBroadcastInstants = np.zeros((numUniqueBroadcastInstants, 3))
+    flattenedUpInstants = np.zeros((numUniqueUpInstants, 3))
+    flattenedBcInstants = np.zeros((numUniqueBcInstants, 3))
     for k in range(nNodes):
-        idxStart_u = sum([len(updateInstants[q]) for q in range(k)])
-        idxEnd_u = idxStart_u + len(updateInstants[k])
-        flattenedUpdateInstants[idxStart_u:idxEnd_u, 0] = updateInstants[k]
-        flattenedUpdateInstants[idxStart_u:idxEnd_u, 1] = k
-        flattenedUpdateInstants[:, 2] = 1    # event reference "1" for updates
+        idxStart_u = sum([len(upInstants[q]) for q in range(k)])
+        idxEnd_u = idxStart_u + len(upInstants[k])
+        flattenedUpInstants[idxStart_u:idxEnd_u, 0] = upInstants[k]
+        flattenedUpInstants[idxStart_u:idxEnd_u, 1] = k
+        flattenedUpInstants[:, 2] = 1    # event reference "1" for updates
 
-        idxStart_b = sum([len(broadcastInstants[q]) for q in range(k)])
-        idxEnd_b = idxStart_b + len(broadcastInstants[k])
-        flattenedBroadcastInstants[idxStart_b:idxEnd_b, 0] = broadcastInstants[k]
-        flattenedBroadcastInstants[idxStart_b:idxEnd_b, 1] = k
-        flattenedBroadcastInstants[:, 2] = 0    # event reference "0" for broadcasts
+        idxStart_b = sum([len(bcInstants[q]) for q in range(k)])
+        idxEnd_b = idxStart_b + len(bcInstants[k])
+        flattenedBcInstants[idxStart_b:idxEnd_b, 0] = bcInstants[k]
+        flattenedBcInstants[idxStart_b:idxEnd_b, 1] = k
+        flattenedBcInstants[:, 2] = 0    # event reference "0" for broadcasts
     # Combine
-    eventInstants = np.concatenate((flattenedUpdateInstants, flattenedBroadcastInstants), axis=0)
+    eventInstants = np.concatenate(
+        (flattenedUpInstants, flattenedBcInstants),
+        axis=0
+    )
     # Sort
     idxSort = np.argsort(eventInstants[:, 0], axis=0)
     eventInstants = eventInstants[idxSort, :]
@@ -216,14 +237,18 @@ def build_events_matrix(updateInstants, broadcastInstants):
         nodesConcerned.append(int(eventInstants[eventIdx, 1]))
         eventTypesConcerned.append(int(eventInstants[eventIdx, 2]))
 
-        if eventIdx < numEventInstants - 1:   # check whether the next instant is the same and should be grouped with the current instant
+        # Check whether the next instant is the same and
+        # should be grouped with the current instant.
+        if eventIdx < numEventInstants - 1:
             nextInstant = eventInstants[eventIdx + 1, 0]
             while currInstant == nextInstant:
                 eventIdx += 1
                 currInstant = eventInstants[eventIdx, 0]
                 nodesConcerned.append(int(eventInstants[eventIdx, 1]))
                 eventTypesConcerned.append(int(eventInstants[eventIdx, 2]))
-                if eventIdx < numEventInstants - 1:   # check whether the next instant is the same and should be grouped with the current instant
+                # Check whether the next instant is the same and
+                # should be grouped with the current instant.
+                if eventIdx < numEventInstants - 1:
                     nextInstant = eventInstants[eventIdx + 1, 0]
                 else:
                     eventIdx += 1
@@ -238,15 +263,15 @@ def build_events_matrix(updateInstants, broadcastInstants):
         eventTypesConcerned = np.array(eventTypesConcerned, dtype=int)
         # 1) First broadcasts, then updates
         originalIndices = np.arange(len(nodesConcerned))
-        idxUpdateEvent = originalIndices[eventTypesConcerned == 1]
-        idxBroadcastEvent = originalIndices[eventTypesConcerned == 0]
+        idxUpEvent = originalIndices[eventTypesConcerned == 1]
+        idxBcEvent = originalIndices[eventTypesConcerned == 0]
         # 2) Order by node index
-        if len(idxUpdateEvent) > 0:
-            idxUpdateEvent = idxUpdateEvent[np.argsort(nodesConcerned[idxUpdateEvent])]
-        if len(idxBroadcastEvent) > 0:
-            idxBroadcastEvent = idxBroadcastEvent[np.argsort(nodesConcerned[idxBroadcastEvent])]
+        if len(idxUpEvent) > 0:
+            idxUpEvent = idxUpEvent[np.argsort(nodesConcerned[idxUpEvent])]
+        if len(idxBcEvent) > 0:
+            idxBcEvent = idxBcEvent[np.argsort(nodesConcerned[idxBcEvent])]
         # 3) Re-combine
-        indices = np.concatenate((idxBroadcastEvent, idxUpdateEvent))
+        indices = np.concatenate((idxBcEvent, idxUpEvent))
         # 4) Sort
         nodesConcerned = nodesConcerned[indices]
         eventTypesConcerned = eventTypesConcerned[indices]
@@ -264,7 +289,8 @@ def build_events_matrix(updateInstants, broadcastInstants):
 
 
 def local_chunk_for_broadcast(y, t, fs, N):
-    """Extract correct chunk of local signals for broadcasting.
+    """
+    Extract correct chunk of local signals for broadcasting.
     
     Parameters
     ----------
@@ -283,18 +309,24 @@ def local_chunk_for_broadcast(y, t, fs, N):
         Time chunk of local sensor signals.
     """
 
-    idxEnd = int(np.floor(np.round(t * fs, 5)))  # np.round() used to avoid issues with previous rounding/precision errors (see Word journal week 32, THU, 2022)
-    idxBeg = np.amax([idxEnd - N, 0])   # don't go into negative sample indices!
+    # vvv -- np.round() used to avoid issues with previous
+    # rounding/precision errors (see Word journal week 32, THU, 2022).
+    idxEnd = int(np.floor(np.round(t * fs, 5)))
+    # vvv -- don't go into negative sample indices!
+    idxBeg = np.amax([idxEnd - N, 0])
     chunk = y[idxBeg:idxEnd, :]
     # Pad zeros at beginning if needed
     if idxEnd - idxBeg < N:
-        chunk = np.concatenate((np.zeros((N - chunk.shape[0], chunk.shape[1])), chunk))
+        chunk = np.concatenate((
+            np.zeros((N - chunk.shape[0], chunk.shape[1])), chunk
+        ))
 
     return chunk
 
 
 def local_chunk_for_update(y, t, fs, p: DANSEparameters):
-    """Extract correct chunk of local signals for DANSE updates.
+    """
+    Extract correct chunk of local signals for DANSE updates.
     
     Parameters
     ----------
@@ -328,19 +360,24 @@ def local_chunk_for_update(y, t, fs, p: DANSEparameters):
         idxEnd = int(np.floor(np.round(t * fs, 5)))
     # Broadcast scheme: block-wise, in time-domain
     elif bd == 'wholeChunk_td':
-        idxEnd = int(np.floor(np.round(t * fs, 5))) - (Ndft - Ns)     # `N - Ns` samples delay due to time-domain WOLA
+        # `N - Ns` samples delay due to time-domain WOLA
+        idxEnd = int(np.floor(np.round(t * fs, 5))) - (Ndft - Ns)
 
-    idxBeg = np.amax([idxEnd - Ndft, 0])       # don't go into negative sample indices!
+    # vvv -- don't go into negative sample indices!
+    idxBeg = np.amax([idxEnd - Ndft, 0])
     chunk = y[idxBeg:idxEnd, :]
     # Pad zeros at beginning if needed (occurs at algorithm's startup)
     if idxEnd - idxBeg < Ndft:
-        chunk = np.concatenate((np.zeros((Ndft - chunk.shape[0], chunk.shape[1])), chunk))
+        chunk = np.concatenate((
+            np.zeros((Ndft - chunk.shape[0], chunk.shape[1])), chunk
+        ))
 
     return chunk, idxBeg, idxEnd
 
 
 def back_to_time_domain(x, n, axis=0):
-    """Performs an IFFT after pre-processing of a frequency-domain
+    """
+    Performs an IFFT after pre-processing of a frequency-domain
     signal chunk.
     
     Parameters
@@ -350,7 +387,8 @@ def back_to_time_domain(x, n, axis=0):
     n : int
         IFFT order.
     axis : int (0 or 1)
-        Array axis where to perform IFFT -- not implemented for more than 2-D arrays.
+        Array axis where to perform IFFT.
+        -- not implemented for more than 2-D arrays.
 
     Returns
     -------
@@ -373,13 +411,15 @@ def back_to_time_domain(x, n, axis=0):
 
     # Check dimension
     if x.shape[0] != n/2 + 1:
-        raise ValueError('`x` should be (n/2 + 1)-dimensioned along the IFFT axis.')
+        raise ValueError('`x` should be (n/2+1)-long along the IFFT axis.')
 
     x[0, :] = x[0, :].real      # Set DC to real value
     x[-1, :] = x[-1, :].real    # Set Nyquist to real value
     x = np.concatenate((x, np.flip(x[:-1, :].conj(), axis=0)[:-1, :]), axis=0)
     
-    if flagSingleton: # important to go back to original input dimensionality before FFT (bias of np.fft.fft with (n,1)-dimensioned input)
+    # vvv -- important to go back to original input dimensionalitybefore FFT
+    # (bias of np.fft.fft with (n,1)-dimensioned input).
+    if flagSingleton:
         x = np.squeeze(x)
 
     # Back to time-domain
@@ -395,32 +435,37 @@ def back_to_time_domain(x, n, axis=0):
     return xout
 
 
-def fill_buffers_whole_chunk(k, neighbourNodes, zBuffer, zLocalK):
-    """Fills neighbors nodes' buffers, using frequency domain data.
+def fill_buffers_whole_chunk(k, neighs, zBuffer, zLocalK):
+    """
+    Fills neighbors nodes' buffers, using frequency domain data.
     Data comes from compression via function `danse_compression_freq_domain`.
     
         Parameters
     ----------
     k : int
         Current node index.
-    neighbourNodes : [numNodes x 1] list of [nNeighbours[n] x 1] lists (int)
+    neighs : [numNodes x 1] list of [nNeighbours[n] x 1] lists (int)
         Network indices of neighbours, per node.
-    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] lists of [variable length] np.ndarrays (complex)
+    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] ...
+            ... lists of [variable length] np.ndarrays (complex)
         Compressed signals buffers for each node and its neighbours.
     zLocal : [N x 1] np.ndarray (float)
         Latest compressed local signals to be broadcasted from node `k`.
 
     Returns
     -------
-    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] lists of [N x 1] np.ndarrays (complex)
+    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] ...
+            ... lists of [N x 1] np.ndarrays (complex)
         Updated compressed signals buffers for each node and its neighbours.
     """
 
     # Loop over neighbors of `k`
-    for idxq in range(len(neighbourNodes[k])):
-        q = neighbourNodes[k][idxq]                 # network-wide index of node `q` (one of node `k`'s neighbors)
-        idxKforNeighborQ = [i for i, x in enumerate(neighbourNodes[q]) if x == k]
-        idxKforNeighborQ = idxKforNeighborQ[0]      # node `k`'s "neighbor index", from node `q`'s perspective
+    for idxq in range(len(neighs[k])):
+        # Network-wide index of node `q` (one of node `k`'s neighbors)
+        q = neighs[k][idxq]
+        idxKforNeighborQ = [i for i, x in enumerate(neighs[q]) if x == k]
+        # Node `k`'s "neighbor index", from node `q`'s perspective
+        idxKforNeighborQ = idxKforNeighborQ[0]
         # Fill in neighbor's buffer
         zBuffer[q][idxKforNeighborQ] = zLocalK
         
@@ -450,22 +495,27 @@ def extract_few_samples_from_convolution(idDesired, a, b):
     out = np.zeros(len(idDesired))
     yqzp = np.concatenate((np.zeros(len(a)), b, np.zeros(len(a))))
     for ii in range(len(idDesired)):
-        out[ii] = np.dot(yqzp[idDesired[ii] + 1:idDesired[ii] + 1 + len(a)], np.flip(a))
+        out[ii] = np.dot(
+            yqzp[idDesired[ii] + 1:idDesired[ii] + 1 + len(a)],
+            np.flip(a)
+        )
     
     return out
 
 
-def fill_buffers_td_few_samples(k, neighbourNodes, zBuffer, zLocalK, L):
-    """Fill in buffers -- simulating broadcast of compressed signals
+def fill_buffers_td_few_samples(k, neighs, zBuffer, zLocalK, L):
+    """
+    Fill in buffers -- simulating broadcast of compressed signals
     from one node (`k`) to its neighbours.
     
     Parameters
     ----------
     k : int
         Current node index.
-    neighbourNodes : [numNodes x 1] list of [nNeighbours[n] x 1] lists (int)
+    neighs : [numNodes x 1] list of [nNeighbours[n] x 1] lists (int)
         Network indices of neighbours, per node.
-    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] lists of [variable length] np.ndarrays (float)
+    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] ... 
+            ... lists of [variable length] np.ndarrays (float)
         Compressed signals buffers for each node and its neighbours.
     zLocalK : [N x 1] np.ndarray (float)
         Latest compressed local signals to be broadcasted from node `k`.
@@ -474,7 +524,8 @@ def fill_buffers_td_few_samples(k, neighbourNodes, zBuffer, zLocalK, L):
 
     Returns
     -------
-    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] lists of [variable length] np.ndarrays (float)
+    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] ...
+            ... lists of [variable length] np.ndarrays (float)
         Updated compressed signals buffers for each node and its neighbours.
     """
 
@@ -485,159 +536,28 @@ def fill_buffers_td_few_samples(k, neighbourNodes, zBuffer, zLocalK, L):
             raise ValueError(f'Incoherence: float `zLocalK` but L = {L}')
 
     # Loop over neighbors of node `k`
-    for idxq in range(len(neighbourNodes[k])):
-        q = neighbourNodes[k][idxq]                 # network-wide index of node `q` (one of node `k`'s neighbors)
-        idxKforNeighborQ = [i for i, x in enumerate(neighbourNodes[q]) if x == k]
-        idxKforNeighborQ = idxKforNeighborQ[0]      # node `k`'s "neighbor index", from node `q`'s perspective
+    for idxq in range(len(neighs[k])):
+        # Network-wide index of node `q` (one of node `k`'s neighbors)
+        q = neighs[k][idxq]
+        idxKforNeighborQ = [i for i, x in enumerate(neighs[q]) if x == k]
+        # Node `k`'s "neighbor index", from node `q`'s perspective
+        idxKforNeighborQ = idxKforNeighborQ[0]
         # Only broadcast the `L` last samples of local compressed signals
-        zBuffer[q][idxKforNeighborQ] = np.concatenate((zBuffer[q][idxKforNeighborQ], zLocalK[-L:]), axis=0)
+        zBuffer[q][idxKforNeighborQ] = np.concatenate(
+            (zBuffer[q][idxKforNeighborQ], zLocalK[-L:]),
+            axis=0
+        )
         
     return zBuffer
 
 
-def process_incoming_signals_buffers(k, dv: DANSEvariables, p: DANSEparameters, t):
-    """When called, processes the incoming data from other nodes, as stored in local node's buffers.
-    Called whenever a DANSE update can be performed (`N` new local samples were captured since last update).
-    
-    Parameters
-    ----------
-    k : int
-        Receiving node index.
-    dv : DANSEvariables object
-        DANSE variables to be updated.
-    p : DANSEparameters object
-        DANSE parameters.
-    t : float
-        Current time instant [s].
-    
-    Returns
-    -------
-    dv : DANSEvariables object
-        Updated DANSE variables.
+def events_parser(
+    events: DANSEeventInstant,
+    startUpdates,
+    printouts=False,
+    doNotPrintBCs=False):
     """
-
-    # Useful renaming
-    Ndft = p.DFTsize
-    Ns = p.Ns
-    Lbc = p.broadcastLength
-
-    # Initialize compressed signal matrix ($\mathbf{z}_{-k}$ in [1]'s notation)
-    if p.broadcastType == 'wholeChunk_fd':
-        zk = np.empty((dv.nPosFreqs, 0), dtype=complex)
-    elif p.broadcastType == 'wholeChunk_td':
-        zk = np.empty((p.DFTsize, 0), dtype=float)
-    elif p.broadcastType == 'fewSamples_td':
-        zk = np.empty((p.DFTsize, 0), dtype=float)
-
-    # Initialise flags vector (overflow: >0; underflow: <0; or none: ==0)
-    bufferFlags = np.zeros(len(dv.neighbors[k]))
-
-    for idxq in range(len(dv.neighbors[k])):
-        
-        Bq = len(dv.zBuffer[k][idxq])  # buffer size for neighbour node `q`
-
-        # Frequency-domain chunks broadcasting (naïve DANSE, simplest to visualize/implement, but inefficient)
-        if p.broadcastType == 'wholeChunk_fd':
-            if Bq == 0:     # under-flow with chunk-wise FD broadcasting
-                if dv.DANSEiter[k] == 0:
-                    raise ValueError(f'Unexpected buffer under-flow at first iteration in FD-broadcasting.')
-                else:
-                    print('FD BROADCASTING: BUFFER UNDERFLOW')
-                    zCurrBuffer = dv.z[k][:, idxq]  # re-use previous z...
-            elif Bq == 2 * dv.nPosFreqs:  # over-flow with chunk-wise FD broadcasting
-                print('FD BROADCASTING: BUFFER OVERFLOW')
-                zCurrBuffer = dv.zBuffer[k][idxq][:Ns]
-            elif Bq == dv.nPosFreqs:     # correctly filled-in buffer, no under-/over-flow
-                zCurrBuffer = dv.zBuffer[k][idxq]
-            else:
-                raise ValueError(f'Unexpected buffer over-/under-flow in FD-broadcasting: {Bq} samples instead of {dv.nPosFreqs} expected.')
-        
-        # Time-domain chunks broadcasting (naïve DANSE, simplest to visualize/implement, but inefficient)
-        elif p.broadcastType == 'wholeChunk_td':
-            if dv.DANSEiter[k] == 0:
-                if Bq == Ns:
-                    # Not yet any previous buffer -- need to appstart zeros
-                    zCurrBuffer = np.concatenate((np.zeros(Ndft - Bq), dv.zBuffer[k][idxq]))
-                elif Bq == 0:
-                    # Node `q` has not yet transmitted enough data to node `k`, but node `k` has already reached its first update instant.
-                    # Interpretation: Node `q` samples slower than node `k`. 
-                    # Response: ...
-                    print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{dv.neighbors[k][idxq]+1} buffer | -1 broadcast')
-                    bufferFlags[idxq] = -1      # raise negative flag
-                    zCurrBuffer = np.zeros(Ndft)
-            else:
-                if Bq == Ns:
-                    # All good, no under-/over-flows
-                    if not np.any(dv.z[k]):
-                        # Not yet any previous buffer -- need to appstart zeros
-                        zCurrBuffer = np.concatenate((np.zeros(Ndft - Bq), dv.zBuffer[k][idxq]))
-                    else:
-                        # Concatenate last `Ns` samples of previous buffer with current buffer
-                        zCurrBuffer = np.concatenate((dv.z[k][-Ns:, idxq], dv.zBuffer[k][idxq]))
-                else:
-                    # Under- or over-flow...
-                    raise ValueError('[NOT YET IMPLEMENTED]')
-                
-        elif p.broadcastType == 'fewSamples_td':
-
-            if dv.DANSEiter[k] == 0: # first DANSE iteration case -- we are expecting an abnormally full buffer, with an entire DANSE chunk size inside of it
-                if Bq == Ndft: 
-                    # There is no significant SRO between node `k` and `q`.
-                    # Response: node `k` uses all samples in the `q`^th buffer.
-                    zCurrBuffer = dv.zBuffer[k][idxq]
-                elif (Ndft - Bq) % Lbc == 0 and Bq < Ndft:
-                    # Node `q` has not yet transmitted enough data to node `k`, but node `k` has already reached its first update instant.
-                    # Interpretation: Node `q` samples slower than node `k`. 
-                    # Response: ...
-                    nMissingBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                    print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{dv.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
-                    bufferFlags[idxq] = -1 * nMissingBroadcasts      # raise negative flag
-                    zCurrBuffer = np.concatenate((np.zeros(Ndft - Bq), dv.zBuffer[k][idxq]), axis=0)
-                    # raise ValueError('Unexpected edge case: Node `q` has not yet transmitted enough data to node `k`, but node `k` has already reached its first update instant.')
-                elif (Ndft - Bq) % Lbc == 0 and Bq > Ndft:
-                    # Node `q` has already transmitted too much data to node `k`.
-                    # Interpretation: Node `q` samples faster than node `k`.
-                    # Response: node `k` raises a positive flag and uses the last `frameSize` samples from the `q`^th buffer.
-                    nExtraBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                    print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{dv.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
-                    bufferFlags[idxq] = +1 * nExtraBroadcasts       # raise positive flag
-                    zCurrBuffer = dv.zBuffer[k][idxq][-Ndft:]
-
-            else:   # not the first DANSE iteration -- we are expecting a normally full buffer, with a DANSE chunk size considering overlap
-                if Bq == Ns:             # case 1: no broadcast frame mismatch between node `k` and node `q`
-                    pass
-                elif (Ns - Bq) % Lbc == 0 and Bq < Ns:       # case 2: negative broadcast frame mismatch between node `k` and node `q`
-                    nMissingBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                    print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{dv.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
-                    bufferFlags[idxq] = -1 * nMissingBroadcasts      # raise negative flag
-                elif (Ns - Bq) % Lbc == 0 and Bq > Ns:       # case 3: positive broadcast frame mismatch between node `k` and node `q`
-                    nExtraBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                    print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{dv.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
-                    bufferFlags[idxq] = +1 * nExtraBroadcasts       # raise positive flag
-                else:
-                    if (Ns - Bq) % Lbc != 0 and np.abs(dv.DANSEiter[k] - (dv.numIterations - 1)) < 10:
-                        print('[b! @ t={np.round(t, 3)}s] This is the last iteration -- not enough samples anymore due to cumulated SROs effect, skip update.')
-                        bufferFlags[idxq] = np.NaN   # raise "end of signal" flag
-                    else:
-                        raise ValueError(f'Unexpected buffer size ({Bq} samples, with L={Lbc} and N={Ns}) for neighbor node q={dv.neighbors[k][idxq]+1}.')
-                # Build current buffer
-                if Ndft - Bq > 0:
-                    zCurrBuffer = np.concatenate((dv.z[k][-(Ndft - Bq):, idxq], dv.zBuffer[k][idxq]), axis=0)
-                else:   # edge case: no overlap between consecutive frames
-                    zCurrBuffer = dv.zBuffer[k][idxq]
-
-        # Stack compressed signals
-        zk = np.concatenate((zk, zCurrBuffer[:, np.newaxis]), axis=1)
-
-    # Update DANSE variables
-    dv.z[k] = zk
-    dv.bufferFlags[k][dv.DANSEiter[k], :] = bufferFlags
-
-    return dv
-
-
-def events_parser(events: DANSEeventInstant, startUpdates, printouts=False, doNotPrintBCs=False):
-    """Printouts to inform user of DANSE events.
+    Printouts to inform user of DANSE events.
     
     Parameters
     ----------
@@ -649,16 +569,8 @@ def events_parser(events: DANSEeventInstant, startUpdates, printouts=False, doNo
     printouts : bool
         If True, inform user about current events after parsing. 
     doNotPrintBCs : bool
-        If True, do not print the broadcast events (only used if `printouts == True`).
-
-    Returns
-    -------
-    t : float
-        Current time instant [s].
-    eventTypes : list of str
-        Events at current instant.
-    nodesConcerned : list of ints
-        Corresponding node indices.
+        If True, do not print the broadcast events
+        (only used if `printouts == True`).
     """
 
     if printouts:
@@ -669,7 +581,8 @@ def events_parser(events: DANSEeventInstant, startUpdates, printouts=False, doNo
                 broadcastsTxt = ''
             else:
                 broadcastsTxt = 'Broadcasting nodes: '
-            flagCommaUpdating = False    # little flag to add a comma (`,`) at the right spot
+            # vvv -- little flag to add a comma (`,`) at the right spot.
+            flagCommaUpdating = False
             for idxEvent in range(len(events.type)):
                 k = int(events.nodes[idxEvent])   # node index
                 if events.type[idxEvent] == 'bc' and not doNotPrintBCs:
@@ -677,7 +590,10 @@ def events_parser(events: DANSEeventInstant, startUpdates, printouts=False, doNo
                         broadcastsTxt += ','
                     broadcastsTxt += f'{k + 1}'
                 elif events.type[idxEvent] == 'up':
-                    if startUpdates[k]:  # only print if the node actually has started updating (i.e. there has been sufficiently many autocorrelation matrices updates since the start of recording)
+                    # Only print if the node actually has started updating
+                    # (i.e. there has been sufficiently many autocorrelation
+                    # matrices updates since the start of recording).
+                    if startUpdates[k]:
                         if not flagCommaUpdating:
                             flagCommaUpdating = True
                         else:
@@ -685,205 +601,225 @@ def events_parser(events: DANSEeventInstant, startUpdates, printouts=False, doNo
                         updatesTxt += f'{k + 1}'
             print(txt + broadcastsTxt + '; ' + updatesTxt)
 
-    return None
 
+def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
+    """Performs local signals compression in the frequency domain.
 
-def build_ytilde(yk, tCurr, fs, k, dv: DANSEvariables, params: DANSEparameters):
-    """
-    
     Parameters
     ----------
-    yk : [Nt x Nsensors] np.ndarray (float)
-        Full time-domain local sensor signals at node `k`.
-    tCurr : float
-        Current time instant [s].
-    fs : float
-        Node `k`'s sampling frequency [s].
-    k : int
-        Receiving node index.
-    dv : DANSEvariables object
-        DANSE variables to be updated.
-    p : DANSEparameters object
-        DANSE parameters.
+    yq : [N x nSensors] np.ndarray (float)
+        Local sensor signals.
+    wHat : [N/2 x nSensors] np.ndarray (float or complex)
+        Frequency-domain local filter estimate (from latest DANSE iteration).
+    h : [`n` x 1] np.ndarray (float)
+        WOLA analysis window (time-domain to WOLA-domain).
+    f : [`n` x 1] np.ndarray (float)
+        WOLA synthesis window (WOLA-domain to time-domain).
+    zqPrevious : [N x 1] np.ndarray (float)
+        Previous time-domain chunk of compressed signal.
 
     Returns
     -------
-    TODO:
+    zqHat : [N/2 x 1] np.ndarray (complex)
+        Frequency-domain compressed signal for current frame.
+    zq : [N x 1] np.ndarray (float)
+        Time-domain latest WOLA chunk of compressed signal (after OLA).
     """
 
-    # Extract current local data chunk
-    yLocalCurr, dv.idxBegChunk, dv.idxEndChunk = local_chunk_for_update(yk, tCurr, fs, params)
+    # Check for single-sensor case
+    flagSingleSensor = False
+    if wHat.shape[-1] == 1:
+        wHat = np.squeeze(wHat)
+        yq = np.squeeze(yq)
+        flagSingleSensor = True
+    
+    # Transfer local observations to frequency domain
+    n = len(yq)     # DFT order
 
-    # Compute VAD
-    VADinFrame = dv.fullVAD[np.amax([dv.idxBegChunk, 0]):dv.idxEndChunk, k]
-    # If there is a majority of "VAD = 1" in the frame, set the frame-wise VAD to 1
-    dv.oVADframes[dv.DANSEiter[k]] = sum(VADinFrame == 0) <= len(VADinFrame) // 2
-    # Count number of spatial covariance matrices updates
-    if dv.oVADframes[dv.DANSEiter[k]]:
-        dv.numUpdatesRyy[k] += 1
-    else:
-        dv.numUpdatesRnn[k] += 1
-
-    # Build `\tilde{y}_k`
-    if params.broadcastType == 'wholeChunk_fd':
-        # Broadcasting done in frequency-domain
-        yLocalHatCurr = 1 / params.normFactWOLA * np.fft.fft(
-            yLocalCurr * params.winWOLAanalysis[:, np.newaxis],
-            params.DFTsize, axis=0
-        )
-        dv.yTildeHat[k][:, dv.DANSEiter[k], :] = np.concatenate(
-            (yLocalHatCurr[:dv.nPosFreqs, :], 1 / params.normFactWOLA * dv.z[k]),
-            axis=1
-        )
-    elif params.broadcastType in ['wholeChunk_td', 'fewSamples_td']:
-        # Build full available observation vector
-        yTildeCurr = np.concatenate((yLocalCurr, dv.z[k]), axis=1)
-        dv.yTilde[k][:, dv.DANSEiter[k], :] = yTildeCurr
-        # Go to frequency domain
-        yTildeHatCurr = 1 / params.normFactWOLA * np.fft.fft(
-            dv.yTilde[k][:, dv.DANSEiter[k], :] * params.winWOLAanalysis[:, np.newaxis],
-            params.DFTsize, axis=0
-        )
+    # WOLA analysis stage
+    if flagSingleSensor:
+        yqHat = np.fft.fft(np.squeeze(yq) * h, n, axis=0)
         # Keep only positive frequencies
-        dv.yTildeHat[k][:, dv.DANSEiter[k], :] = yTildeHatCurr[:dv.nPosFreqs, :]
+        yqHat = yqHat[:int(n/2 + 1)]
+        # Apply linear combination to form compressed signal.
+        # -- single sensor = simple element-wise multiplication.
+        zqHat = wHat.conj() * yqHat
+    else:
+        yqHat = np.fft.fft(np.squeeze(yq) * h[:, np.newaxis], n, axis=0)
+        # Keep only positive frequencies
+        yqHat = yqHat[:int(n/2 + 1), :]
+        # Apply linear combination to form compressed signal.
+        zqHat = np.einsum('ij,ij->i', wHat.conj(), yqHat)
 
-    return dv, yLocalCurr
+    # WOLA synthesis stage
+    if zqPrevious is not None:
+        # IDFT
+        zqCurr = base.back_to_time_domain(zqHat, n, axis=0)
+        zqCurr = np.real_if_close(zqCurr)
+        zqCurr *= f    # multiply by synthesis window
 
-
-def account_for_flags(yLocalCurr, k, dv: DANSEvariables, p: DANSEparameters, t):
-
-    # Init
-    skipUpdate = False
-    extraPhaseShiftFactor = np.zeros(dv.dimYTilde[k])
-    
-    for q in range(len(dv.neighbors[k])):
-        if not np.isnan(dv.bufferFlags[k][dv.DANSEiter[k], q]):
-            extraPhaseShiftFactor[yLocalCurr.shape[-1] + q] =\
-                dv.bufferFlags[k][dv.DANSEiter[k], q] * p.broadcastLength
-            # ↑↑↑ if `bufferFlags[k][i[k], q] == 0`, `extraPhaseShiftFactor = 0` and no additional phase shift is applied
-            if dv.bufferFlags[k][dv.DANSEiter[k], q] != 0:
-                dv.flagIterations[k].append(dv.DANSEiter[k])  # keep flagging iterations in memory
-                dv.flagInstants[k].append(t)       # keep flagging instants in memory
+        if not np.any(zqPrevious):
+            # No previous frame, keep current frame
+            zq = zqCurr
         else:
-            # From `process_incoming_signals_buffers`: "Not enough samples anymore due to cumulated SROs effect, skip update"
-            skipUpdate = True
-    # Save uncompensated \tilde{y} for coherence-drift-based SRO estimation
-    dv.yTildeHatUncomp[k][:, dv.DANSEiter[k], :] = copy.copy(dv.yTildeHat[k][:, dv.DANSEiter[k], :])
-    dv.yyHuncomp[k][dv.DANSEiter[k], :, :, :] = np.einsum(
-        'ij,ik->ijk',
-        dv.yTildeHatUncomp[k][:, dv.DANSEiter[k], :],
-        dv.yTildeHatUncomp[k][:, dv.DANSEiter[k], :].conj()
-    )
-    # Compensate SROs
-    if p.compensateSROs:
-        # Complete phase shift factors
-        dv.phaseShiftFactors[k] += extraPhaseShiftFactor
-        if k == 0:  # Save for plotting
-            dv.phaseShiftFactorThroughTime[dv.DANSEiter[k]:] = dv.phaseShiftFactors[k][yLocalCurr.shape[-1] + q]
-        # Apply phase shift factors
-        dv.yTildeHat[k][:, dv.DANSEiter[k], :] *=\
-            np.exp(-1 * 1j * 2 * np.pi / p.DFTsize *\
-                np.outer(np.arange(dv.nPosFreqs), dv.phaseShiftFactors[k]))
-
-    return dv, skipUpdate
+            # Overlap-add
+            zq = np.zeros(n)
+            # TODO: consider case with multiple neighbor nodes
+            # (`len(zqPrevious) > 1`).
+            zq[:(n // 2)] = zqPrevious[-(n // 2):]
+            zq += zqCurr
+    else:
+        zq = None
+    
+    return zqHat, zq
 
 
-def spatial_covariance_matrix_update(y, Ryy, Rnn, beta, vad):
-    """Helper function: performs the spatial covariance matrices updates.
+def danse_compression_few_samples(
+    yq, wqqHat, L, wIRprevious,
+    winWOLAanalysis, winWOLAsynthesis, R, 
+    updateBroadcastFilter=False):
+    """
+    Performs local signals compression according to DANSE theory [1],
+    in the time-domain (to be able to broadcast the compressed signal sample
+    per sample between nodes).
+    Approximate WOLA filtering process via linear convolution.
     
     Parameters
     ----------
-    y : [N x M] np.ndarray (real or complex)
-        Current input data chunk (if complex: in the frequency domain).
-    Ryy : [N x M x M] np.ndarray (real or complex)
-        Previous Ryy matrices (for each time frame /or/ each frequency line).
-    Rnn : [N x M x M] np.ndarray (real or complex)
-        Previous Rnn matrices (for each time frame /or/ each frequency line).
-    beta : float (0 <= beta <= 1)
-        Exponential averaging forgetting factor.
-    vad : bool
-        If True (=1), Ryy is updated. Otherwise, Rnn is updated.
-    
+    yq : [Ntotal x nSensors] np.ndarray (real)
+        Local sensor signals.
+    wqqHat : [N/2 x nSensors] np.ndarray (real or complex)
+        Frequency-domain local filter estimate (from latest DANSE iteration).
+    L : int
+        Broadcast length [samples].
+    winWOLAanalysis : [`n` x 1] np.ndarray (float)
+        WOLA analysis window (time-domain to WOLA-domain).
+    winWOLAsynthesis : [`n` x 1] np.ndarray (float)
+        WOLA synthesis window (WOLA-domain to time-domain).
+    R : int
+        Sample shift between adjacent windows.
+    updateBroadcastFilter : bool
+        If True, update TD filter for broadcast.
+
     Returns
     -------
-    Ryy : [N x M x M] np.ndarray (real or complex)
-        New Ryy matrices (for each time frame /or/ each frequency line).
-    Rnn : [N x M x M] np.ndarray (real or complex)
-        New Rnn matrices (for each time frame /or/ each frequency line).
-    yyH : [N x M x M] np.ndarray (real or complex)
-        Instantaneous correlation outer product.
+    zq : [N x 1] np.ndarray (real)
+        Compress local sensor signals (1-D).
     """
-    yyH = np.einsum('ij,ik->ijk', y, y.conj())
 
-    if vad:
-        Ryy = beta * Ryy + (1 - beta) * yyH  # update signal + noise matrix
-    else:     
-        Rnn = beta * Rnn + (1 - beta) * yyH  # update noise-only matrix
+    # Profiling
+    if updateBroadcastFilter:
+        wIR = dist_fct_approx(
+            wqqHat,
+            winWOLAanalysis,
+            winWOLAsynthesis,
+            R
+        )
+    else:
+        wIR = wIRprevious
+    
+    # Perform convolution
+    yfiltLastSamples = np.zeros((L, yq.shape[-1]))
+    for idxSensor in range(yq.shape[-1]):
+        # Indices required from convolution output
+        idDesired = np.arange(
+            start=len(wIR) - L + 1,
+            stop=len(wIR) + 1
+        )
+        tmp = base.extract_few_samples_from_convolution(
+            idDesired,
+            wIR[:, idxSensor],
+            yq[:, idxSensor]
+        )
+        yfiltLastSamples[:, idxSensor] = tmp
 
-    return Ryy, Rnn, yyH
+    zq = np.sum(yfiltLastSamples, axis=1)
+
+    return zq, wIR
 
 
-def get_desired_signal(k, dv: DANSEvariables, p: DANSEparameters):
+@njit
+def get_trace_jitted(A, ofst):
+    """ 
+    JIT-ting NumPy's `trace()` function.
     """
-    Compute chunk of desired signal from DANSE freq.-domain filters
-    and freq.-domain observation vector y_tilde.
+    return np.trace(A, ofst)
+
+
+def dist_fct_approx(wHat, h, f, R, jitted=True):
+    """
+    Distortion function approximation of the WOLA filtering process.
+    -- See Word journal 2022, weeks 30-33.
 
     Parameters
     ----------
-    w : [Nf x M] np.ndarray (complex)
-        Frequency-domain filter coefficients for each of the `M` channels (>0 freqs. only).
-    y : [Nf x M] np.ndarray (complex)
-        Frequency-domain signals (full observations vector $\\tilde{\\mathbf{y}}_k$) (>0 freqs. only).
-    win : [N x 1] np.ndarray (float)
-        Synthesis window (time-domain).
-    dChunk : [N x 1] np.ndarray (float)
-        For WOLA processing: previous data chunk to use for overlap-add.
-    normFactWOLA : float
-        For WOLA processing: normalization factor (sum of window samples).
-    winShift : int
+    wHat : [Nf x M] np.ndarry (complex)
+        Frequency-domain filter coefficients for each of the `M` channels
+        (>0 freqs. only) used in the WOLA process to modify the
+        short-term spectrum.
+    h : [N x 1] np.ndarray (float)
+        WOLA analysis window (time-domain).
+    f : [N x 1] np.ndarray (float)
+        WOLA synthesis window (time-domain).
+    R : int
         Window shift [samples].
-    desSigEstChunkLength : int
-        Output length (only used if `processingType == 'conv'`) [samples].
-    processingType : str
-        Processing type -- "wola": WOLA synthesis; "conv": linear convolution via T(z)-approximation.
+    jitted : bool
+        If True, use numba to speed some computations up. 
 
     Returns
     -------
-    dhatCurr : [Nf x 1] np.ndarray (complex)
-        Current chunk frequency-domain estimate (>0 freqs. only).
-    dChunk : [N x 1] np.ndarray (float)
-        Current chunk time-domain estimate, incl. overlap-add.
+    wIR_out : [(2 * N + 1) x 1] np.ndarray (float)
+        Time-domain distortion function approx. of the WOLA filtering process.
     """
+
+    n = len(h)
+
+    wTD = base.back_to_time_domain(wHat.conj(), n, axis=0)
+    wTD = np.real_if_close(wTD)         
+    wIR_out = np.zeros((2 * n - 1, wTD.shape[1]))
+    for m in range(wTD.shape[1]):
+        Hmat = sla.circulant(np.flip(wTD[:, m]))
+        Amat = np.diag(f) @ Hmat @ np.diag(h)
+
+        for ii in np.arange(start=-n+1, stop=n):
+            if jitted:
+                wIR_out[ii + n - 1, m] = get_trace_jitted(Amat, ii)
+            else:
+                wIR_out[ii + n - 1, m] = np.sum(np.diagonal(Amat, ii))
+
+    wIR_out /= R
+
+    return wIR_out
+
+
+def perform_update_noforloop(Ryy, Rnn, refSensorIdx=0):
+    """
+    Regular DANSE update computations, `for`-loop free.
+    No GEVD involved here.
     
-    # Useful renaming (compact code)
-    w = dv.wTilde[k][:, dv.DANSEiter[k] + 1, :]
-    y = dv.yTildeHat[k][:, dv.DANSEiter[k], :]
-    win = p.winWOLAsynthesis
-    dChunk = dv.d[dv.idxBegChunk:dv.idxEndChunk, k]
-    yTD = dv.yTilde[k][:, dv.DANSEiter[k], :dv.nLocalSensors[k]]
-        
-    dhatCurr = None  # init
+    Parameters
+    ----------
+    Ryy : [M x N x N] np.ndarray (complex)
+        Autocorrelation matrix between the sensor signals.
+    Rnn : [M x N x N] np.ndarray (complex)
+        Autocorrelation matrix between the noise signals.
+    refSensorIdx : int
+        Index of the reference sensor (>=0).
 
-    if p.desSigProcessingType == 'wola':
-        # ----- Compute desired signal chunk estimate using WOLA -----
-        dhatCurr = np.einsum('ij,ij->i', w.conj(), y)   # vectorized way to do inner product on slices
-        # Transform back to time domain (WOLA processing)
-        dChunCurr = p.normFactWOLA * win * back_to_time_domain(dhatCurr, len(win))
-        if len(dChunk) < len(win):   # fewSamples_td BC scheme: first iteration required zero-padding at the start of the chunk
-            dChunk += np.real_if_close(dChunCurr[-len(dChunk):])   # overlap and add construction of output time-domain signal
-        else:
-            dChunk += np.real_if_close(dChunCurr)   # overlap and add construction of output time-domain signal
+    Returns
+    -------
+    w : [M x N] np.ndarray (complex)
+        Regular DANSE filter coefficients.
+    """
+    # Reference sensor selection vector
+    Evect = np.zeros((Ryy.shape[-1],))
+    Evect[refSensorIdx] = 1
 
-    elif p.desSigProcessingType == 'conv':
-        # ----- Compute desired signal chunk estimate using T(z) approx. for linear convolution -----
-        wIR = dist_fct_approx(w, win, win, p.Ns)
-        # Perform convolution
-        yfiltLastSamples = np.zeros((p.Ns, yTD.shape[-1]))
-        for m in range(yTD.shape[-1]):
-            idDesired = np.arange(start=len(wIR) - p.Ns, stop=len(wIR))   # indices required from convolution output
-            tmp = extract_few_samples_from_convolution(idDesired, wIR[:, m], yTD[:, m])
-            yfiltLastSamples[:, m] = tmp
-
-        dChunk = np.sum(yfiltLastSamples, axis=1)
-
-    return dhatCurr, dChunk
+    # Cross-correlation matrix update 
+    ryd = np.matmul(Ryy - Rnn, Evect)
+    # Update node-specific parameters of node k
+    Ryyinv = np.linalg.inv(Ryy)
+    w = np.matmul(Ryyinv, ryd[:,:,np.newaxis])
+    w = w[:, :, 0]  # get rid of singleton dimension
+    
+    return w

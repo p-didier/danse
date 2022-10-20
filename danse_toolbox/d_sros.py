@@ -3,102 +3,17 @@ from danse.danse_toolbox.d_classes import *
 from paderwasn.synchronization.time_shift_estimation import max_time_lag_search
 
 
-def update_sro_estimates(k, dv: DANSEvariables, p: DANSEparameters):
-    """
-    TODO:
-    """
-    # Useful variables (compact coding)
-    nNeighs = len(dv.neighbors[k])
-    iter = dv.DANSEiter[k]
-    bufferFlagPos = p.broadcastLength * np.sum(
-        dv.bufferFlags[k][:(iter + 1), :],
-        axis=0
-    )
-    bufferFlagPri = p.broadcastLength * np.sum(
-        dv.bufferFlags[k][:(iter - p.cohDriftMethod.segLength + 1), :],
-        axis=0
-    )
-    
-    # DANSE filter update indices corresponding to "Filter-shift" SRO estimate updates
-    cohDriftSROupdateIndices = np.arange(
-        start=p.cohDriftMethod.startAfterNupdates + p.cohDriftMethod.estEvery,
-        stop=dv.numIterations,
-        step=p.cohDriftMethod.estEvery
-    )
-    
-    # Init arrays
-    sroOut = np.zeros(nNeighs)
-    if p.estimateSROs == 'CohDrift':
-        
-        ld = p.cohDriftMethod.segLength
-
-        if iter in cohDriftSROupdateIndices:
-
-            flagFirstSROEstimate = False
-            if iter == np.amin(cohDriftSROupdateIndices):
-                flagFirstSROEstimate = True     # let `cohdrift_sro_estimation()` know that this is the 1st SRO estimation round
-
-            # Residuals method
-            for q in range(nNeighs):
-
-                idxq = dv.nLocalSensors + q     # index of the compressed signal from node `q` inside `yyH`
-                if p.cohDriftMethod.loop == 'closed':
-                    # Use SRO-compensated correlation matrix entries (closed-loop SRO est. + comp.)
-                    cohPosteriori = (dv.yyH[iter, :, 0, idxq]
-                        / np.sqrt(dv.yyH[iter, :, 0, 0] *\
-                            dv.yyH[iter, :, idxq, idxq]))   # a posteriori coherence
-                    cohPriori = (dv.yyH[iter - ld, :, 0, idxq]
-                        / np.sqrt(dv.yyH[iter - ld, :, 0, 0] *\
-                            dv.yyH[iter - ld, :, idxq, idxq]))  # a priori coherence
-                    
-                    # Set buffer flags to 0
-                    bufferFlagPri = np.zeros_like(bufferFlagPri)
-                    bufferFlagPos = np.zeros_like(bufferFlagPos)
-
-                elif p.cohDriftMethod.loop == 'open':
-                    # Use SRO-_un_compensated correlation matrix entries (open-loop SRO est. + comp.)
-                    cohPosteriori = (dv.yyHuncomp[iter, :, 0, idxq]
-                        / np.sqrt(dv.yyHuncomp[iter, :, 0, 0] *\
-                            dv.yyHuncomp[iter, :, idxq, idxq]))     # a posteriori coherence
-                    cohPriori = (dv.yyHuncomp[iter - ld, :, 0, idxq]
-                        / np.sqrt(dv.yyHuncomp[iter - ld, :, 0, 0] *\
-                            dv.yyHuncomp[iter - ld, :, idxq, idxq]))     # a priori coherence
-
-                sroRes, apr = cohdrift_sro_estimation(
-                    wPos=cohPosteriori,
-                    wPri=cohPriori,
-                    avgResProd=dv.avgProdResiduals[:, q],
-                    Ns=p.Ns,
-                    ld=ld,
-                    method=p.cohDriftMethod.estimationMethod,
-                    alpha=p.cohDriftMethod.alpha,
-                    flagFirstSROEstimate=flagFirstSROEstimate,
-                    bufferFlagPri=bufferFlagPri[q],
-                    bufferFlagPos=bufferFlagPos[q]
-                )
-            
-                sroOut[q] = sroRes
-                dv.avgProdResiduals[:, q] = apr
-
-    elif p.estimateSROs == 'Oracle':        # no data-based dynamic SRO estimation: use oracle knowledge
-        sroOut = (dv.SROsppm[dv.neighbors[k]] - dv.SROsppm[k]) * 1e-6
-
-    # Save SRO (residuals)
-    dv.SROsResiduals[k][iter, :] = sroOut
-
-    return dv
-
-
-def cohdrift_sro_estimation(wPos: np.ndarray,
-                            wPri: np.ndarray,
-                            avgResProd,
-                            Ns,
-                            ld,
-                            alpha=0.95,
-                            method='gs',
-                            flagFirstSROEstimate=False,
-                            bufferFlagPos=0,
-                            bufferFlagPri=0):
+def cohdrift_sro_estimation(
+        wPos: np.ndarray,
+        wPri: np.ndarray,
+        avgResProd,
+        Ns,
+        ld,
+        alpha=0.95,
+        method='gs',
+        flagFirstSROEstimate=False,
+        bufferFlagPos=0,
+        bufferFlagPri=0):
     """Estimates residual SRO using a coherence drift technique.
     
     Parameters
@@ -162,28 +77,3 @@ def cohdrift_sro_estimation(wPos: np.ndarray,
         sro_est = - b.T @ np.angle(avgResProd_out[-len(kappa):]) / (b.T @ b)
 
     return sro_est, avgResProd_out
-
-
-def compensate_sros(k, dv: DANSEvariables, p: DANSEparameters):
-    """
-    TODO:
-    """
-
-    for q in range(len(dv.neighbors[k])):
-        if p.estimateSROs == 'CohDrift':
-            if p.cohDriftMethod.loop == 'closed':
-                # Increment estimate using SRO residual
-                dv.SROsEstimates[k][dv.DANSEiter[k], q] +=\
-                    dv.SROsResiduals[k][dv.DANSEiter[k], q] /\
-                    (1 + dv.SROsResiduals[k][dv.DANSEiter[k], q]) *\
-                    p.cohDriftMethod.alphaEps
-            elif p.cohDriftMethod.loop == 'open':
-                # Use SRO "residual" as estimates
-                dv.SROsEstimates[k][dv.DANSEiter[k], q] =\
-                    dv.SROsResiduals[k][dv.DANSEiter[k], q] /\
-                    (1 + dv.SROsResiduals[k][dv.DANSEiter[k], q])
-        # Increment phase shift factor recursively
-        dv.phaseShiftFactors[k][dv.nLocalSensors[k] + q] -=\
-            dv.SROsEstimates[k][dv.DANSEiter[k], q] * p.Ns  # <-- valid directly for oracle SRO ``estimation''
-
-    return dv
