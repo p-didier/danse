@@ -47,10 +47,11 @@ class WASNparameters(AcousticScenarioParameters):
 @dataclass
 class Node:
     nSensors: int = 1
+    sro: float = 0.
     fs: float = 16000.
     data: np.ndarray = np.array([])
     timeStamps: np.ndarray = np.array([])
-    neighborsIdx: np.ndarray = np.array([])
+    neighborsIdx: list[int] = field(default_factory=list)
     vad: np.ndarray = np.array([])
     beta: float = 1.    # exponential averaging (forgetting factor)
                         # for Ryy and Rnn updates at this node

@@ -5,12 +5,15 @@
 # General TODO:'s
 # -- Allow computation of local and centralised estimates
 
+import time, datetime
 from numba import njit
 import scipy.linalg as sla
-from danse.danse_toolbox.d_base import *
+from pyinstrument import Profiler
+import danse.danse_toolbox.d_base as base
+from danse.danse_toolbox.d_sros import *
 from danse.danse_toolbox.d_classes import *
 
-def danse(wasn: list[Node], p: DANSEparameters):
+def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
     """
     Main DANSE function.
 
@@ -31,7 +34,7 @@ def danse(wasn: list[Node], p: DANSEparameters):
     dv = DANSEvariables().fromWASN(wasn)
 
     # Events
-    eventInstants, fs = initialize_events(
+    eventInstants, fs = base.initialize_events(
         timeInstants=dv.timeInstants,
         N=p.DFTsize,
         Ns=p.Ns,
@@ -40,11 +43,15 @@ def danse(wasn: list[Node], p: DANSEparameters):
         efficient=p.efficientSpSBC
     )
 
+    # Profiling
+    profiler = Profiler()
+    profiler.start()
+    t0 = time.perf_counter()        # loop timing
 
     for idx_t in range(len(eventInstants)):
 
         # Parse event matrix and inform user (is asked)
-        events_parser(
+        base.events_parser(
             eventInstants[idx_t],
             dv.startUpdates,
             printouts=p.printout_eventsParser,
@@ -79,15 +86,23 @@ def danse(wasn: list[Node], p: DANSEparameters):
                     fs=fs[k],
                     k=k,
                     dv=dv,
-                    params=p
+                    p=p
                 )
 
             else:
                 raise ValueError(f'Unknown event type: "{events.type[idx_e]}".')
 
-    out = DANSEoutputs(
-        #
-    )
+    # Profiling
+    profiler.stop()
+    if p.printout_profiler:
+        profiler.print()
+
+    print('\nSimultaneous DANSE processing all done.')
+    dur = time.perf_counter() - t0
+    print(f'{np.amax(dv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: {np.round(np.amax(dv.timeInstants) / dur, 4)})')
+
+    out = DANSEoutputs().fromVariables(dv)
 
     return out
 
@@ -118,7 +133,7 @@ def broadcast(yk, tCurr, fs, k,
     """
 
     # Extract correct frame of local signals
-    ykFrame = local_chunk_for_broadcast(yk, tCurr, fs, params.DFTsize)
+    ykFrame = base.local_chunk_for_broadcast(yk, tCurr, fs, params.DFTsize)
 
     if len(ykFrame) < params.DFTsize:
 
@@ -137,7 +152,7 @@ def broadcast(yk, tCurr, fs, k,
             )  # local compressed signals (freq.-domain)
 
             # Fill buffers in
-            dv.zBuffer = fill_buffers_whole_chunk(
+            dv.zBuffer = base.fill_buffers_whole_chunk(
                 k,
                 dv.neighbors,
                 dv.zBuffer,
@@ -157,7 +172,7 @@ def broadcast(yk, tCurr, fs, k,
             )  # local compressed signals (time-domain)
 
             # Fill buffers in
-            dv.zBuffer = fill_buffers_whole_chunk(
+            dv.zBuffer = base.fill_buffers_whole_chunk(
                 k,
                 dv.neighbors,
                 dv.zBuffer,
@@ -186,7 +201,7 @@ def broadcast(yk, tCurr, fs, k,
                 updateBroadcastFilter
             )  # local compressed signals
 
-            dv.zBuffer = fill_buffers_td_few_samples(
+            dv.zBuffer = base.fill_buffers_td_few_samples(
                 k,
                 dv.neighbors,
                 dv.zBuffer,
@@ -199,23 +214,23 @@ def broadcast(yk, tCurr, fs, k,
 
 def update_and_estimate(yk, tCurr, fs, k,
                 dv: DANSEvariables,
-                params: DANSEparameters):
+                p: DANSEparameters):
     """
     Update filter coefficient at current node
     and estimate corresponding desired signal frame.
     """
 
     # Process buffers
-    dv.z[k], dv.bufferFlags[k][dv.DANSEiter[k], :] = process_incoming_signals_buffers(dv, params, tCurr)
+    dv = base.process_incoming_signals_buffers(k, dv, p, tCurr)
     # Wipe local buffers
     dv.zBuffer[k] = [np.array([]) for _ in range(len(dv.neighbors[k]))]
     # Construct `\tilde{y}_k` in frequency domain
-    dv, yLocalCurr = build_ytilde(yk, tCurr, fs, k, dv, params)
+    dv, yLocalCurr = base.build_ytilde(yk, tCurr, fs, k, dv, p)
     # Account for buffer flags
-    dv, skipUpdate = account_for_flags(yLocalCurr, k, dv, params, tCurr)
+    dv, skipUpdate = base.account_for_flags(yLocalCurr, k, dv, p, tCurr)
     # Ryy and Rnn updates
     dv.Ryytilde[k], dv.Rnntilde[k], dv.yyH[k][dv.DANSEiter[k], :, :, :] =\
-        spatial_covariance_matrix_update(
+        base.spatial_covariance_matrix_update(
             dv.yTildeHat[k][:, dv.DANSEiter[k], :],
             dv.Ryytilde[k],
             dv.Rnntilde[k],
@@ -230,23 +245,23 @@ def update_and_estimate(yk, tCurr, fs, k,
             dv.numUpdatesRnn[k] > np.amax(dv.dimYTilde):
         dv.startUpdates[k] = True
 
-    if dv.startUpdates[k] and not params.bypassFilterUpdates and not skipUpdate:
-        if k == params.referenceSensor and dv.nInternalFilterUpdates[k] == 0:
+    if dv.startUpdates[k] and not p.bypassFilterUpdates and not skipUpdate:
+        if k == p.referenceSensor and dv.nInternalFilterUpdates[k] == 0:
             # Save first update instant (for, e.g., SRO plot)
             firstDANSEupdateRefSensor = tCurr
-        # No `for`-loop versions 
-        if params.performGEVD:    # GEVD update
+        # No `for`-loop versions
+        if p.performGEVD:    # GEVD update
             dv.wTilde[k][:, dv.DANSEiter[k] + 1, :], _ = perform_gevd_noforloop(
                 dv.Ryytilde[k],
                 dv.Rnntilde[k],
-                params.GEVDrank,
-                params.referenceSensor
+                p.GEVDrank,
+                p.referenceSensor
             )
         else:                       # regular update (no GEVD)
             dv.wTilde[k][:, dv.DANSEiter[k] + 1, :] = perform_update_noforloop(
                 dv.Ryytilde[k],
                 dv.Rnntilde[k],
-                params.referenceSensor
+                p.referenceSensor
             )
         # Count the number of internal filter updates
         dv.nInternalFilterUpdates[k] += 1  
@@ -266,24 +281,38 @@ def update_and_estimate(yk, tCurr, fs, k,
         dv.wTilde[k][:, dv.DANSEiter[k] + 1, :] = dv.wTilde[k][:, dv.DANSEiter[k], :]
         if skipUpdate:
             print(f'Node {k+1}: {dv.DANSEiter[k] + 1}^th update skipped.')
-    if params.bypassFilterUpdates:
+    if p.bypassFilterUpdates:
         print('!! User-forced bypass of filter coefficients updates !!')
 
     # ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓  Update external filters (for broadcasting)  ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
     dv.wTildeExt[k] = dv.expAvgBeta[k] * dv.wTildeExt[k] +\
         (1 - dv.expAvgBeta[k]) *  dv.wTildeExtTarget[k]
     # Update targets
-    # TODO:TODO:TODO:TODO: stopped here on 19.10.2022
-    # if tCurr - lastExternalFiltUpdateInstant[k] >= s.timeBtwExternalFiltUpdates:
-    #     wTildeExternalTarget[k] = (1 - alphaExternalFilters) * wTildeExternalTarget[k] + alphaExternalFilters * wTilde[k][:, i[k] + 1, :yLocalCurr.shape[-1]]
-    #     # Update last external filter update instant [s]
-    #     lastExternalFiltUpdateInstant[k] = tCurr
-    #     if s.printouts.externalFilterUpdates:    # inform user
-    #         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {s.timeBtwExternalFiltUpdates}s)')
+    if tCurr - dv.lastExternalFiltUpdateInstant[k] >= p.timeBtwExternalFiltUpdates:
+        dv.wTildeExtTarget[k] = (1 - p.alphaExternalFilters) * dv.wTildeExtTarget[k] +\
+            p.alphaExternalFilters * dv.wTilde[k][:, dv.DANSEiter[k] + 1, :yLocalCurr.shape[-1]]
+        # Update last external filter update instant [s]
+        dv.lastExternalFiltUpdateInstant[k] = tCurr
+        if p.printout_externalFilterUpdate:    # inform user
+            print(f't={np.round(tCurr, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {p.timeBtwExternalFiltUpdates}s)')
     # ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑  Update external filters (for broadcasting)  ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 
+    # Update SRO estimates
+    dv = update_sro_estimates(k, dv, p)
 
-    stop = 1
+    # Update phase shifts for SRO compensation
+    if p.compensateSROs:
+        dv = compensate_sros(k, dv, p)
+
+    # ----- Compute desired signal chunk estimate [DANSE, GLOBAL] -----
+    dv.dhat[:, dv.DANSEiter[k], k], tmp = base.get_desired_signal(k, dv, p)
+    # if s.desSigProcessingType == 'wola':
+    #     d[idxBegChunk:idxEndChunk, k] = tmp
+    # elif s.desSigProcessingType == 'conv':
+    #     d[idxEndChunk - s.Ns:idxEndChunk, k] = tmp
+
+    return dv
+
 
 def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
     """Performs local signals compression in the frequency domain.
@@ -336,7 +365,7 @@ def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
     # WOLA synthesis stage
     if zqPrevious is not None:
         # IDFT
-        zqCurr = back_to_time_domain(zqHat, n, axis=0)
+        zqCurr = base.back_to_time_domain(zqHat, n, axis=0)
         zqCurr = np.real_if_close(zqCurr)
         zqCurr *= f    # multiply by synthesis window
 
@@ -404,7 +433,7 @@ def danse_compression_few_samples(
             start=len(wIR) - L + 1,
             stop=len(wIR) + 1
         )   # indices required from convolution output
-        tmp = extract_few_samples_from_convolution(
+        tmp = base.extract_few_samples_from_convolution(
             idDesired,
             wIR[:, idxSensor],
             yq[:, idxSensor]
@@ -448,7 +477,7 @@ def dist_fct_approx(wHat, h, f, R, jitted=True):
 
     n = len(h)
 
-    wTD = back_to_time_domain(wHat.conj(), n, axis=0)
+    wTD = base.back_to_time_domain(wHat.conj(), n, axis=0)
     wTD = np.real_if_close(wTD)         
     wIR_out = np.zeros((2 * n - 1, wTD.shape[1]))
     for m in range(wTD.shape[1]):

@@ -7,6 +7,7 @@ import copy
 from platform import node
 import numpy as np
 from danse.danse_toolbox.d_classes import *
+from danse.danse_toolbox.d_core import dist_fct_approx
 from scipy.signal._arraytools import zero_ext
 
 
@@ -709,15 +710,12 @@ def build_ytilde(yk, tCurr, fs, k, dv: DANSEvariables, params: DANSEparameters):
     -------
     TODO:
     """
-    
-    # Useful variables
-    normWOLA = params.winWOLAanalysis.sum()
 
     # Extract current local data chunk
-    yLocalCurr, idxBegChunk, idxEndChunk = local_chunk_for_update(yk, tCurr, fs, params)
+    yLocalCurr, dv.idxBegChunk, dv.idxEndChunk = local_chunk_for_update(yk, tCurr, fs, params)
 
     # Compute VAD
-    VADinFrame = dv.fullVAD[np.amax([idxBegChunk, 0]):idxEndChunk, k]
+    VADinFrame = dv.fullVAD[np.amax([dv.idxBegChunk, 0]):dv.idxEndChunk, k]
     # If there is a majority of "VAD = 1" in the frame, set the frame-wise VAD to 1
     dv.oVADframes[dv.DANSEiter[k]] = sum(VADinFrame == 0) <= len(VADinFrame) // 2
     # Count number of spatial covariance matrices updates
@@ -729,12 +727,12 @@ def build_ytilde(yk, tCurr, fs, k, dv: DANSEvariables, params: DANSEparameters):
     # Build `\tilde{y}_k`
     if params.broadcastType == 'wholeChunk_fd':
         # Broadcasting done in frequency-domain
-        yLocalHatCurr = 1 / normWOLA * np.fft.fft(
+        yLocalHatCurr = 1 / params.normFactWOLA * np.fft.fft(
             yLocalCurr * params.winWOLAanalysis[:, np.newaxis],
             params.DFTsize, axis=0
         )
         dv.yTildeHat[k][:, dv.DANSEiter[k], :] = np.concatenate(
-            (yLocalHatCurr[:dv.nPosFreqs, :], 1 / normWOLA * dv.z[k]),
+            (yLocalHatCurr[:dv.nPosFreqs, :], 1 / params.normFactWOLA * dv.z[k]),
             axis=1
         )
     elif params.broadcastType in ['wholeChunk_td', 'fewSamples_td']:
@@ -742,7 +740,7 @@ def build_ytilde(yk, tCurr, fs, k, dv: DANSEvariables, params: DANSEparameters):
         yTildeCurr = np.concatenate((yLocalCurr, dv.z[k]), axis=1)
         dv.yTilde[k][:, dv.DANSEiter[k], :] = yTildeCurr
         # Go to frequency domain
-        yTildeHatCurr = 1 / normWOLA * np.fft.fft(
+        yTildeHatCurr = 1 / params.normFactWOLA * np.fft.fft(
             dv.yTilde[k][:, dv.DANSEiter[k], :] * params.winWOLAanalysis[:, np.newaxis],
             params.DFTsize, axis=0
         )
@@ -754,7 +752,10 @@ def build_ytilde(yk, tCurr, fs, k, dv: DANSEvariables, params: DANSEparameters):
 
 def account_for_flags(yLocalCurr, k, dv: DANSEvariables, p: DANSEparameters, t):
 
+    # Init
+    skipUpdate = False
     extraPhaseShiftFactor = np.zeros(dv.dimYTilde[k])
+    
     for q in range(len(dv.neighbors[k])):
         if not np.isnan(dv.bufferFlags[k][dv.DANSEiter[k], q]):
             extraPhaseShiftFactor[yLocalCurr.shape[-1] + q] =\
@@ -820,3 +821,69 @@ def spatial_covariance_matrix_update(y, Ryy, Rnn, beta, vad):
         Rnn = beta * Rnn + (1 - beta) * yyH  # update noise-only matrix
 
     return Ryy, Rnn, yyH
+
+
+def get_desired_signal(k, dv: DANSEvariables, p: DANSEparameters):
+    """
+    Compute chunk of desired signal from DANSE freq.-domain filters
+    and freq.-domain observation vector y_tilde.
+
+    Parameters
+    ----------
+    w : [Nf x M] np.ndarray (complex)
+        Frequency-domain filter coefficients for each of the `M` channels (>0 freqs. only).
+    y : [Nf x M] np.ndarray (complex)
+        Frequency-domain signals (full observations vector $\\tilde{\\mathbf{y}}_k$) (>0 freqs. only).
+    win : [N x 1] np.ndarray (float)
+        Synthesis window (time-domain).
+    dChunk : [N x 1] np.ndarray (float)
+        For WOLA processing: previous data chunk to use for overlap-add.
+    normFactWOLA : float
+        For WOLA processing: normalization factor (sum of window samples).
+    winShift : int
+        Window shift [samples].
+    desSigEstChunkLength : int
+        Output length (only used if `processingType == 'conv'`) [samples].
+    processingType : str
+        Processing type -- "wola": WOLA synthesis; "conv": linear convolution via T(z)-approximation.
+
+    Returns
+    -------
+    dhatCurr : [Nf x 1] np.ndarray (complex)
+        Current chunk frequency-domain estimate (>0 freqs. only).
+    dChunk : [N x 1] np.ndarray (float)
+        Current chunk time-domain estimate, incl. overlap-add.
+    """
+    
+    # Useful renaming (compact code)
+    w = dv.wTilde[k][:, dv.DANSEiter[k] + 1, :]
+    y = dv.yTildeHat[k][:, dv.DANSEiter[k], :]
+    win = p.winWOLAsynthesis
+    dChunk = dv.d[dv.idxBegChunk:dv.idxEndChunk, k]
+    yTD = dv.yTilde[k][:, dv.DANSEiter[k], :dv.nLocalSensors[k]]
+        
+    dhatCurr = None  # init
+
+    if p.desSigProcessingType == 'wola':
+        # ----- Compute desired signal chunk estimate using WOLA -----
+        dhatCurr = np.einsum('ij,ij->i', w.conj(), y)   # vectorized way to do inner product on slices
+        # Transform back to time domain (WOLA processing)
+        dChunCurr = p.normFactWOLA * win * back_to_time_domain(dhatCurr, len(win))
+        if len(dChunk) < len(win):   # fewSamples_td BC scheme: first iteration required zero-padding at the start of the chunk
+            dChunk += np.real_if_close(dChunCurr[-len(dChunk):])   # overlap and add construction of output time-domain signal
+        else:
+            dChunk += np.real_if_close(dChunCurr)   # overlap and add construction of output time-domain signal
+
+    elif p.desSigProcessingType == 'conv':
+        # ----- Compute desired signal chunk estimate using T(z) approx. for linear convolution -----
+        wIR = dist_fct_approx(w, win, win, p.Ns)
+        # Perform convolution
+        yfiltLastSamples = np.zeros((p.Ns, yTD.shape[-1]))
+        for m in range(yTD.shape[-1]):
+            idDesired = np.arange(start=len(wIR) - p.Ns, stop=len(wIR))   # indices required from convolution output
+            tmp = extract_few_samples_from_convolution(idDesired, wIR[:, m], yTD[:, m])
+            yfiltLastSamples[:, m] = tmp
+
+        dChunk = np.sum(yfiltLastSamples, axis=1)
+
+    return dhatCurr, dChunk

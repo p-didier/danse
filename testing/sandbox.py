@@ -18,11 +18,7 @@ import danse.danse_toolbox.d_base as base
 import danse.danse_toolbox.d_core as core
 from danse.danse_toolbox.d_classes import *
 from dataclasses import dataclass
-
-@dataclass
-class WASN:
-    data : np.ndarray = np.ndarray([])
-
+import postproc
 
 @dataclass
 class TestParameters:
@@ -31,7 +27,9 @@ class TestParameters:
     #
     referenceSensor: int = 0                # Index of the reference sensor at each node
     #
-    wasn: WASNparameters = WASNparameters()
+    wasn: WASNparameters = WASNparameters(
+        sigDur=5
+    )
     danseParams: DANSEparameters = DANSEparameters()
     #
     seed: int = 12345
@@ -95,6 +93,9 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
 
     # Launch DANSE
     out = core.danse(wasn, p.danseParams)
+
+    # Visualize results
+    postproc.visualization(out)
 
 
 if __name__ == '__main__':

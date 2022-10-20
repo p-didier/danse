@@ -304,6 +304,7 @@ def build_wasn(room: pra.room.ShoeBox, vad, p: classes.WASNparameters):
         # Create node
         node = classes.Node(
             nSensors=p.nSensorPerNode[k],
+            sro=p.SROperNode[k],
             fs=fsSRO,
             data=sigs,
             timeStamps=t,
@@ -373,7 +374,7 @@ def get_topo(topoType, K):
 
     Returns
     -------
-    neighbors : [K x 1] list of [variable-dim x 1] np.ndarray (int)
+    neighbors : [K x 1] list of [variable-dim x 1] lists (int)
         Node-specific lists of neighbor nodes indices.
     """
 
@@ -390,7 +391,7 @@ def get_topo(topoType, K):
 
     # Get node-specific lists of neighbor nodes indices
     allNodes = np.arange(K)
-    neighbors = [allNodes[(topo[:, k] > 0) & (allNodes != k)] for k in range(K)]
+    neighbors = [list(allNodes[(topo[:, k] > 0) & (allNodes != k)]) for k in range(K)]
 
     return neighbors
 
