@@ -84,9 +84,28 @@ class Hyperparameters:
 
 @dataclass
 class DANSEparameters(Hyperparameters):
+    """
+    Parameters for the DANSE algorithm.
+
+    References
+    ----------
+    - [1] Bertrand, A., & Moonen, M. (2010). Distributed adaptive node-specific
+    signal estimation in fully connected sensor networks—Part I: Sequential
+    node updating. IEEE Transactions on Signal Processing, 58(10), 5277-5291.
+
+    - [2] Bertrand, A., & Moonen, M. (2010). Distributed adaptive node-specific
+    signal estimation in fully connected sensor networks—Part II: Simultaneous
+    and asynchronous node updating. IEEE Transactions on Signal Processing,
+    58(10), 5292-5306.
+
+    """
     referenceSensor: int = 0    # index of reference sensor at each node
     DFTsize: int = 1024    # DFT size
     WOLAovlp: float = .5   # WOLA window overlap [*100%]
+    nodeUpdating: str = 'seq'   # node-updating strategy
+        # - "seq": round-robin updating [1]
+        # - "sim": simultaneous updating [2]
+        # - "asy": asynchronous updating [2]
     broadcastLength: int = 1    # number of samples to be broadcasted at a time
     broadcastType: str = 'wholeChunk_td'    # type of broadcast
         # -- 'wholeChunk_td': chunks of compressed signals in time-domain,
@@ -107,7 +126,7 @@ class DANSEparameters(Hyperparameters):
     performGEVD: bool = True    # if True, perform GEVD
     GEVDrank: int = 1           # GEVD rank
     timeBtwExternalFiltUpdates: float = 1.  # [s] bw. external filter updates.
-        # -- TODO: make that used only if the node-updating is simultaneous/asynchronous
+    # ^ TODO: make that used only if the node-updating is sim/asy.
     alphaExternalFilters: float = .5    # exponential averaging constant
                                         # for external filter target update.
     t_expAvg50p: float = 2.     # [s] Time in the past at which the value is
@@ -120,13 +139,16 @@ class DANSEparameters(Hyperparameters):
     minFiltUpdatesForMetrics: int = 10   # minimum number of DANSE
         # updates before start of speech enhancement metrics computation
     
-
     def __post_init__(self):
         self.Ns = int(self.DFTsize * (1 - self.WOLAovlp))
 
 
 @dataclass
 class DANSEvariables(DANSEparameters):
+    """
+    Main DANSE class. Stores all relevant variables and core functions on 
+    those variables.
+    """
     
     def fromWASN(self, wasn: list[Node]):
         """
@@ -259,7 +281,8 @@ class DANSEvariables(DANSEparameters):
 
         # VAD
         if wasn[0].vad.shape[-1] > 1: #TODO:
-            raise ValueError('/!\ VAD for multiple desired sources not yet treated as special case. Using VAD for source #1!')
+            raise ValueError('/!\ VAD for multiple desired sources not yet \
+                treated as special case. Using VAD for source #1!')
         nNodes = len(wasn)
         fullVAD = np.zeros((wasn[0].vad.shape[0], nNodes))
         for k in range(nNodes):  # for each node
@@ -429,7 +452,9 @@ class DANSEvariables(DANSEparameters):
             # Update last external filter update instant [s]
             self.lastExtFiltUp[k] = t
             if p.printout_externalFilterUpdate:    # inform user
-                print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {p.timeBtwExternalFiltUpdates}s)')
+                print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for \
+                    node {k+1} (scheduled every [at least] \
+                        {p.timeBtwExternalFiltUpdates}s)')
 
 
     def process_incoming_signals_buffers(self, k, t, p: DANSEparameters):
@@ -479,7 +504,9 @@ class DANSEvariables(DANSEparameters):
                         # `k`, but node `k` has already reached its first
                         # update instant. Interpretation: Node `q` samples
                         # slower than node `k`. 
-                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -1 broadcast')
+                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow \
+                            at current node`s B_{self.neighbors[k][idxq]+1} \
+                            buffer | -1 broadcast')
                         bufferFlags[idxq] = -1      # raise negative flag
                         zCurrBuffer = np.zeros(Ndft)
                 else:
@@ -516,7 +543,9 @@ class DANSEvariables(DANSEparameters):
                         # update instant. Interpretation: Node `q` samples
                         # slower than node `k`. 
                         nMissingBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
+                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow \
+                            at current node`s B_{self.neighbors[k][idxq]+1} \
+                            buffer | -{nMissingBroadcasts} broadcast(s)')
                         # Raise negative flag
                         bufferFlags[idxq] = -1 * nMissingBroadcasts
                         zCurrBuffer = np.concatenate(
@@ -528,7 +557,9 @@ class DANSEvariables(DANSEparameters):
                         # to node `k`. Interpretation: Node `q` samples faster
                         # than node `k`.
                         nExtraBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
+                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at \
+                            current node`s B_{self.neighbors[k][idxq]+1} \
+                            buffer | +{nExtraBroadcasts} broadcasts(s)')
                         # Raise positive flag
                         bufferFlags[idxq] = +1 * nExtraBroadcasts
                         zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
@@ -543,23 +574,31 @@ class DANSEvariables(DANSEparameters):
                     # case 2: negative mismatch
                     elif (Ns - Bq) % Lbc == 0 and Bq < Ns:
                         nMissingBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
+                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow \
+                            at current node`s B_{self.neighbors[k][idxq]+1} \
+                            buffer | -{nMissingBroadcasts} broadcast(s)')
                         # Raise negative flag
                         bufferFlags[idxq] = -1 * nMissingBroadcasts
                     # case 3: positive mismatch
                     elif (Ns - Bq) % Lbc == 0 and Bq > Ns:       
                         nExtraBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
+                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow \
+                            at current node`s B_{self.neighbors[k][idxq]+1} \
+                            buffer | +{nExtraBroadcasts} broadcasts(s)')
                         # Raise positive flag
                         bufferFlags[idxq] = +1 * nExtraBroadcasts
                     else:
                         if (Ns - Bq) % Lbc != 0 and\
                             np.abs(self.i[k] - (self.nIter - 1)) < 10:
-                            print('[b! @ t={np.round(t, 3)}s] This is the last iteration -- not enough samples anymore due to cumulated SROs effect, skip update.')
+                            print('[b! @ t={np.round(t, 3)}s] This is the \
+                                last iteration -- not enough samples anymore \
+                                due to cumulated SROs effect, skip update.')
                             # Raise "end of signal" flag
                             bufferFlags[idxq] = np.NaN
                         else:
-                            raise ValueError(f'Unexpected buffer size ({Bq} samples, with L={Lbc} and N={Ns}) for neighbor node q={self.neighbors[k][idxq]+1}.')
+                            raise ValueError(f'Unexpected buffer size ({Bq} \
+                                samples, with L={Lbc} and N={Ns}) for \
+                                neighbor node q={self.neighbors[k][idxq]+1}.')
                     # Build current buffer
                     if Ndft - Bq > 0:
                         zCurrBuffer = np.concatenate(
@@ -967,7 +1006,8 @@ class DANSEvariables(DANSEparameters):
             # Compute desired signal chunk estimate using WOLA
             dhatCurr = np.einsum('ij,ij->i', w.conj(), y)
             # Transform back to time domain (WOLA processing)
-            dChunCurr = p.normFactWOLA * win * base.back_to_time_domain(dhatCurr, len(win))
+            dChunCurr = p.normFactWOLA * win *\
+                base.back_to_time_domain(dhatCurr, len(win))
             # Overlap and add construction of output time-domain signal
             if len(dChunk) < len(win):
                 dChunk += np.real_if_close(dChunCurr[-len(dChunk):])

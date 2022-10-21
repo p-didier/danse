@@ -74,8 +74,10 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
 
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0
-    print(f'{np.amax(dv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
-    print(f'(Real-time processing factor: {np.round(np.amax(dv.timeInstants) / dur, 4)})')
+    print(f'{np.amax(dv.timeInstants)}s of signal processed in \
+        {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: \
+        {np.round(np.amax(dv.timeInstants) / dur, 4)})')
 
     out = DANSEoutputs().fromVariables(dv)
 

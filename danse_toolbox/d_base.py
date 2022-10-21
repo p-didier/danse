@@ -74,7 +74,7 @@ def prep_sigs_for_FFT(y, N, Ns, t):
     return yout, tout, nadd
 
 
-def initialize_events(timeInstants, p: DANSEparameters):
+def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
     """
     Returns the matrix the columns of which to loop over in SRO-affected
     simultaneous DANSE. For each event instant, the matrix contains the instant
@@ -106,7 +106,7 @@ def initialize_events(timeInstants, p: DANSEparameters):
         if timeInstants.ndim == 1:
             timeInstants = timeInstants[:, np.newaxis]
         else:
-            raise ValueError('Unexpected number of dimensions for input `timeInstants`.')
+            raise ValueError('Unexpected dimensions for `timeInstants`.')
     if timeInstants.shape[0] < timeInstants.shape[1]:
         timeInstants = timeInstants.T
 
@@ -120,13 +120,25 @@ def initialize_events(timeInstants, p: DANSEparameters):
         # vvv Allowing computer precision errors down to 1e-4*mean delta.
         precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e6))))
         if len(np.unique(np.round(deltas, precision))) > 1:
-            raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: {len(np.unique(np.round(deltas, precision)))} different sample intervals detected for node {k+1}.')
+            raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: \
+                {len(np.unique(np.round(deltas, precision)))} different \
+                    sample intervals detected for node {k+1}.')
         # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.
         fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)
 
     # Total signal duration [s] per node
     # (after truncation during signal generation).
     Ttot = timeInstants[-1, :]
+
+    # TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:
+    # Address variable `p.nodeUpdating`
+    if p.nodeUpdating == 'seq':     # sequential node-updating
+        pass
+    elif p.nodeUpdating == 'sim':   # simultaneous node-updating
+        pass
+    elif p.nodeUpdating == 'asy':   # asynchronous node-updating
+        pass
+    # TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:
     
     # Expected number of DANSE update per node over total signal length
     numUpInTtot = np.floor(Ttot * fs / Ns)

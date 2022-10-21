@@ -23,9 +23,9 @@ import postproc
 @dataclass
 class TestParameters:
     # TODO: vvv self-noise
-    selfnoiseSNR: int = -50                 # [dB] microphone self-noise SNR
+    selfnoiseSNR: int = -50 # [dB] microphone self-noise SNR
     #
-    referenceSensor: int = 0                # Index of the reference sensor at each node
+    referenceSensor: int = 0    # Index of the reference sensor at each node
     #
     wasn: WASNparameters = WASNparameters(
         sigDur=5
@@ -38,7 +38,9 @@ class TestParameters:
         np.random.seed(self.seed)  # set random seed
         random.seed(self.seed)  # set random seed
         #
-        self.testid = f'J{self.wasn.nNodes}Mk{list(self.wasn.nSensorPerNode)}Nn{self.wasn.nNoiseSources}Nd{self.wasn.nDesiredSources}T60_{int(self.wasn.t60)*1e3}ms'
+        self.testid = f'J{self.wasn.nNodes}Mk{list(self.wasn.nSensorPerNode)}\
+            Nn{self.wasn.nNoiseSources}Nd{self.wasn.nDesiredSources}T60_\
+                {int(self.wasn.t60)*1e3}ms'
 
 
 def main():
@@ -51,8 +53,16 @@ def main():
             t60=0.2,
             nNodes=2,
             nSensorPerNode=[2, 1],
-            desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}' for file in ['speech1.wav', 'speech2.wav']],
-            noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}' for file in ['whitenoise_signal_1.wav', 'whitenoise_signal_2.wav']],
+            desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
+                for file in [
+                    'speech1.wav',
+                    'speech2.wav'
+                ]],
+            noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}'\
+                for file in [
+                    'whitenoise_signal_1.wav',
+                    'whitenoise_signal_2.wav'
+                ]],
             SROperNode=np.array([0., 0.])
         ),
         danseParams=DANSEparameters(

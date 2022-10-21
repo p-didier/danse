@@ -52,8 +52,8 @@ def build_room(p: classes.WASNparameters):
         y = (y - np.mean(y)) / np.std(y)  # whiten
         desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
         ssrc = pra.soundsource.SoundSource(
-            position=np.random.uniform(size=(3,))* (p.rd - 2 * p.minDistToWalls)\
-                + p.minDistToWalls, # source coordinates
+            position=np.random.uniform(size=(3,)) *\
+                (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
             signal=y
         )
         room.add_soundsource(ssrc)
@@ -70,8 +70,8 @@ def build_room(p: classes.WASNparameters):
         y = (y - np.mean(y)) / np.std(y)    # whiten
         y *= 10 ** (-p.baseSNR / 20)        # gain
         ssrc = pra.soundsource.SoundSource(
-            position=np.random.uniform(size=(3,))* (p.rd - 2 * p.minDistToWalls)\
-                + p.minDistToWalls, # source coordinates
+            position=np.random.uniform(size=(3,)) *\
+                (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
             signal=y
         )
         room.add_soundsource(ssrc)
@@ -85,7 +85,8 @@ def build_room(p: classes.WASNparameters):
     # Extract 1 set of desired source RIRs per node
     rirsNodes = []
     for k in range(p.nNodes):
-        rirsCurr = [room.rir[ii][:p.nDesiredSources] for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
+        rirsCurr = [room.rir[ii][:p.nDesiredSources]\
+            for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
         rirsNodes.append(rirsCurr[0])
     # Compute VAD
     vad = get_vad(rirsNodes, desiredSignalsRaw, p)
@@ -106,9 +107,15 @@ def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
             wetsig = wetsig[:xdry.shape[0]]  # truncate
 
             thrsVAD = np.amax(wetsig ** 2) / p.VADenergyFactor
-            vad[:, k, ii], _ = oracleVAD(wetsig, tw=p.VADwinLength, thrs=thrsVAD, Fs=p.fs)
+            vad[:, k, ii], _ = oracleVAD(
+                wetsig,
+                tw=p.VADwinLength,
+                thrs=thrsVAD,
+                Fs=p.fs
+            )
 
     return vad
+
 
 def plot_mic_sigs(room: pra.room.ShoeBox, vad=None):
     """
@@ -119,7 +126,11 @@ def plot_mic_sigs(room: pra.room.ShoeBox, vad=None):
     fig.set_size_inches(8.5, 3.5)
     axes.plot(room.mic_array.signals.T)
     if vad is not None:
-        axes.plot(vad[:, 0, 0] * np.amax(abs(room.mic_array.signals)), 'k', label='Oracle VAD')
+        axes.plot(
+            vad[:, 0, 0] * np.amax(abs(room.mic_array.signals)),
+            'k',
+            label='Oracle VAD'
+        )
     axes.grid()
     axes.legend()
     plt.tight_layout()
@@ -127,7 +138,9 @@ def plot_mic_sigs(room: pra.room.ShoeBox, vad=None):
 
 
 def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, force2D=False):
-    """Define node positions based on node position, number of nodes, and array type
+    """
+    Define node positions based on node position, number of nodes,
+    and array type.
 
     Parameters
     ----------
@@ -159,7 +172,8 @@ def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, force2D=False):
         sensorCoords = np.zeros_like(sensorCoordsBeforeRot)
         for ii in range(Mk):
             myrot = rot.from_rotvec(np.pi/2 * rotvec)
-            sensorCoords[ii,:] = myrot.apply(sensorCoordsBeforeRot[ii, :]) + nodeCoords
+            sensorCoords[ii,:] =\
+                myrot.apply(sensorCoordsBeforeRot[ii, :]) + nodeCoords
     elif arrayGeom == 'radius':
         radius = micSep 
         sensorCoords = np.zeros((Mk,3))
@@ -184,18 +198,25 @@ def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, force2D=False):
         for ii in range(3):
             for jj in range(3):
                 for kk in range(3):
-                    coordFlat[counter, :] = [x[ii,jj,kk], y[ii,jj,kk], z[ii,jj,kk]]
+                    coordFlat[counter, :] = [
+                        x[ii,jj,kk],
+                        y[ii,jj,kk],
+                        z[ii,jj,kk]
+                    ]
                     counter += 1
         # Base configuration ("atomic" -- see Word journal week 39, MON)
         idx = [13,4,22,10,16,14,12]
-        sensorCoords[:np.amin([len(idx), Mk]), :] = coordFlat[idx[:np.amin([len(idx), Mk])], :]
+        sensorCoords[:np.amin([len(idx), Mk]), :] =\
+            coordFlat[idx[:np.amin([len(idx), Mk])], :]
         if len(idx) < Mk:
             allIdx = np.arange(coordFlat.shape[0])
             idxValid = [ii for ii in allIdx if ii not in idx]
             for ii in range(Mk - len(idx)):
-                sensorCoords[np.amin([len(idx), Mk]) + ii, :] = coordFlat[idxValid[ii], :]
+                sensorCoords[np.amin([len(idx), Mk]) + ii, :] =\
+                    coordFlat[idxValid[ii], :]
     else:
-        raise ValueError('No sensor array geometry defined for array type "%s"' % arrayGeom)
+        raise ValueError('No sensor array geometry defined for \
+            array type "%s"' % arrayGeom)
 
     return sensorCoords
 
@@ -234,9 +255,11 @@ def oracleVAD(x,tw,thrs,Fs):
     # Check input format
     x = np.array(x)     # Ensure it is an array
     if len(x.shape) > 1:
-        print('<oracleVAD>: input signal is multidimensional: using 1st row as reference')
+        print('<oracleVAD>: input signal is multidimensional: \
+            using 1st row as reference')
         dimsidx = range(len(x.shape))
-        x = np.transpose(x, tuple(np.take(dimsidx,np.argsort(x.shape))))   # rearrange x dimensions in increasing order of size
+        # Rearrange x dimensions in increasing order of size
+        x = np.transpose(x, tuple(np.take(dimsidx,np.argsort(x.shape))))
         for ii in range(x.ndim-1):
             x = x[0]    # extract 1 "row" along the largest dimension
 
@@ -379,11 +402,11 @@ def get_topo(topoType, K):
     """
 
     # Connectivity matrix. 
-    # If `{topo}_{i,j} == 0`: nodes `i` and `j` are not connected.
-    # If `{topo}_{i,j} == 1`: nodes `i` and `j` can communicate with each other.
+    # If `{topo}_{i,j} == 0`: `i` and `j` are not connected.
+    # If `{topo}_{i,j} == 1`: `i` and `j` can communicate with each other.
     # TODO vvv oriented graph
-    # If `{topo}_{i,j} == 2`: nodes `i` can send data to node `j` but not vice-versa.
-    # If `{topo}_{i,j} == 3`: nodes `j` can send data to node `i` but not vice-versa.
+    # If `{topo}_{i,j} == 2`: `i` can send data to `j` but not vice-versa.
+    # If `{topo}_{i,j} == 3`: `j` can send data to `i` but not vice-versa.
     if topoType == 'fully-connected':
         topo = np.ones((K, K), dtype=int)
     else:
@@ -391,7 +414,8 @@ def get_topo(topoType, K):
 
     # Get node-specific lists of neighbor nodes indices
     allNodes = np.arange(K)
-    neighbors = [list(allNodes[(topo[:, k] > 0) & (allNodes != k)]) for k in range(K)]
+    neighbors = [list(allNodes[(topo[:, k] > 0) &\
+        (allNodes != k)]) for k in range(K)]
 
     return neighbors
 
@@ -433,7 +457,8 @@ def resample_for_sro(x, baseFs, SROppm):
     else:
         # Extend time stamps vector
         dt = t[1] - t[0]
-        tadd = np.linspace(t[-1]+dt, t[-1]+dt*(len(x) - len(xResamp)), len(x) - len(xResamp))
+        tadd = np.linspace(t[-1]+dt, t[-1]+dt*(len(x) - len(xResamp)),\
+            len(x) - len(xResamp))
         t = np.concatenate((t, tadd))
         # Append zeros
         xResamp = np.concatenate((xResamp, np.zeros(len(x) - len(xResamp))))
