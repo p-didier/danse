@@ -7,6 +7,7 @@ import copy
 import numpy as np
 from numba import njit
 import scipy.linalg as sla
+import matplotlib.pyplot as plt
 from danse.danse_toolbox.d_classes import *
 from scipy.signal._arraytools import zero_ext
 
@@ -93,14 +94,7 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
     outputEvents : [Ne x 1] list of DANSEeventInstant objects
         Event instants matrix.
     """
-
-    # Useful renaming (compact code)
-    Ndft = p.DFTsize
-    Ns = p.Ns 
-    Lbc = p.broadcastLength
-    bcType = p.broadcastType
-    efficient = p.efficientSpSBC
-
+    
     # Make sure time stamps matrix is indeed a matrix, correctly oriented
     if timeInstants.ndim != 2:
         if timeInstants.ndim == 1:
@@ -126,19 +120,20 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
         # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.
         fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)
 
-    # Total signal duration [s] per node
-    # (after truncation during signal generation).
-    Ttot = timeInstants[-1, :]
+    # Check consistency
+    if p.nodeUpdating == 'sim' and any(fs != fs[p.referenceSensor]):
+        raise ValueError('Simultaneous node-updating is impossible\
+            in the presence of SROs.')
 
-    # TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:
-    # Address variable `p.nodeUpdating`
-    if p.nodeUpdating == 'seq':     # sequential node-updating
-        pass
-    elif p.nodeUpdating == 'sim':   # simultaneous node-updating
-        pass
-    elif p.nodeUpdating == 'asy':   # asynchronous node-updating
-        pass
-    # TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:# TODO:
+    # Total signal duration [s] per node (after truncation during sig. gen.).
+    Ttot = timeInstants[-1, :]
+    
+    # Useful renaming (compact code)
+    Ndft = p.DFTsize
+    Ns = p.Ns 
+    Lbc = p.broadcastLength
+    bcType = p.broadcastType
+    efficient = p.efficientSpSBC
     
     # Expected number of DANSE update per node over total signal length
     numUpInTtot = np.floor(Ttot * fs / Ns)
@@ -178,23 +173,28 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
             ]
             # ^ note that we start broadcasting sooner:
             # when we have `L` samples, enough for linear convolution.
-
+    
     # Build event matrix
-    outputEvents = build_events_matrix(upInstants, bcInstants)
+    outputEvents = build_events_matrix(
+        upInstants,
+        bcInstants,
+        p.nodeUpdating,
+        visualizeUps=True
+    )
 
     return outputEvents, fs
 
 
-def build_events_matrix(upInstants, bcInstants):
+def build_events_matrix(up_t, bc_t, nodeUpdating, visualizeUps=False):
     """
     Sub-function of `get_events_matrix`, building the events matrix
     from the update and broadcast instants.
     
     Parameters
     ----------
-    upInstants : [nNodes x 1] list of np.ndarrays (float)
+    up_t : [nNodes x 1] list of np.ndarrays (float)
         Update instants per node [s].
-    bcInstants : [nNodes x 1] list of np.ndarrays (float)
+    bc_t : [nNodes x 1] list of np.ndarrays (float)
         Broadcast instants per node [s].
 
     Returns
@@ -202,15 +202,15 @@ def build_events_matrix(upInstants, bcInstants):
     outputEvents : [Ne x 1] list of DANSEeventInstant objects
         Event instants matrix.
     """
-
-    nNodes = len(upInstants)
+    # Useful variables
+    nNodes = len(up_t)
 
     numUniqueUpInstants = sum(
-        [len(np.unique(upInstants[k])) for k in range(nNodes)]
+        [len(np.unique(up_t[k])) for k in range(nNodes)]
     )
     # Number of unique broadcast instants across the WASN
     numUniqueBcInstants = sum(
-        [len(np.unique(bcInstants[k])) for k in range(nNodes)]
+        [len(np.unique(bc_t[k])) for k in range(nNodes)]
     )
     # Number of unique update _or_ broadcast instants across the WASN
     numEventInstants = numUniqueBcInstants + numUniqueUpInstants
@@ -219,15 +219,15 @@ def build_events_matrix(upInstants, bcInstants):
     flattenedUpInstants = np.zeros((numUniqueUpInstants, 3))
     flattenedBcInstants = np.zeros((numUniqueBcInstants, 3))
     for k in range(nNodes):
-        idxStart_u = sum([len(upInstants[q]) for q in range(k)])
-        idxEnd_u = idxStart_u + len(upInstants[k])
-        flattenedUpInstants[idxStart_u:idxEnd_u, 0] = upInstants[k]
+        idxStart_u = sum([len(up_t[q]) for q in range(k)])
+        idxEnd_u = idxStart_u + len(up_t[k])
+        flattenedUpInstants[idxStart_u:idxEnd_u, 0] = up_t[k]
         flattenedUpInstants[idxStart_u:idxEnd_u, 1] = k
         flattenedUpInstants[:, 2] = 1    # event reference "1" for updates
 
-        idxStart_b = sum([len(bcInstants[q]) for q in range(k)])
-        idxEnd_b = idxStart_b + len(bcInstants[k])
-        flattenedBcInstants[idxStart_b:idxEnd_b, 0] = bcInstants[k]
+        idxStart_b = sum([len(bc_t[q]) for q in range(k)])
+        idxEnd_b = idxStart_b + len(bc_t[k])
+        flattenedBcInstants[idxStart_b:idxEnd_b, 0] = bc_t[k]
         flattenedBcInstants[idxStart_b:idxEnd_b, 1] = k
         flattenedBcInstants[:, 2] = 0    # event reference "0" for broadcasts
     # Combine
@@ -239,10 +239,12 @@ def build_events_matrix(upInstants, bcInstants):
     idxSort = np.argsort(eventInstants[:, 0], axis=0)
     eventInstants = eventInstants[idxSort, :]
     # Group
-    outputEvents: list[DANSEeventInstant] = []
+    outputInstants: list[DANSEeventInstant] = []
     eventIdx = 0    # init while-loop
     nodesConcerned = []             # init
     eventTypesConcerned = []        # init
+    lastUpNode = -1     # index of latest updating node
+    # ^^^ (init. at -1 so that `lastUpNode + 1 == 0`)
     while eventIdx < numEventInstants:
 
         currInstant = eventInstants[eventIdx, 0]
@@ -288,16 +290,61 @@ def build_events_matrix(upInstants, bcInstants):
         nodesConcerned = nodesConcerned[indices]
         eventTypesConcerned = eventTypesConcerned[indices]
 
+        # Event types (broadcast or update)
+        types = ['bc' if ii == 0 else 'up' for ii in eventTypesConcerned]
+
+        # Address node-updating strategy
+        bypass = [False for _ in eventTypesConcerned]  # default: no bypass
+        if 'up' in types and nodeUpdating == 'seq':
+            lastUpNodeUpdated = lastUpNode
+            for ii in range(len(eventTypesConcerned)):
+                if types[ii] == 'up':
+                    if nodesConcerned[ii] == np.mod(lastUpNode + 1, nNodes):
+                        # Increment last updating node index
+                        lastUpNodeUpdated = nodesConcerned[ii]
+                        # break  # break `for`-loop
+                    else:
+                        # Bypass update in other nodes
+                        bypass[ii] = True
+            lastUpNode = lastUpNodeUpdated
+
         # Build events matrix
-        outputEvents.append(DANSEeventInstant(
+        outputInstants.append(DANSEeventInstant(
             t=currInstant,
             nodes=nodesConcerned,
-            type=['bc' if ii == 0 else 'up' for ii in eventTypesConcerned]
+            type=types,
+            bypass=bypass
         ))
-        nodesConcerned = []         # reset
-        eventTypesConcerned = []    # reset
 
-    return outputEvents
+        nodesConcerned = []         # reset list
+        eventTypesConcerned = []    # reset list
+
+    # Visualize update instants
+    if visualizeUps:
+        fig, axes = plt.subplots(1,1)
+        fig.set_size_inches(6.5, 1.5)
+        t = 0
+        idxInstant = 0
+        while t < 1:    # hard-coded, but ok
+            currEvents = outputInstants[idxInstant]
+            t = currEvents.t
+            for ii in range(len(currEvents.type)):
+                k = currEvents.nodes[ii]
+                if currEvents.type[ii] == 'up':
+                    alpha = 1
+                    if currEvents.bypass[ii]:
+                        alpha = 0.2
+                    axes.vlines(
+                        x=t, ymin=k, ymax=k+0.9, colors=f'C{k}', alpha=alpha)
+            idxInstant += 1
+        axes.set_yticks(np.arange(nNodes) + 0.5)
+        axes.set_yticklabels([f'Node {k+1}' for k in range(nNodes)])
+        axes.grid()
+        axes.set_title('Update instants')
+        plt.tight_layout()	
+        plt.show()
+
+    return outputInstants
 
 
 def local_chunk_for_broadcast(y, t, fs, N):

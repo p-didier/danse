@@ -31,17 +31,17 @@ class AcousticScenarioParameters:
 
 @dataclass
 class WASNparameters(AcousticScenarioParameters):
-    SROperNode: np.ndarray = np.array([0.])
+    SROperNode: np.ndarray = np.array([0])
     topologyType: str = 'fully-connected'       # type of WASN topology
                 # ^^^ valid values: "fully-connected"; TODO: add some
     
     def __post_init__(self):
-        # Explicitly derive sensor-to-node indices
-        self.sensorToNodeIndices = np.array(list(itertools.chain(*[[ii] * self.nSensorPerNode[ii]\
-            for ii in range(len(self.nSensorPerNode))])))  # itertools trick from https://stackoverflow.com/a/953097
         # Dimensionality checks
         if len(self.SROperNode) != self.nNodes:
             raise ValueError(f'The number of SRO values ({len(self.SROperNode)}) does not correspond to the number of nodes in the WASN ({self.nNodes}).')
+        # Explicitly derive sensor-to-node indices
+        self.sensorToNodeIndices = np.array(list(itertools.chain(*[[ii] * self.nSensorPerNode[ii]\
+            for ii in range(len(self.nSensorPerNode))])))  # itertools trick from https://stackoverflow.com/a/953097
 
 
 @dataclass

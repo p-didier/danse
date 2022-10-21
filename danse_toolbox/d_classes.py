@@ -1069,6 +1069,11 @@ class DANSEeventInstant:
     t: float = 0.   # event time instant [s]
     nodes: np.ndarray = np.array([0])   # node(s) concerned
     type: list[str] = field(default_factory=list)   # event type
+    bypass: list[bool] = field(default_factory=list)  
+        # ^^^ if True, bypass event at that instant and for that node.
+        # This value is adapted, e.g., depending on the node-updating strategy
+        # chosen (may be set to True for certain updates if sequential DANSE
+        # node-updating is used). 
 
     def __post_init__(self):
         self.nEvents = len(self.nodes)

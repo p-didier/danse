@@ -40,7 +40,12 @@ class TestParameters:
         #
         self.testid = f'J{self.wasn.nNodes}Mk{list(self.wasn.nSensorPerNode)}\
             Nn{self.wasn.nNoiseSources}Nd{self.wasn.nDesiredSources}T60_\
-                {int(self.wasn.t60)*1e3}ms'
+            {int(self.wasn.t60)*1e3}ms'
+        # Check consistency
+        if self.danseParams.nodeUpdating == 'sym' and\
+            any(self.wasn.SROperNode != 0):
+            raise ValueError('Simultaneous node-updating impossible in\
+                the presence of SROs.')
 
 
 def main():
@@ -51,8 +56,8 @@ def main():
             rd=np.array([5, 5, 5]),
             fs=16000,
             t60=0.2,
-            nNodes=2,
-            nSensorPerNode=[2, 1],
+            nNodes=5,
+            nSensorPerNode=[1,1,1,1,1],
             desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
                 for file in [
                     'speech1.wav',
@@ -63,12 +68,14 @@ def main():
                     'whitenoise_signal_1.wav',
                     'whitenoise_signal_2.wav'
                 ]],
-            SROperNode=np.array([0., 0.])
+            SROperNode=np.array([0., 10., 20, 40, 50])
         ),
         danseParams=DANSEparameters(
             referenceSensor=0,
             DFTsize=1024,
-            WOLAovlp=.5
+            WOLAovlp=.5,
+            # nodeUpdating='seq'
+            nodeUpdating='asy'
         )
     )
 
