@@ -178,8 +178,7 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
     outputEvents = build_events_matrix(
         upInstants,
         bcInstants,
-        p.nodeUpdating,
-        visualizeUps=True
+        p.nodeUpdating
     )
 
     return outputEvents, fs
@@ -606,6 +605,8 @@ def fill_buffers_td_few_samples(k, neighs, zBuffer, zLocalK, L):
             (zBuffer[q][idxKforNeighborQ], zLocalK[-L:]),
             axis=0
         )
+
+        stop = 1
         
     return zBuffer
 

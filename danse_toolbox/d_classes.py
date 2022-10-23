@@ -257,6 +257,7 @@ class DANSEvariables(DANSEparameters):
         self.oVADframes = np.zeros(self.nIter)
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
+        self.lastBroadcastInstant = np.zeros(nNodes)
         self.lastTDfilterUp = np.zeros(nNodes)
         self.Rnntilde = Rnntilde
         self.Ryytilde = Ryytilde
@@ -344,11 +345,22 @@ class DANSEvariables(DANSEparameters):
                 updateBroadcastFilter = True
                 self.lastTDfilterUp[k] = tCurr
 
+            # If "efficient" events for broadcast
+            # (unnecessary broadcast instants were aggregated):
+            if p.efficientSpSBC:
+                # Count samples recorded since the last broadcast at node `k`
+                nSamplesSinceLastBroadcast = ((self.timeInstants[:, k] >\
+                    self.lastBroadcastInstant[k]) &\
+                    (self.timeInstants[:, k] <= tCurr)).sum()
+                self.lastBroadcastInstant[k] = tCurr
+                currL = nSamplesSinceLastBroadcast
+            else:
+                currL = p.broadcastLength
+
             self.zLocal[k], self.wIR[k] = base.danse_compression_few_samples(
                 ykFrame,
                 self.wTildeExt[k],
-                p.DFTsize,
-                p.broadcastLength,
+                currL,
                 self.wIR[k],
                 p.winWOLAanalysis,
                 p.winWOLAsynthesis,
@@ -361,7 +373,7 @@ class DANSEvariables(DANSEparameters):
                 self.neighbors,
                 self.zBuffer,
                 self.zLocal[k],
-                p.broadcastLength
+                currL
             )
 
         
@@ -379,7 +391,7 @@ class DANSEvariables(DANSEparameters):
         # Construct `\tilde{y}_k` in frequency domain
         yLocalCurr = self.build_ytilde(yk, tCurr, fs, k, p)
         # Account for buffer flags
-        skipUpdate = self.compensate_sros(yLocalCurr, k, tCurr, p)
+        skipUpdate = self.compensate_sros(k, tCurr, p)
         # Ryy and Rnn updates
         self.spatial_covariance_matrix_update(k)
         
@@ -426,6 +438,8 @@ class DANSEvariables(DANSEparameters):
             self.build_phase_shifts_for_srocomp(k, p)
         # Compute desired signal chunk estimate
         self.get_desired_signal(k, p)
+        # Update iteration index
+        self.i[k] += 1
 
 
     def update_external_filters(self, k, t, p: DANSEparameters):
@@ -504,9 +518,7 @@ class DANSEvariables(DANSEparameters):
                         # `k`, but node `k` has already reached its first
                         # update instant. Interpretation: Node `q` samples
                         # slower than node `k`. 
-                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow \
-                            at current node`s B_{self.neighbors[k][idxq]+1} \
-                            buffer | -1 broadcast')
+                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -1 broadcast')
                         bufferFlags[idxq] = -1      # raise negative flag
                         zCurrBuffer = np.zeros(Ndft)
                 else:
@@ -543,9 +555,7 @@ class DANSEvariables(DANSEparameters):
                         # update instant. Interpretation: Node `q` samples
                         # slower than node `k`. 
                         nMissingBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow \
-                            at current node`s B_{self.neighbors[k][idxq]+1} \
-                            buffer | -{nMissingBroadcasts} broadcast(s)')
+                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
                         # Raise negative flag
                         bufferFlags[idxq] = -1 * nMissingBroadcasts
                         zCurrBuffer = np.concatenate(
@@ -557,9 +567,7 @@ class DANSEvariables(DANSEparameters):
                         # to node `k`. Interpretation: Node `q` samples faster
                         # than node `k`.
                         nExtraBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at \
-                            current node`s B_{self.neighbors[k][idxq]+1} \
-                            buffer | +{nExtraBroadcasts} broadcasts(s)')
+                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
                         # Raise positive flag
                         bufferFlags[idxq] = +1 * nExtraBroadcasts
                         zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
@@ -574,31 +582,23 @@ class DANSEvariables(DANSEparameters):
                     # case 2: negative mismatch
                     elif (Ns - Bq) % Lbc == 0 and Bq < Ns:
                         nMissingBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow \
-                            at current node`s B_{self.neighbors[k][idxq]+1} \
-                            buffer | -{nMissingBroadcasts} broadcast(s)')
+                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
                         # Raise negative flag
                         bufferFlags[idxq] = -1 * nMissingBroadcasts
                     # case 3: positive mismatch
                     elif (Ns - Bq) % Lbc == 0 and Bq > Ns:       
                         nExtraBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow \
-                            at current node`s B_{self.neighbors[k][idxq]+1} \
-                            buffer | +{nExtraBroadcasts} broadcasts(s)')
+                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
                         # Raise positive flag
                         bufferFlags[idxq] = +1 * nExtraBroadcasts
                     else:
                         if (Ns - Bq) % Lbc != 0 and\
                             np.abs(self.i[k] - (self.nIter - 1)) < 10:
-                            print('[b! @ t={np.round(t, 3)}s] This is the \
-                                last iteration -- not enough samples anymore \
-                                due to cumulated SROs effect, skip update.')
+                            print('[b! @ t={np.round(t, 3)}s] This is the last iteration -- not enough samples anymore due to cumulated SROs effect, skip update.')
                             # Raise "end of signal" flag
                             bufferFlags[idxq] = np.NaN
                         else:
-                            raise ValueError(f'Unexpected buffer size ({Bq} \
-                                samples, with L={Lbc} and N={Ns}) for \
-                                neighbor node q={self.neighbors[k][idxq]+1}.')
+                            raise ValueError(f'Unexpected buffer size ({Bq} samples, with L={Lbc} and N={Ns}) for neighbor node q={self.neighbors[k][idxq]+1}.')
                     # Build current buffer
                     if Ndft - Bq > 0:
                         zCurrBuffer = np.concatenate(
@@ -893,19 +893,19 @@ class DANSEvariables(DANSEparameters):
                 # Residuals method
                 for q in range(nNeighs):
                     # index of the compressed signal from node `q` inside `yyH`
-                    idxq = self.nLocalMic + q     
+                    idxq = self.nLocalMic[k] + q     
                     if p.cohDrift.loop == 'closed':
                         # Use SRO-compensated correlation matrix entries
                         # (closed-loop SRO est. + comp.).
 
                         # A posteriori coherence
-                        cohPosteriori = (self.yyH[iter, :, 0, idxq]
-                            / np.sqrt(self.yyH[iter, :, 0, 0] *\
-                                self.yyH[iter, :, idxq, idxq]))
+                        cohPosteriori = (self.yyH[k][iter, :, 0, idxq]
+                            / np.sqrt(self.yyH[k][iter, :, 0, 0] *\
+                                self.yyH[k][iter, :, idxq, idxq]))
                         # A priori coherence
-                        cohPriori = (self.yyH[iter - ld, :, 0, idxq]
-                            / np.sqrt(self.yyH[iter - ld, :, 0, 0] *\
-                                self.yyH[iter - ld, :, idxq, idxq]))
+                        cohPriori = (self.yyH[k][iter - ld, :, 0, idxq]
+                            / np.sqrt(self.yyH[k][iter - ld, :, 0, 0] *\
+                                self.yyH[k][iter - ld, :, idxq, idxq]))
                         
                         # Set buffer flags to 0
                         bufferFlagPri = np.zeros_like(bufferFlagPri)
@@ -916,19 +916,19 @@ class DANSEvariables(DANSEparameters):
                         # (open-loop SRO est. + comp.).
 
                         # A posteriori coherence
-                        cohPosteriori = (self.yyHuncomp[iter, :, 0, idxq]
-                            / np.sqrt(self.yyHuncomp[iter, :, 0, 0] *\
-                                self.yyHuncomp[iter, :, idxq, idxq]))
+                        cohPosteriori = (self.yyHuncomp[k][iter, :, 0, idxq]
+                            / np.sqrt(self.yyHuncomp[k][iter, :, 0, 0] *\
+                                self.yyHuncomp[k][iter, :, idxq, idxq]))
                         # A priori coherence
-                        cohPriori = (self.yyHuncomp[iter - ld, :, 0, idxq]
-                            / np.sqrt(self.yyHuncomp[iter - ld, :, 0, 0] *\
-                                self.yyHuncomp[iter - ld, :, idxq, idxq]))
+                        cohPriori = (self.yyHuncomp[k][iter - ld, :, 0, idxq]
+                            / np.sqrt(self.yyHuncomp[k][iter - ld, :, 0, 0] *\
+                                self.yyHuncomp[k][iter - ld, :, idxq, idxq]))
 
                     # Perform SRO estimation via coherence-drift method
                     sroRes, apr = sros.cohdrift_sro_estimation(
                         wPos=cohPosteriori,
                         wPri=cohPriori,
-                        avgResProd=self.avgProdResiduals[:, q],
+                        avgResProd=self.avgProdResiduals[k][:, q],
                         Ns=p.Ns,
                         ld=ld,
                         method=p.cohDrift.estimationMethod,
@@ -939,7 +939,7 @@ class DANSEvariables(DANSEparameters):
                     )
                 
                     sroOut[q] = sroRes
-                    self.avgProdResiduals[:, q] = apr
+                    self.avgProdResiduals[k][:, q] = apr
 
         elif p.estimateSROs == 'Oracle':
             # No data-based dynamic SRO estimation: use oracle knowledge

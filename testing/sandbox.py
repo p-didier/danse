@@ -1,6 +1,8 @@
 
 import sys
 from pathlib import Path, PurePath
+
+from sympy import comp
 rootFolder = 'sounds-phd'
 pathToRoot = Path(__file__)
 while PurePath(pathToRoot).name != rootFolder:
@@ -56,8 +58,8 @@ def main():
             rd=np.array([5, 5, 5]),
             fs=16000,
             t60=0.2,
-            nNodes=5,
-            nSensorPerNode=[1,1,1,1,1],
+            nNodes=2,
+            nSensorPerNode=[1,1],
             desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
                 for file in [
                     'speech1.wav',
@@ -68,14 +70,21 @@ def main():
                     'whitenoise_signal_1.wav',
                     'whitenoise_signal_2.wav'
                 ]],
-            SROperNode=np.array([0., 10., 20, 40, 50])
+            SROperNode=np.array([0, 50])
         ),
         danseParams=DANSEparameters(
             referenceSensor=0,
             DFTsize=1024,
             WOLAovlp=.5,
             # nodeUpdating='seq'
-            nodeUpdating='asy'
+            nodeUpdating='asy',
+            broadcastType='fewSamples_td',
+            estimateSROs='CohDrift',
+            compensateSROs=True,
+            cohDrift=CohDriftParameters(
+                loop='open',
+                alpha=0.99
+            )
         )
     )
 
@@ -112,7 +121,9 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
     out = core.danse(wasn, p.danseParams)
 
     # Visualize results
-    postproc.visualization(out)
+    postproc.plot_sros(out)
+    # postproc.plot_des_sig_est(out)
+    stop = 1
 
 
 if __name__ == '__main__':
