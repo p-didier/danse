@@ -16,6 +16,21 @@ def build_room(p: classes.WASNparameters):
     """
     Builds room, adds nodes and sources, simulates RIRs
     and computes microphone signals.
+
+    Parameters
+    ----------
+    p : `WASNparameters` object
+        Parameters.
+
+    Returns
+    -------
+    room : `pyroomacoustics.room.ShoeBox` object
+        Room (acoustic scenario) object.
+    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
+        VAD per sample, per node, and per speech source.
+    wetSpeechAtRefSensor : [N x Nnodes x Nsources] np.ndarray (float)
+        Wet (RIR-affected) individual speech signal at the reference
+        sensor of each node.
     """
 
     # Room
@@ -24,7 +39,8 @@ def build_room(p: classes.WASNparameters):
         fs=p.fs,
         max_order=10,
         air_absorption=False,
-        materials=pra.Material('rough_concrete')
+        materials=pra.Material('rough_concrete'),
+        # TODO: USE p.t60! (reverberation time)
     )
 
     for k in range(p.nNodes):
@@ -87,34 +103,54 @@ def build_room(p: classes.WASNparameters):
     for k in range(p.nNodes):
         rirsCurr = [room.rir[ii][:p.nDesiredSources]\
             for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
-        rirsNodes.append(rirsCurr[0])
+        rirsNodes.append(rirsCurr[p.referenceSensor])
     # Compute VAD
-    vad = get_vad(rirsNodes, desiredSignalsRaw, p)
+    vad, wetSpeechAtRefSensor = get_vad(rirsNodes, desiredSignalsRaw, p)
 
-    return room, vad
+    return room, vad, wetSpeechAtRefSensor
 
 
 def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
     """
     Compute all node- and desired-source-specific VADs.
+
+    Parameters
+    ----------
+    rirs : [Nnodes x 1] list of [Nsources x 1] lists of [variable length x 1]
+            np.ndarrays (float)
+        Individual RIRs between the reference sensor of each node
+        and each source.
+    xdry : [N x Nsources] np.ndarray (float)
+        Dry (latent) source signals.
+    p : AcousticScenarioParameters object
+        Acoustic scenario parameters.
+
+    Returns
+    -------
+    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
+        VAD per sample, per node, and per speech source.
+    wetsigs : [N x Nnodes x Nsources] np.ndarray (float)
+        Wet (RIR-affected) individual speech signal at the reference
+        sensor of each node.
     """
 
     vad = np.zeros((xdry.shape[0], len(rirs), len(rirs[0])))
+    wetsigs = np.zeros_like(vad)
     for k in range(len(rirs)):  # for each node
         for ii in range(len(rirs[k])):  # for each desired source
             # Compute wet desired-only signal
             wetsig = sig.fftconvolve(xdry[:, ii], rirs[k][ii], axes=0)
-            wetsig = wetsig[:xdry.shape[0]]  # truncate
+            wetsigs[:, k, ii] = wetsig[:xdry.shape[0]]  # truncate
 
-            thrsVAD = np.amax(wetsig ** 2) / p.VADenergyFactor
+            thrsVAD = np.amax(wetsigs[:, k, ii] ** 2) / p.VADenergyFactor
             vad[:, k, ii], _ = oracleVAD(
-                wetsig,
+                wetsigs[:, k, ii],
                 tw=p.VADwinLength,
                 thrs=thrsVAD,
                 Fs=p.fs
             )
 
-    return vad
+    return vad, wetsigs
 
 
 def plot_mic_sigs(room: pra.room.ShoeBox, vad=None):
@@ -307,9 +343,30 @@ def compute_VAD(chunk_x,thrs):
     return VADout
 
 
-def build_wasn(room: pra.room.ShoeBox, vad, p: classes.WASNparameters):
+def build_wasn(room: pra.room.ShoeBox,
+        vad, wetSpeechAtRefSensor,
+        p: classes.WASNparameters):
     """
     Build WASN from parameters (including asynchronicities and topology).
+    
+    Parameters
+    ----------
+    room : [augmented] `pyroomacoustics.room.ShoeBox` object
+        Room (acoustic scenario) object. Augmented with VAD and 
+        wet speech signals at each node's reference sensor (output of
+        `build_room()`).
+    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
+        VAD per sample, per node, and per speech source.
+    wetSpeechAtRefSensor : [N x Nnodes x Nsources] np.ndarray (float)
+        Wet (RIR-affected) individual speech signal at the reference
+        sensor of each node.
+    p : `WASNparameters` object
+        WASN parameters
+
+    Returns
+    -------
+    myWASN : list of `Node` objects
+        WASN.
     """
 
     # Create network topological map (inter-node links)
@@ -324,12 +381,20 @@ def build_wasn(room: pra.room.ShoeBox, vad, p: classes.WASNparameters):
             sro=p.SROperNode[k],
             sto=0.
         )
+        # also to speech-only signal
+        speechonly, _, _ = apply_asynchronicity_at_node(
+            y=wetSpeechAtRefSensor[:, k, :],
+            fs=p.fs,
+            sro=p.SROperNode[k],
+            sto=0.
+        )
         # Create node
         node = classes.Node(
             nSensors=p.nSensorPerNode[k],
             sro=p.SROperNode[k],
             fs=fsSRO,
             data=sigs,
+            cleanspeech=speechonly,
             timeStamps=t,
             neighborsIdx=neighbors[k],
             vad=vad[:, k, :]

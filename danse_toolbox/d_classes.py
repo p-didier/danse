@@ -1,11 +1,11 @@
 import copy
 import numpy as np
 import scipy.linalg as sla
+from danse.siggen.classes import Node, WASNparameters
 from dataclasses import dataclass, field
-from danse.siggen.classes import Node
 import danse.danse_toolbox.d_base as base
 import danse.danse_toolbox.d_sros as sros
-
+from danse.danse_toolbox.d_eval import DynamicMetricsParameters
 
 @dataclass
 class DANSEeventInstant:
@@ -114,7 +114,6 @@ class DANSEparameters(Hyperparameters):
     58(10), 5292-5306.
 
     """
-    referenceSensor: int = 0    # index of reference sensor at each node
     DFTsize: int = 1024    # DFT size
     WOLAovlp: float = .5   # WOLA window overlap [*100%]
     nodeUpdating: str = 'seq'   # node-updating strategy
@@ -150,8 +149,11 @@ class DANSEparameters(Hyperparameters):
         # the desired signal estimates: "wola": WOLA synthesis,
                                     # "conv": T(z)-approximation.
     # Metrics
+    dynMetrics: DynamicMetricsParameters = DynamicMetricsParameters()
+    gammafwSNRseg: float = 0.2  # gamma exponent for fwSNRseg
+    frameLenfwSNRseg: float = 0.03  # [s] time window duration for fwSNRseg
     minFiltUpdatesForMetrics: int = 10   # minimum number of DANSE
-        # updates before start of speech enhancement metrics computation
+    # updates before start of speech enhancement metrics computation
     
     def __post_init__(self):
         """
@@ -164,6 +166,15 @@ class DANSEparameters(Hyperparameters):
         elif self.broadcastType == 'fewSamples':
             self.broadcastLength = 1
 
+    def get_wasn_info(self, wasn: WASNparameters):
+        """
+        Adds useful info to DANSEparameters object from WASNparameters
+        object. 
+        """
+        self.nNodes = wasn.nNodes
+        self.nSensorPerNode = wasn.nSensorPerNode
+        self.referenceSensor = wasn.referenceSensor
+
 
 @dataclass
 class DANSEvariables(DANSEparameters):
@@ -171,7 +182,10 @@ class DANSEvariables(DANSEparameters):
     Main DANSE class. Stores all relevant variables and core functions on 
     those variables.
     """
-    def fromWASN(self, wasn: list[Node]):
+    def import_params(self, p: DANSEparameters):
+        self.__dict__.update(p.__dict__)
+
+    def init_from_wasn(self, wasn: list[Node]):
         """
         Initialize `DANSEvariables` object based on `wasn`
         list of `Node` objects.
@@ -263,10 +277,12 @@ class DANSEvariables(DANSEparameters):
         self.i = np.zeros(nNodes, dtype=int)
         self.dimYTilde = dimYTilde
         self.dhat = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex)
+            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
+        )
         self.expAvgBeta = [node.beta for node in wasn]
         self.flagIterations = [[] for _ in range(nNodes)]
         self.flagInstants = [[] for _ in range(nNodes)]
+        self.fullVAD = [node.vadCombined for node in wasn]
         self.idxBegChunk = None
         self.idxEndChunk = None
         self.lastExtFiltUp = np.zeros(nNodes)
@@ -288,6 +304,7 @@ class DANSEvariables(DANSEparameters):
         self.startUpdates = np.full(shape=(nNodes,), fill_value=False)
         self.timeInstants = t
         self.tStartForMetrics = np.zeros(nNodes)
+        self.yin = [node.data for node in wasn]
         self.yyH = yyH
         self.yyHuncomp = yyHuncomp
         self.yTilde = yTilde
@@ -301,25 +318,12 @@ class DANSEvariables(DANSEparameters):
         self.zBuffer = zBuffer
         self.zLocal = zLocal
 
-        # VAD
-        if wasn[0].vad.shape[-1] > 1: #TODO:
-            raise ValueError('/!\ VAD for multiple desired sources not yet \
-                treated as special case. Using VAD for source #1!')
-        nNodes = len(wasn)
-        fullVAD = np.zeros((wasn[0].vad.shape[0], nNodes))
-        for k in range(nNodes):  # for each node
-            # TODO: multiple desired sources case not considered
-            fullVAD[:, k] = wasn[k].vad[:, 0]
-        self.fullVAD = fullVAD
-
         return self
 
-    def broadcast(self, yk, tCurr, fs, k, p: DANSEparameters):
+    def broadcast(self, tCurr, fs, k, p: DANSEparameters):
         """
         Parameters
         ----------
-        yk : [Nt x Nsensors] np.ndarray (float)
-            Local sensors time-domain signals.
         tCurr : float
             Broadcast event global time instant [s].
         fs : float
@@ -331,7 +335,7 @@ class DANSEvariables(DANSEparameters):
         """
 
         # Extract correct frame of local signals
-        ykFrame = base.local_chunk_for_broadcast(yk, tCurr, fs, p.DFTsize)
+        ykFrame = base.local_chunk_for_broadcast(self.yin[k], tCurr, fs, p.DFTsize)
 
         if len(ykFrame) < p.DFTsize:
 
@@ -401,7 +405,7 @@ class DANSEvariables(DANSEparameters):
             )
 
         
-    def update_and_estimate(self, yk, tCurr, fs, k,
+    def update_and_estimate(self, tCurr, fs, k,
                     p: DANSEparameters):
         """
         Update filter coefficient at current node
@@ -412,8 +416,8 @@ class DANSEvariables(DANSEparameters):
         self.process_incoming_signals_buffers(k, tCurr, p)
         # Wipe local buffers
         self.zBuffer[k] = [np.array([]) for _ in range(len(self.neighbors[k]))]
-        # Construct `\tilde{y}_k` in frequency domain
-        self.build_ytilde(yk, tCurr, fs, k, p)
+        # Construct `\tilde{y}_k` in frequency domain and VAD at current frame
+        self.build_ytilde(self.yin[k], tCurr, fs, k, p)
         # Account for buffer flags
         skipUpdate = self.compensate_sros(k, tCurr, p)
         # Ryy and Rnn updates
@@ -677,9 +681,9 @@ class DANSEvariables(DANSEparameters):
             base.local_chunk_for_update(yk, tCurr, fs, p)
 
         # Compute VAD
-        VADinFrame = self.fullVAD[
-            np.amax([self.idxBegChunk, 0]):self.idxEndChunk, k
-            ]
+        VADinFrame = self.fullVAD[k][
+            np.amax([self.idxBegChunk, 0]):self.idxEndChunk
+        ]
         # If there is a majority of "VAD = 1" in the frame,
         # set the frame-wise VAD to 1.
         self.oVADframes[self.i[k]] =\
@@ -1066,31 +1070,4 @@ class DANSEvariables(DANSEparameters):
             self.d[self.idxBegChunk:self.idxEndChunk, k] = dChunk
         elif p.desSigProcessingType == 'conv':
             self.d[self.idxEndChunk - p.Ns:self.idxEndChunk, k] = dChunk
-
-
-@dataclass
-class DANSEoutputs:
-    """
-    Dataclass to assemble all useful outputs
-    of the DANSE algorithm.
-    """
-    
-    def fromVariables(self, dv: DANSEvariables):
-        """
-        Selects useful output values from `DANSEvariables` object
-        after DANSE processing.
-        """
-
-        # Desired signal estimates
-        self.TDdesiredSignals = dv.d
-        self.STFTDdesiredSignals = dv.dhat
-        # SROs
-        self.SROsEstimates = dv.SROsEstimates
-        self.SROsResiduals = dv.SROsResiduals
-        # Filters
-        self.filters = dv.wTilde
-
-        return self
-
-
 

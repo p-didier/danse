@@ -2,7 +2,6 @@
 import sys
 from pathlib import Path, PurePath
 
-from sympy import comp
 rootFolder = 'sounds-phd'
 pathToRoot = Path(__file__)
 while PurePath(pathToRoot).name != rootFolder:
@@ -19,8 +18,8 @@ import danse.siggen.utils as sig_ut
 import danse.danse_toolbox.d_base as base
 import danse.danse_toolbox.d_core as core
 from danse.danse_toolbox.d_classes import *
+import danse.danse_toolbox.d_post as postproc
 from dataclasses import dataclass
-import postproc
 
 @dataclass
 class TestParameters:
@@ -91,11 +90,11 @@ def main():
         )
     )
 
-    room, vad = sig_ut.build_room(p.wasn)
+    room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasn)
     # sig_ut.plot_mic_sigs(room, vad)  # <-- plot signals
 
     # Build WASN (asynchronicities, topology)
-    wasn = sig_ut.build_wasn(room, vad, p.wasn)
+    wasn = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasn)
 
     # DANSE
     out = danse_it_up(wasn, p)

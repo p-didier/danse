@@ -10,6 +10,7 @@ from pyinstrument import Profiler
 import danse.danse_toolbox.d_base as base
 from danse.danse_toolbox.d_sros import *
 from danse.danse_toolbox.d_classes import *
+from danse.danse_toolbox.d_post import DANSEoutputs
 
 
 def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
@@ -30,9 +31,11 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
     """
 
     # Initialize variables
-    dv = DANSEvariables().fromWASN(wasn)
+    dv = DANSEvariables()
+    dv.import_params(p)
+    dv.init_from_wasn(wasn)
 
-    # Events
+    # Compute events
     eventInstants, fs = base.initialize_events(dv.timeInstants, p)
 
     # Profiling
@@ -59,11 +62,10 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
             if events.type[idx_e] == 'bc':
                 # TODO: maybe not needed to recompute `fs`
                 # (already there in `wasn[k].fs`)
-                dv.broadcast(wasn[k].data, events.t, fs[k], k, p)
-            
+                dv.broadcast(events.t, fs[k], k, p)
             # Filter updates and desired signal estimates event
             elif events.type[idx_e] == 'up':
-                dv.update_and_estimate(wasn[k].data, events.t, fs[k], k, p)
+                dv.update_and_estimate(events.t, fs[k], k, p)
             else:
                 raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
 
@@ -79,6 +81,9 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
     print(f'(Real-time processing factor: \
         {np.round(np.amax(dv.timeInstants) / dur, 4)})')
 
-    out = DANSEoutputs().fromVariables(dv)
+    # Build output
+    out = DANSEoutputs()
+    out.import_params(p)
+    out.from_variables(dv)
 
     return out
