@@ -28,6 +28,8 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
     -------
     out : DANSEoutputs object
         DANSE outputs.
+    wasn : list of `Node` objects
+        WASN under consideration, after DANSE.
     """
 
     # Initialize variables
@@ -85,5 +87,8 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
     out = DANSEoutputs()
     out.import_params(p)
     out.from_variables(dv)
+    # Update WASN object
+    for k in range(len(wasn)):
+        wasn[k].enhancedData = dv.d[:, k]
 
-    return out
+    return out, wasn

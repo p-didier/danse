@@ -87,6 +87,15 @@ class DANSEoutputs(DANSEparameters):
             figDynamic.savefig(f'{exportFolder}/metrics_dyn.png')
             figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
 
+    def plot_sigs(self, wasn, exportFolder):
+        """
+        Plots signals before/after DANSE.
+        """
+        figs = plot_signals_all_nodes(self, wasn)
+        for k in range(len(figs)):
+            figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.png')
+            figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.pdf')
+
 
 def compute_metrics(
         out: DANSEoutputs,
@@ -190,6 +199,7 @@ def plot_metrics(out: DANSEoutputs):
     ax.set(title='PESQ')
 
     plt.tight_layout()
+    fig1.suptitle("Speech enhancement metrics")
 
     # Check where dynamic metrics were computed
     flagsDynMetrics = np.zeros(len(fields(out.metrics)), dtype=bool)
@@ -242,6 +252,7 @@ def plot_metrics(out: DANSEoutputs):
                 axes[ii].legend(loc='lower left', fontsize=8)
             axes[ii].set_xlabel('$t$ [s]')  
         plt.tight_layout()
+        fig2.suptitle("Dynamic speech enhancement metrics")
     else:
         fig2 = None
 
@@ -568,3 +579,173 @@ def plot_room2D(ax, rd, dotted=False):
     ax.plot([0,0], [0,rd[1]], fmt)
     ax.plot([rd[0],rd[0]], [0,rd[1]], fmt)
     ax.plot([0,rd[0]], [rd[1],rd[1]], fmt)
+
+
+def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
+    """
+    Plot DANSE output signals, comparing with inputs.
+
+    Parameters
+    ----------
+    out : `DANSEoutputs` object
+        DANSE run outputs.
+
+    Returns
+    -------
+    figs : list of `matplotlib.figure.Figure` objects
+        Figure handle for each node.
+    """
+
+    figs = []
+    # Plot per node
+    for k in range(out.nNodes):
+        fig = plot_signals(
+            node=wasn[k],
+            win=out.winWOLAanalysis,
+            ovlp=out.WOLAovlp
+        )
+        plt.title(f'Node {k + 1}, ref. sensor (#{out.referenceSensor + 1})')
+        figs.append(fig)
+
+    return figs
+
+
+def plot_signals(node: Node, win, ovlp):
+    """
+    Creates a visual representation of the signals at a particular sensor.
+
+    Parameters
+    ----------
+    node : `Node` object
+        Node, containing all needed info (fs, signals, etc.).
+    win : np.ndarry (float)
+        STFT analysis window.
+    ovlp : float
+        Consecutive STFT window overlap [/100%].
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure` object
+        Figure handle.
+    """
+
+    # Waveforms
+    fig = plt.figure(figsize=(8,4))
+    ax = fig.add_subplot(1,2,1)
+    delta = np.amax(np.abs(node.data))
+    ax.plot(node.timeStamps, node.cleanspeechCombined, label='Desired')
+    ax.plot(node.timeStamps, node.vad * np.amax(node.cleanspeechCombined) * 1.1, 'k-', label='VAD')
+    ax.plot(node.timeStamps, node.data - 2*delta, label='Noisy')
+    # Desired signal estimate waveform 
+    delta *= 4
+    ax.plot(node.timeStamps, node.enhancedData - delta, label='Enhanced (global)')
+    ax.set_yticklabels([])
+    ax.set(xlabel='$t$ [s]')
+    ax.grid()
+    plt.legend(loc=(0.01, 0.5), fontsize=8)
+
+    # Compute STFTs
+    cleanSTFT, f, t = get_stft(node.cleanspeechCombined, node.fs, win, ovlp)
+    noisySTFT, _, _ = get_stft(node.data, node.fs, win, ovlp)
+    enhanSTFT, _, _ = get_stft(node.enhancedData, node.fs, win, ovlp)
+    
+    # -------- STFTs --------
+    # Get color plot limits
+    limLow = 20 * np.log10(
+        np.amin([np.amin(np.abs(cleanSTFT)), np.amin(np.abs(noisySTFT))])
+    )
+    # Ensures that pure silences do not bring the limit too low
+    limLow = np.amax([-100, limLow])
+    limHigh = 20 * np.log10(
+        np.amax([np.amax(np.abs(cleanSTFT)), np.amax(np.abs(noisySTFT))])
+    )
+    
+    # Number of subplot rows
+    nRows = 3
+
+    # Plot spectrograms
+    ax = fig.add_subplot(nRows,2,2)  # Wet desired signal
+    data = 20 * np.log10(np.abs(np.squeeze(cleanSTFT)))
+    stft_subplot(ax, t, f, data, [limLow, limHigh], 'Desired')
+    plt.xticks([])
+    ax = fig.add_subplot(nRows,2,4)  # Sensor signals
+    data = 20 * np.log10(np.abs(np.squeeze(noisySTFT)))
+    stft_subplot(ax, t, f, data, [limLow, limHigh], 'Noisy')
+    plt.xticks([])
+    ax = fig.add_subplot(nRows,2,nRows*2)   # Enhanced signals (global)
+    data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT)))
+    stft_subplot(ax, t, f, data, [limLow, limHigh], 'Global DANSE')
+    ax.set(xlabel='$t$ [s]')
+    plt.tight_layout()
+
+    return fig
+
+
+def stft_subplot(ax, t, f, data, vlims, label=''):
+    """Helper function for <Signals.plot_signals()>."""
+    # Text boxes properties
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    #
+    mappable = ax.pcolormesh(t, f / 1e3, data, vmin=vlims[0], vmax=vlims[1], shading='auto')
+    ax.set(ylabel='$f$ [kHz]')
+    if label != '':
+        ax.text(0.025, 0.9, label, fontsize=8, transform=ax.transAxes,
+            verticalalignment='top', bbox=props)
+    ax.yaxis.label.set_size(8)
+    cb = plt.colorbar(mappable)
+    return cb
+
+
+def get_stft(x, fs, win, ovlp):
+    """
+    Derives time-domain signals' STFT representation
+    given certain settings.
+
+    Parameters
+    ----------
+    x : [N x C] np.ndarray (float)
+        Time-domain signal(s).
+    fs : int
+        Sampling frequency [samples/s].
+    settings : ProgramSettings object
+        Settings (contains window, window length, overlap)
+
+    Returns
+    -------
+    out : [Nf x Nt x C] np.ndarray (complex)
+        STFT-domain signal(s).
+    f : [Nf x C] np.ndarray (real)
+        STFT frequency bins, per channel (because of different sampling rates).
+    t : [Nt x 1] np.ndarray (real)
+        STFT time frames.
+    """
+
+    if x.ndim == 1:
+        x = x[:, np.newaxis]
+
+    for channel in range(x.shape[-1]):
+        
+        if x.shape[-1] == 1 and isinstance(fs, float):
+            fs = [fs]   # from float to list
+
+        fcurr, t, tmp = sig.stft(
+            x[:, channel],
+            fs=fs[channel],
+            window=win,
+            nperseg=len(win),
+            noverlap=int(ovlp * len(win)),
+            return_onesided=True
+        )
+        if channel == 0:
+            out = np.zeros(
+                (tmp.shape[0], tmp.shape[1], x.shape[-1]), dtype=complex
+            )
+            f = np.zeros((tmp.shape[0], x.shape[-1]))
+        out[:, :, channel] = tmp
+        f[:, channel] = fcurr
+
+    # Flatten array in case of single-channel data
+    if x.shape[-1] == 1:
+        f = np.array([i[0] for i in f])
+
+    return out, f, t

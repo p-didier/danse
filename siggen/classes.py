@@ -55,8 +55,9 @@ class Node:
     nSensors: int = 1
     sro: float = 0.
     fs: float = 16000.
-    data: np.ndarray = np.array([])  # mic. signals
     cleanspeech: np.ndarray = np.array([])  # mic. signals if no noise present
+    data: np.ndarray = np.array([])  # mic. signals
+    enhancedData: np.ndarray = np.array([]) # signals after enhancement
     timeStamps: np.ndarray = np.array([])
     neighborsIdx: list[int] = field(default_factory=list)
     vad: np.ndarray = np.array([])
