@@ -414,10 +414,10 @@ def local_chunk_for_update(y, t, fs, p: DANSEparameters):
 
     # Broadcast scheme: block-wise, in freq.-domain
     # <or> Broadcast scheme: few samples at a time, in time-domain
-    if bd in ['wholeChunk_fd', 'fewSamples_td']:
+    if bd == 'fewSamples':
         idxEnd = int(np.floor(np.round(t * fs, 5)))
     # Broadcast scheme: block-wise, in time-domain
-    elif bd == 'wholeChunk_td':
+    elif bd == 'wholeChunk':
         # `N - Ns` samples delay due to time-domain WOLA
         idxEnd = int(np.floor(np.round(t * fs, 5))) - (Ndft - Ns)
 

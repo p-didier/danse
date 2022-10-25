@@ -8,6 +8,21 @@ import danse.danse_toolbox.d_sros as sros
 
 
 @dataclass
+class DANSEeventInstant:
+    t: float = 0.   # event time instant [s]
+    nodes: np.ndarray = np.array([0])   # node(s) concerned
+    type: list[str] = field(default_factory=list)   # event type
+    bypass: list[bool] = field(default_factory=list)  
+        # ^^^ if True, bypass event at that instant and for that node.
+        # This value is adapted, e.g., depending on the node-updating strategy
+        # chosen (may be set to True for certain updates if sequential DANSE
+        # node-updating is used). 
+
+    def __post_init__(self):
+        self.nEvents = len(self.nodes)
+
+
+@dataclass
 class CohDriftParameters():
     """
     Dataclass containing the required parameters for the
@@ -106,10 +121,9 @@ class DANSEparameters(Hyperparameters):
         # - "seq": round-robin updating [1]
         # - "sim": simultaneous updating [2]
         # - "asy": asynchronous updating [2]
-    broadcastLength: int = 1    # number of samples to be broadcasted at a time
-    broadcastType: str = 'wholeChunk_td'    # type of broadcast
-        # -- 'wholeChunk_td': chunks of compressed signals in time-domain,
-        # -- 'fewSamples_td': T(z)-approximation of WOLA compression process.
+    broadcastType: str = 'wholeChunk'    # type of broadcast
+        # -- 'wholeChunk': chunks of compressed signals in time-domain,
+        # -- 'fewSamples': T(z)-approximation of WOLA compression process.
         # broadcast L ≪ Ns samples at a time.
     winWOLAanalysis: np.ndarray = np.sqrt(np.hanning(DFTsize))      # window
     winWOLAsynthesis: np.ndarray = np.sqrt(np.hanning(DFTsize))     # window
@@ -140,7 +154,15 @@ class DANSEparameters(Hyperparameters):
         # updates before start of speech enhancement metrics computation
     
     def __post_init__(self):
+        """
+        Adapt some fields depending on the value of others, after 
+        dataclass instance initialisation.
+        """
         self.Ns = int(self.DFTsize * (1 - self.WOLAovlp))
+        if self.broadcastType == 'wholeChunk':
+            self.broadcastLength = self.Ns
+        elif self.broadcastType == 'fewSamples':
+            self.broadcastLength = 1
 
 
 @dataclass
@@ -149,7 +171,6 @@ class DANSEvariables(DANSEparameters):
     Main DANSE class. Stores all relevant variables and core functions on 
     those variables.
     """
-    
     def fromWASN(self, wasn: list[Node]):
         """
         Initialize `DANSEvariables` object based on `wasn`
@@ -316,7 +337,7 @@ class DANSEvariables(DANSEparameters):
 
             print('Cannot perform compression: not enough local signals samples.')
 
-        elif p.broadcastType == 'wholeChunk_td':
+        elif p.broadcastType == 'wholeChunk':
 
             # Time-domain chunk-wise broadcasting
             _, self.zLocal[k] = base.danse_compression_whole_chunk(
@@ -335,7 +356,7 @@ class DANSEvariables(DANSEparameters):
                 self.zLocal[k][:(p.DFTsize // 2)]
             ) 
         
-        elif p.broadcastType == 'fewSamples_td':
+        elif p.broadcastType == 'fewSamples':
             # Time-domain broadcasting, `L` samples at a time,
             # via linear-convolution approximation of WOLA filtering process
 
@@ -349,6 +370,9 @@ class DANSEvariables(DANSEparameters):
             # (unnecessary broadcast instants were aggregated):
             if p.efficientSpSBC:
                 # Count samples recorded since the last broadcast at node `k`
+                # and consequently adapt the `L` "broadcast length" variable
+                # used in `danse_compression_few_samples` and
+                # `fill_buffers_td_few_samples`.
                 nSamplesSinceLastBroadcast = ((self.timeInstants[:, k] >\
                     self.lastBroadcastInstant[k]) &\
                     (self.timeInstants[:, k] <= tCurr)).sum()
@@ -389,7 +413,7 @@ class DANSEvariables(DANSEparameters):
         # Wipe local buffers
         self.zBuffer[k] = [np.array([]) for _ in range(len(self.neighbors[k]))]
         # Construct `\tilde{y}_k` in frequency domain
-        yLocalCurr = self.build_ytilde(yk, tCurr, fs, k, p)
+        self.build_ytilde(yk, tCurr, fs, k, p)
         # Account for buffer flags
         skipUpdate = self.compensate_sros(k, tCurr, p)
         # Ryy and Rnn updates
@@ -446,6 +470,8 @@ class DANSEvariables(DANSEparameters):
         """
         Update external filters for relaxed filter update.
         To be used when using simultaneous or asynchronous node-updating.
+        When using sequential node-updating, do not differential between
+        internal (`self.wTilde`) and external filters. 
         
         Parameters
         ----------
@@ -456,19 +482,29 @@ class DANSEvariables(DANSEparameters):
         p : DANSEparameters object
             DANSE parameters.
         """
-        self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
-            (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
-        # Update targets
-        if t - self.lastExtFiltUp[k] >= p.timeBtwExternalFiltUpdates:
-            self.wTildeExtTarget[k] = (1 - p.alphaExternalFilters) *\
-                self.wTildeExtTarget[k] + p.alphaExternalFilters *\
-                self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
-            # Update last external filter update instant [s]
-            self.lastExtFiltUp[k] = t
-            if p.printout_externalFilterUpdate:    # inform user
-                print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for \
-                    node {k+1} (scheduled every [at least] \
-                        {p.timeBtwExternalFiltUpdates}s)')
+
+        # Simultaneous or asynchronous node-updating
+        if p.nodeUpdating in ['sim', 'asy']:
+
+            self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
+                (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
+            # Update targets
+            if t - self.lastExtFiltUp[k] >= p.timeBtwExternalFiltUpdates:
+                self.wTildeExtTarget[k] = (1 - p.alphaExternalFilters) *\
+                    self.wTildeExtTarget[k] + p.alphaExternalFilters *\
+                    self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+                # Update last external filter update instant [s]
+                self.lastExtFiltUp[k] = t
+                if p.printout_externalFilterUpdate:    # inform user
+                    print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for \
+                        node {k+1} (scheduled every [at least] \
+                            {p.timeBtwExternalFiltUpdates}s)')
+
+        # Sequential node-updating
+        elif p.nodeUpdating == 'seq':
+
+            self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+
 
 
     def process_incoming_signals_buffers(self, k, t, p: DANSEparameters):
@@ -504,7 +540,7 @@ class DANSEvariables(DANSEparameters):
             Bq = len(self.zBuffer[k][idxq])  # buffer size for neighbour `q`
 
             # Time-domain chunks broadcasting
-            if p.broadcastType == 'wholeChunk_td':
+            if p.broadcastType == 'wholeChunk':
                 if self.i[k] == 0:
                     if Bq == Ns:
                         # Not yet any previous buffer
@@ -540,7 +576,7 @@ class DANSEvariables(DANSEparameters):
                         # Under- or over-flow...
                         raise ValueError('[NOT YET IMPLEMENTED]')
                     
-            elif p.broadcastType == 'fewSamples_td':
+            elif p.broadcastType == 'fewSamples':
 
                 if self.i[k] == 0: # first DANSE iteration case 
                     # -- we are expecting an abnormally full buffer,
@@ -634,11 +670,6 @@ class DANSEvariables(DANSEparameters):
             DANSE variables to be updated.
         p : DANSEparameters object
             DANSE parameters.
-
-        Returns
-        -------
-        yLocalCurr : [N x Mk] np.ndarray (float)
-            Time chunk of local sensor signals.
         """
 
         # Extract current local data chunk
@@ -671,8 +702,6 @@ class DANSEvariables(DANSEparameters):
         )
         # Keep only positive frequencies
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
-
-        return yLocalCurr
 
 
     def compensate_sros(self, k, t, p: DANSEparameters):
@@ -1063,19 +1092,5 @@ class DANSEoutputs:
 
         return self
 
-
-@dataclass
-class DANSEeventInstant:
-    t: float = 0.   # event time instant [s]
-    nodes: np.ndarray = np.array([0])   # node(s) concerned
-    type: list[str] = field(default_factory=list)   # event type
-    bypass: list[bool] = field(default_factory=list)  
-        # ^^^ if True, bypass event at that instant and for that node.
-        # This value is adapted, e.g., depending on the node-updating strategy
-        # chosen (may be set to True for certain updates if sequential DANSE
-        # node-updating is used). 
-
-    def __post_init__(self):
-        self.nEvents = len(self.nodes)
 
 

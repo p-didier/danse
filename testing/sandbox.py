@@ -70,17 +70,20 @@ def main():
                     'whitenoise_signal_1.wav',
                     'whitenoise_signal_2.wav'
                 ]],
-            SROperNode=np.array([0, 50])
+            # SROperNode=np.array([0, 50])
+            SROperNode=np.array([0, 0])
         ),
         danseParams=DANSEparameters(
             referenceSensor=0,
             DFTsize=1024,
             WOLAovlp=.5,
-            # nodeUpdating='seq'
-            nodeUpdating='asy',
-            broadcastType='fewSamples_td',
+            nodeUpdating='seq',
+            # nodeUpdating='asy',
+            # broadcastType='fewSamples',
+            broadcastType='wholeChunk',
             estimateSROs='CohDrift',
-            compensateSROs=True,
+            # compensateSROs=True,
+            compensateSROs=False,
             cohDrift=CohDriftParameters(
                 loop='open',
                 alpha=0.99
@@ -113,7 +116,7 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
             t=wasn[k].timeStamps
         )
 
-        # Derive exponential averaging for Ryy and Rnn
+        # Derive exponential averaging factor for `Ryy` and `Rnn` updates
         wasn[k].beta = np.exp(np.log(0.5) / \
             (p.danseParams.t_expAvg50p * wasn[k].fs / p.danseParams.Ns))
 
@@ -121,8 +124,8 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
     out = core.danse(wasn, p.danseParams)
 
     # Visualize results
-    postproc.plot_sros(out)
-    # postproc.plot_des_sig_est(out)
+    # postproc.plot_sros(out)
+    postproc.plot_des_sig_est(out)
     stop = 1
 
 
