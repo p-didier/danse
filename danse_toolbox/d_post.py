@@ -36,9 +36,17 @@ class DANSEoutputs(DANSEparameters):
 
         # Original microphone signals
         self.micSignals = dv.yin
-        # Desired signal estimates
+        # DANSE desired signal estimates
         self.TDdesiredSignals = dv.d
         self.STFTDdesiredSignals = dv.dhat
+        if self.computeCentralised:
+            # Centralised desired signal estimates
+            self.TDdesiredSignals_c = dv.dCentr
+            self.STFTDdesiredSignals_c = dv.dHatCentr
+        if self.computeLocal:
+            # Local desired signal estimates
+            self.TDdesiredSignals_l = dv.dLocal
+            self.STFTDdesiredSignals_l = dv.dHatLocal
         # SROs
         self.SROsEstimates = dv.SROsEstimates
         self.SROsResiduals = dv.SROsResiduals
@@ -62,8 +70,7 @@ class DANSEoutputs(DANSEparameters):
 
     def export_sounds(self, wasn, exportFolder):
         self.check_init()  # check if object is correctly initialised
-        fnames = export_sounds(self, wasn, exportFolder)
-        return fnames
+        export_sounds(self, wasn, exportFolder)
 
     def plot_perf(self, wasn, exportFolder):
         """
@@ -122,13 +129,15 @@ def compute_metrics(
     for k in range(out.nNodes):
         # Derive starting sample for metrics computations
         startIdx[k] = int(np.floor(out.tStartForMetrics[k] * wasn[k].fs))
-        print(f"""
-        Node {k+1}: computing speech enhancement metrics from the
-        {startIdx[k] + 1}'th sample on (t_start = {out.tStartForMetrics[k]} s;
-        avoid bias due to initial filters guesses in first iterations)...
-        """)
-        
+        print(f"Node {k+1}: computing speech enhancement metrics from the {startIdx[k] + 1}'th sample on (t_start = {out.tStartForMetrics[k]} s --> avoid bias due to initial filters guesses in first iterations)...")
         print(f'Computing signal enhancement evaluation metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
+
+        enhan_c, enhan_l = None, None
+        if out.computeCentralised:
+            enhan_c = out.TDdesiredSignals_c[startIdx[k]:, k]
+        if out.computeLocal:
+            enhan_l = out.TDdesiredSignals_l[startIdx[k]:, k]
+
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
             clean=wasn[k].cleanspeechCombined[startIdx[k]:],
@@ -136,6 +145,11 @@ def compute_metrics(
             noisy=wasn[k].data[startIdx[k]:, out.referenceSensor],
             # DANSE outputs (desired signal estimates)
             enhan=out.TDdesiredSignals[startIdx[k]:, k],
+            # Centralised desired signal estimates
+            enhan_c=enhan_c,
+            # Local desired signal estimates
+            enhan_l=enhan_l,
+            #
             fs=wasn[k].fs,
             VAD=wasn[k].vadCombined[startIdx[k]:],
             dynamic=out.dynMetrics,
@@ -147,6 +161,7 @@ def compute_metrics(
         fwSNRseg[f'Node{k + 1}'] = out1
         stoi[f'Node{k + 1}'] = out2
         pesq[f'Node{k + 1}'] = out3
+
     print(f'All signal enhancement evaluation metrics computed in {np.round(time.perf_counter() - tStart, 3)} s.')
 
     # Group measures into EnhancementMeasures object
@@ -163,7 +178,7 @@ def plot_metrics(out: DANSEoutputs):
     Parameters
     ----------
     out : `DANSEoutputs` object
-        DANSE run outputs.
+        DANSE outputs.
     """
 
     # Useful variables
@@ -188,8 +203,8 @@ def plot_metrics(out: DANSEoutputs):
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.pesq)
     ax.set(title='PESQ')
 
-    plt.tight_layout()
     fig1.suptitle("Speech enhancement metrics")
+    plt.tight_layout()
 
     # Check where dynamic metrics were computed
     flagsDynMetrics = np.zeros(len(fields(out.metrics)), dtype=bool)
@@ -267,39 +282,84 @@ def metrics_subplot(numNodes, ax, barWidth, data):
 
     flagZeroBar = False  # flag for plotting a horizontal line at `metric = 0`
 
+    # Columns count
+    baseCount = 2
+    if data['Node1'].afterCentr != 0.:
+        baseCount += 1
+    if data['Node1'].afterLocal != 0.:
+        baseCount += 1
+    widthFact = baseCount + 1
+    colShifts = np.arange(start=1-baseCount, stop=baseCount, step=2)
+
+    delta = barWidth / (2 * widthFact)
+
     for idxNode in range(numNodes):
         if idxNode == 0:    # only add legend labels to first node
             ax.bar(
-                idxNode - barWidth / 6,
+                idxNode + colShifts[0] * delta,
                 data[f'Node{idxNode + 1}'].before,
-                width=barWidth / 3,
-                color='tab:orange',
+                width=barWidth / widthFact,
+                color='C0',
                 edgecolor='k',
                 label='Before'
             )
             ax.bar(
-                idxNode + barWidth / 6,
+                idxNode + colShifts[1] * delta,
                 data[f'Node{idxNode + 1}'].after,
-                width=barWidth / 3,
-                color='tab:blue',
+                width=barWidth / widthFact,
+                color='C1',
                 edgecolor='k',
                 label='After'
             )
+            if data['Node1'].afterCentr != 0.:
+                ax.bar(
+                    idxNode + colShifts[2] * delta,
+                    data[f'Node{idxNode + 1}'].afterCentr,
+                    width=barWidth / widthFact,
+                    color='C2',
+                    edgecolor='k',
+                    label='After (centralised)'
+                )
+            if data['Node1'].afterLocal != 0.:
+                ax.bar(
+                    idxNode + colShifts[3] *  delta,
+                    data[f'Node{idxNode + 1}'].afterLocal,
+                    width=barWidth / widthFact,
+                    color='C3',
+                    edgecolor='k',
+                    label='After (local)'
+                )
         else:
             ax.bar(
-                idxNode - barWidth / 6,
+                idxNode + colShifts[0] * delta,
                 data[f'Node{idxNode + 1}'].before,
-                width=barWidth / 3,
-                color='tab:orange',
+                width=barWidth / widthFact,
+                color='C0',
                 edgecolor='k'
             )
             ax.bar(
-                idxNode + barWidth / 6,
+                idxNode + colShifts[1] * delta,
                 data[f'Node{idxNode + 1}'].after,
-                width=barWidth / 3,
-                color='tab:blue',
+                width=barWidth / widthFact,
+                color='C1',
                 edgecolor='k'
             )
+            if data['Node1'].afterCentr != 0.:
+                ax.bar(
+                    idxNode + colShifts[2] * delta,
+                    data[f'Node{idxNode + 1}'].afterCentr,
+                    width=barWidth / widthFact,
+                    color='C2',
+                    edgecolor='k',
+                )
+            if data['Node1'].afterLocal != 0.:
+                ax.bar(
+                    idxNode + colShifts[3] * delta,
+                    data[f'Node{idxNode + 1}'].afterLocal,
+                    width=barWidth / widthFact,
+                    color='C3',
+                    edgecolor='k',
+                )
 
         if data[f'Node{idxNode + 1}'].after < 0 or\
             data[f'Node{idxNode + 1}'].before < 0:
@@ -310,7 +370,6 @@ def metrics_subplot(numNodes, ax, barWidth, data):
         fontsize=8
     )
     ax.tick_params(axis='x', labelrotation=90)
-    ax.grid()
     if flagZeroBar:
         ax.hlines(  # plot horizontal line at `metric = 0`
             0,
@@ -333,11 +392,6 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
         WASN under consideration.
     folder : str
         Folder where to create the "wav" folder where to export files.
-
-    Returns
-    ----------
-    fnames : dict
-        Full paths of exported files, sorted by type.
     """
 
     folderShort = met.shorten_path(folder)
@@ -345,36 +399,42 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
     if not Path(f'{folder}/wav').is_dir():
         Path(f'{folder}/wav').mkdir()
         print(f'Created .wav export folder ".../{folderShort}/wav".')
-    fname_noisy    = []
-    fname_desired  = []
-    fname_enhanced = []
     for k in range(len(wasn)):
-        fname_noisy.append(f'{folder}/wav/noisy_N{k + 1}_Sref{out.referenceSensor + 1}.wav')
         data = normalize_toint16(wasn[k].data)
-        wavfile.write(fname_noisy[-1], int(wasn[k].fs), data)
+        wavfile.write(
+            f'{folder}/wav/noisy_N{k + 1}_Sref{out.referenceSensor + 1}.wav',
+            int(wasn[k].fs), data
+        )
         #
-        fname_desired.append(f'{folder}/wav/desired_N{k + 1}_Sref{out.referenceSensor + 1}.wav')
         data = normalize_toint16(wasn[k].cleanspeech)
-        wavfile.write(fname_desired[-1], int(wasn[k].fs), data)
+        wavfile.write(
+            f'{folder}/wav/desired_N{k + 1}_Sref{out.referenceSensor + 1}.wav',
+            int(wasn[k].fs), data
+        )
         # vvv if enhancement has been performed
         if len(out.TDdesiredSignals[:, k]) > 0:
-            fname_enhanced.append(f'{folder}/wav/enhanced_N{k + 1}.wav')
             data = normalize_toint16(out.TDdesiredSignals[:, k])
-            wavfile.write(fname_enhanced[-1], int(wasn[k].fs), data)
-        # TODO: local
+            wavfile.write(
+                f'{folder}/wav/enhanced_N{k + 1}.wav',
+                int(wasn[k].fs), data
+            )
+        # vvv if enhancement has been performed and centralised estimate computed
+        if out.computeCentralised:
+            if len(out.TDdesiredSignals_c[:, k]) > 0:
+                data = normalize_toint16(out.TDdesiredSignals_c[:, k])
+                wavfile.write(
+                    f'{folder}/wav/enhancedCentr_N{k + 1}.wav',
+                    int(wasn[k].fs), data
+                )
         # vvv if enhancement has been performed and local estimate computed
-        # if len(out.desiredSigEstLocal) > 0:
-        #     fname_enhanced.append(f'{folder}/wav/enhancedLocal_N{k + 1}.wav')
-        #     data = normalize_toint16(out.desiredSigEstLocal[:, k])
-        #     wavfile.write(fname_enhanced[-1], int(wasn[k].fs), data)
+        if out.computeLocal:
+            if len(out.TDdesiredSignals_l[:, k]) > 0:
+                data = normalize_toint16(out.TDdesiredSignals_l[:, k])
+                wavfile.write(
+                    f'{folder}/wav/enhancedLocal_N{k + 1}.wav',
+                    int(wasn[k].fs), data
+                )
     print(f'Signals exported in folder ".../{folderShort}/wav".')
-    # WAV files names dictionary
-    fnames = dict([
-        ('Noisy', fname_noisy),
-        ('Desired', fname_desired),
-        ('Enhanced', fname_enhanced)
-    ])
-    return fnames
 
 
 def plot_asc(
@@ -401,8 +461,9 @@ def plot_asc(
         allIndices = np.arange(sum(p.nSensorPerNode))
         sensorIndices = allIndices[p.sensorToNodeIndices == k]
         if len(sensorIndices) > 1:
+            meanpos = np.mean(asc.mic_array.R[:, sensorIndices], axis=1)
             curr = np.amax(asc.mic_array.R[:, sensorIndices] - \
-                np.mean(asc.mic_array.R[:, sensorIndices], axis=1))
+                meanpos[:, np.newaxis])
         else:
             curr = 0.1
         if curr > nodeRadius:
@@ -431,7 +492,7 @@ def plot_asc(
         p.rd[-2:],
         np.array([ii.position[-2:] for ii in asc.sources[:p.nDesiredSources]]), 
         np.array([ii.position[-2:] for ii in asc.sources[-p.nNoiseSources:]]), 
-        asc.mic_array.R[-2:, :],
+        asc.mic_array.R[-2:, :].T,
         p.sensorToNodeIndices,
         dotted=p.t60==0,
         showLegend=False,
@@ -589,12 +650,12 @@ def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
     figs = []
     # Plot per node
     for k in range(out.nNodes):
-        fig = plot_signals(
+        fig, axForTitle = plot_signals(
             node=wasn[k],
             win=out.winWOLAanalysis,
             ovlp=out.WOLAovlp
         )
-        plt.title(f'Node {k + 1}, ref. sensor (#{out.referenceSensor + 1})')
+        axForTitle.set_title(f'Node {k + 1}, ref. sensor (#{out.referenceSensor + 1})')
         figs.append(fig)
 
     return figs
@@ -620,26 +681,64 @@ def plot_signals(node: Node, win, ovlp):
     """
 
     # Waveforms
-    fig = plt.figure(figsize=(8,4))
+    fig = plt.figure(figsize=(10,6))
     ax = fig.add_subplot(1,2,1)
     delta = np.amax(np.abs(node.data))
-    ax.plot(node.timeStamps, node.cleanspeechCombined, label='Desired')
-    ax.plot(node.timeStamps, node.vad * np.amax(node.cleanspeechCombined) * 1.1, 'k-', label='VAD')
-    ax.plot(node.timeStamps, node.data - 2*delta, label='Noisy')
+    ax.plot(
+        node.timeStamps,
+        node.cleanspeechCombined,
+        label='Desired'
+    )
+    ax.plot(
+        node.timeStamps,
+        node.vad * np.amax(node.cleanspeechCombined) * 1.1,
+        'k-', label='VAD'
+    )
+    ax.plot(
+        node.timeStamps,
+        node.data[:, 0] - 2*delta,
+        label='Noisy'
+    )
     # Desired signal estimate waveform 
-    delta *= 4
-    ax.plot(node.timeStamps, node.enhancedData - delta, label='Enhanced (global)')
+    ax.plot(
+        node.timeStamps,
+        node.enhancedData - 4*delta,
+        label='Enhanced (global)'
+    )
+    currDelta = 4*delta
+    if len(node.enhancedData_l) > 0:
+        ax.plot(
+            node.timeStamps,
+            node.enhancedData_l - currDelta - 2*delta,
+            label='Enhanced (local)'
+        )
+        currDelta += 2*delta
+    if len(node.enhancedData_c) > 0:
+        ax.plot(
+            node.timeStamps,
+            node.enhancedData_c - currDelta - 2*delta,
+            label='Enhanced (centr.)'
+        )
     ax.set_yticklabels([])
     ax.set(xlabel='$t$ [s]')
     ax.grid()
     plt.legend(loc=(0.01, 0.5), fontsize=8)
 
+    # -------- STFTs --------
+    # Number of subplot rows
+    nRows = 3
+
     # Compute STFTs
     cleanSTFT, f, t = get_stft(node.cleanspeechCombined, node.fs, win, ovlp)
-    noisySTFT, _, _ = get_stft(node.data, node.fs, win, ovlp)
+    noisySTFT, _, _ = get_stft(node.data[:, 0], node.fs, win, ovlp)
     enhanSTFT, _, _ = get_stft(node.enhancedData, node.fs, win, ovlp)
+    if len(node.enhancedData_l) > 0:
+        enhanSTFT_l, _, _ = get_stft(node.enhancedData_l, node.fs, win, ovlp)
+        nRows += 1
+    if len(node.enhancedData_c) > 0:
+        enhanSTFT_c, _, _ = get_stft(node.enhancedData_c, node.fs, win, ovlp)
+        nRows += 1
     
-    # -------- STFTs --------
     # Get color plot limits
     limLow = 20 * np.log10(
         np.amin([np.amin(np.abs(cleanSTFT)), np.amin(np.abs(noisySTFT))])
@@ -649,12 +748,10 @@ def plot_signals(node: Node, win, ovlp):
     limHigh = 20 * np.log10(
         np.amax([np.amax(np.abs(cleanSTFT)), np.amax(np.abs(noisySTFT))])
     )
-    
-    # Number of subplot rows
-    nRows = 3
 
     # Plot spectrograms
     ax = fig.add_subplot(nRows,2,2)  # Wet desired signal
+    axForTitle = copy.copy(ax)
     data = 20 * np.log10(np.abs(np.squeeze(cleanSTFT)))
     stft_subplot(ax, t, f, data, [limLow, limHigh], 'Desired')
     plt.xticks([])
@@ -662,13 +759,23 @@ def plot_signals(node: Node, win, ovlp):
     data = 20 * np.log10(np.abs(np.squeeze(noisySTFT)))
     stft_subplot(ax, t, f, data, [limLow, limHigh], 'Noisy')
     plt.xticks([])
-    ax = fig.add_subplot(nRows,2,nRows*2)   # Enhanced signals (global)
+    ax = fig.add_subplot(nRows,2,6)   # Enhanced signals (global)
     data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT)))
     stft_subplot(ax, t, f, data, [limLow, limHigh], 'Global DANSE')
+    currSubplotIdx = 6
+    if len(node.enhancedData_l) > 0:    # Enhanced signals (local)
+        ax = fig.add_subplot(nRows,2,currSubplotIdx + 2)
+        data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT_l)))
+        stft_subplot(ax, t, f, data, [limLow, limHigh], 'Local est.')
+        currSubplotIdx += 2
+    if len(node.enhancedData_c) > 0:    # Enhanced signals (centralised)
+        ax = fig.add_subplot(nRows,2,currSubplotIdx + 2)
+        data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT_c)))
+        stft_subplot(ax, t, f, data, [limLow, limHigh], 'Centr. est.')
     ax.set(xlabel='$t$ [s]')
     plt.tight_layout()
 
-    return fig
+    return fig, axForTitle
 
 
 def stft_subplot(ax, t, f, data, vlims, label=''):
@@ -714,13 +821,10 @@ def get_stft(x, fs, win, ovlp):
         x = x[:, np.newaxis]
 
     for channel in range(x.shape[-1]):
-        
-        if x.shape[-1] == 1 and isinstance(fs, float):
-            fs = [fs]   # from float to list
 
         fcurr, t, tmp = sig.stft(
             x[:, channel],
-            fs=fs[channel],
+            fs=fs,
             window=win,
             nperseg=len(win),
             noverlap=int(ovlp * len(win)),
