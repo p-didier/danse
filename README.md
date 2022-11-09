@@ -1,4 +1,4 @@
-# DANSE
+# DANSE algorithm [Paul Didier's implementation]
 ## Distributed Adaptive Node-specific Signal Estimation algorithm - original and added features.
 
 As of 09.11.2022:
