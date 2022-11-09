@@ -148,6 +148,9 @@ class DANSEparameters(Hyperparameters):
     desSigProcessingType: str = 'wola'  # processing scheme used to compute
         # the desired signal estimates: "wola": WOLA synthesis,
                                     # "conv": T(z)-approximation.
+    computeCentralised: bool = False    # if True, compute centralised
+        # estimate (using all microphone signals in network). TODO: TODO: TODO: TODO: 
+    computeLocal: bool = False  # if True, compute local estimate at each node TODO: TODO: TODO: TODO: 
     # Metrics
     dynMetrics: DynamicMetricsParameters = DynamicMetricsParameters()
     gammafwSNRseg: float = 0.2  # gamma exponent for fwSNRseg
@@ -191,6 +194,7 @@ class DANSEvariables(DANSEparameters):
         list of `Node` objects.
         """
         nNodes = len(wasn)  # number of nodes in WASN
+        nSensorsTotal = sum([wasn[k].nSensors for k in range(nNodes)])
         self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
@@ -200,8 +204,12 @@ class DANSEvariables(DANSEparameters):
         bufferFlags = []
         dimYTilde = np.zeros(nNodes, dtype=int)   # dimension of \tilde{y}_k
         phaseShiftFactors = []
-        Rnntilde = []   # autocorrelation matrix when VAD=0 
-        Ryytilde = []   # autocorrelation matrix when VAD=1
+        Rnncentr = []   # autocorrelation matrix when VAD=0 [centralised]
+        Ryycentr = []   # autocorrelation matrix when VAD=1 [centralised]
+        Rnnlocal = []   # autocorrelation matrix when VAD=0 [local]
+        Ryylocal = []   # autocorrelation matrix when VAD=1 [local]
+        Rnntilde = []   # autocorrelation matrix when VAD=0 [DANSE]
+        Ryytilde = []   # autocorrelation matrix when VAD=1 [DANSE]
         SROsEstimates = []  # SRO estimates per node (for each neighbor)
         SROsResiduals = []  # SRO residuals per node (for each neighbor)
         t = np.zeros((len(wasn[0].timeStamps), nNodes))  # time stamps
@@ -211,6 +219,9 @@ class DANSEvariables(DANSEparameters):
         wTildeExtTarget = []
         yyH = []
         yyHuncomp = []
+        yCentr = []
+        yHatCentr = []
+        yHatLocal = []
         yTilde = []
         yTildeHat = []
         yTildeHatUncomp = []
@@ -232,9 +243,22 @@ class DANSEvariables(DANSEparameters):
             #
             sliceTilde = np.finfo(float).eps *\
                 (np.random.random((dimYTilde[k], dimYTilde[k])) +\
-                    1j * np.random.random((dimYTilde[k], dimYTilde[k]))) 
+                1j * np.random.random((dimYTilde[k], dimYTilde[k]))) 
             Rnntilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
             Ryytilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
+            # TODO: centralised and local covariance matrices should
+            # contain the same _local_ part as the 'tilde' covariance
+            # matrices... 
+            sliceCentr = np.finfo(float).eps *\
+                (np.random.random((nSensorsTotal, nSensorsTotal)) +\
+                1j * np.random.random((nSensorsTotal, nSensorsTotal))) 
+            Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+            Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+            sliceLocal = np.finfo(float).eps *\
+                (np.random.random((wasn[k].nSensors, wasn[k].nSensors)) +\
+                1j * np.random.random((wasn[k].nSensors, wasn[k].nSensors))) 
+            Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
+            Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
             #
             SROsEstimates.append(np.zeros((self.nIter, nNeighbors)))
             SROsResiduals.append(np.zeros((self.nIter, nNeighbors)))
@@ -256,15 +280,21 @@ class DANSEvariables(DANSEparameters):
             wTildeExt.append(wtmp)
             wTildeExtTarget.append(wtmp)
             #
-            yyH.append(np.zeros((self.nIter, self.nPosFreqs, dimYTilde[k],
-                dimYTilde[k]), dtype=complex))
-            yyHuncomp.append(np.zeros((self.nIter, self.nPosFreqs,
-                dimYTilde[k], dimYTilde[k]), dtype=complex))
+            yCentr.append(np.zeros(
+                (self.DFTsize, self.nIter, nSensorsTotal)))
+            yHatCentr.append(np.zeros(
+                (self.nPosFreqs, self.nIter, nSensorsTotal), dtype=complex))
+            yHatLocal.append(np.zeros(
+                (self.nPosFreqs, self.nIter, wasn[k].nSensors), dtype=complex))
             yTilde.append(np.zeros((self.DFTsize, self.nIter, dimYTilde[k])))
             yTildeHat.append(np.zeros(
                 (self.nPosFreqs, self.nIter, dimYTilde[k]), dtype=complex))
             yTildeHatUncomp.append(np.zeros(
                 (self.nPosFreqs, self.nIter, dimYTilde[k]), dtype=complex))
+            yyH.append(np.zeros((self.nIter, self.nPosFreqs, dimYTilde[k],
+                dimYTilde[k]), dtype=complex))
+            yyHuncomp.append(np.zeros((self.nIter, self.nPosFreqs,
+                dimYTilde[k], dimYTilde[k]), dtype=complex))
             #
             z.append(np.empty((self.DFTsize, 0), dtype=float))
             zBuffer.append([np.array([]) for _ in range(nNeighbors)])
@@ -296,6 +326,10 @@ class DANSEvariables(DANSEparameters):
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
         self.lastBroadcastInstant = np.zeros(nNodes)
         self.lastTDfilterUp = np.zeros(nNodes)
+        self.Rnncentr = Rnncentr
+        self.Ryycentr = Ryycentr
+        self.Rnnlocal = Rnnlocal
+        self.Ryylocal = Ryylocal
         self.Rnntilde = Rnntilde
         self.Ryytilde = Ryytilde
         self.SROsppm = np.array([node.sro for node in wasn])
@@ -307,6 +341,9 @@ class DANSEvariables(DANSEparameters):
         self.yin = [node.data for node in wasn]
         self.yyH = yyH
         self.yyHuncomp = yyHuncomp
+        self.yCentr = yCentr
+        self.yHatCentr = yHatCentr
+        self.yHatLocal = yHatLocal
         self.yTilde = yTilde
         self.yTildeHat = yTildeHat
         self.yTildeHatUncomp = yTildeHatUncomp
@@ -317,6 +354,9 @@ class DANSEvariables(DANSEparameters):
         self.z = z
         self.zBuffer = zBuffer
         self.zLocal = zLocal
+
+        # For centralised and local estimates
+        self.yinStacked = np.concatenate((x for x in self.yin), axis=-1)
 
         return self
 
@@ -405,11 +445,21 @@ class DANSEvariables(DANSEparameters):
             )
 
         
-    def update_and_estimate(self, tCurr, fs, k,
-                    p: DANSEparameters):
+    def update_and_estimate(self, tCurr, fs, k, p: DANSEparameters):
         """
         Update filter coefficient at current node
         and estimate corresponding desired signal frame.
+
+        Parameters
+        ----------
+        tCurr : float
+            Current time instant [s].
+        fs : float
+            Node `k`'s sampling frequency [Hz].
+        k : int
+            Receiving node index.
+        p : DANSEparameters object
+            DANSE parameters.
         """
 
         # Process buffers
@@ -417,11 +467,17 @@ class DANSEvariables(DANSEparameters):
         # Wipe local buffers
         self.zBuffer[k] = [np.array([]) for _ in range(len(self.neighbors[k]))]
         # Construct `\tilde{y}_k` in frequency domain and VAD at current frame
-        self.build_ytilde(self.yin[k], tCurr, fs, k, p)
+        self.build_ytilde(tCurr, fs, k, p)
+        # Consider local / centralised estimation(s)
+        if p.computeCentralised:
+            self.build_ycentr(tCurr, fs, k, p)
+        if p.computeLocal:
+            self.yHatLocal[k][:, self.i[k], :] =\
+                self.yTilde[k][:, self.i[k], self.nSensorPerNode[k]:]
         # Account for buffer flags
         skipUpdate = self.compensate_sros(k, tCurr, p)
-        # Ryy and Rnn updates
-        self.spatial_covariance_matrix_update(k)
+        # Ryy and Rnn updates (including centralised / local, if needed)
+        self.spatial_covariance_matrix_update(k, p)
         
         # Check quality of autocorrelations estimates 
         # -- once we start updating, do not check anymore.
@@ -432,6 +488,7 @@ class DANSEvariables(DANSEparameters):
 
         if self.startUpdates[k] and not p.bypassUpdates and not skipUpdate:
             # No `for`-loop versions
+            # TODO:~TODO:~TODO:~TODO: ADD CENTRALISED / LOCAL 
             if p.performGEVD:   # GEVD update
                 self.perform_gevd_noforloop(k, p.GEVDrank, p.referenceSensor)
             else:   # regular update (no GEVD)
@@ -458,6 +515,7 @@ class DANSEvariables(DANSEparameters):
             print('!! User-forced bypass of filter coefficients updates !!')
 
         # Update external filters (for broadcasting)
+        # TODO:~TODO:~TODO:~TODO: ADD CENTRALISED / LOCAL -- TAKE NODE-UPDATING MECHANISM INTO ACCOUNT 
         self.update_external_filters(k, tCurr, p)
         # Update SRO estimates
         self.update_sro_estimates(k, p)
@@ -465,9 +523,31 @@ class DANSEvariables(DANSEparameters):
         if p.compensateSROs:
             self.build_phase_shifts_for_srocomp(k, p)
         # Compute desired signal chunk estimate
+        # TODO:~TODO:~TODO:~TODO: ADD CENTRALISED / LOCAL 
         self.get_desired_signal(k, p)
         # Update iteration index
         self.i[k] += 1
+    
+
+    def build_ycentr(self, tCurr, fs, k, p: DANSEparameters):
+        """
+        Build STFT-domain centralised observation vector.
+        """
+        # Extract current local data chunk
+        yCentrCurr, _, _ = base.local_chunk_for_update(
+            self.yinStacked, tCurr, fs, p
+        )
+        self.yCentr[k][:, self.i[k], :] = yCentrCurr
+        # Go to frequency domain
+        yHatCentrCurr = 1 / p.normFactWOLA * np.fft.fft(
+            self.yCentr[k][:, self.i[k], :] *\
+                p.winWOLAanalysis[:, np.newaxis],
+            p.DFTsize,
+            axis=0
+        )
+        # Keep only positive frequencies
+        self.yHatCentr[k][:, self.i[k], :] =\
+            yHatCentrCurr[:self.nPosFreqs, :]
 
 
     def update_external_filters(self, k, t, p: DANSEparameters):
@@ -500,9 +580,7 @@ class DANSEvariables(DANSEparameters):
                 # Update last external filter update instant [s]
                 self.lastExtFiltUp[k] = t
                 if p.printout_externalFilterUpdate:    # inform user
-                    print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for \
-                        node {k+1} (scheduled every [at least] \
-                            {p.timeBtwExternalFiltUpdates}s)')
+                    print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {p.timeBtwExternalFiltUpdates}s)')
 
         # Sequential node-updating
         elif p.nodeUpdating == 'seq':
@@ -657,17 +735,15 @@ class DANSEvariables(DANSEparameters):
         self.bufferFlags[k][self.i[k], :] = bufferFlags
 
     
-    def build_ytilde(self, yk, tCurr, fs, k, p: DANSEparameters):
+    def build_ytilde(self, tCurr, fs, k, p: DANSEparameters):
         """
         
         Parameters
         ----------
-        yk : [Nt x Nsensors] np.ndarray (float)
-            Full time-domain local sensor signals at node `k`.
         tCurr : float
             Current time instant [s].
         fs : float
-            Node `k`'s sampling frequency [s].
+            Node `k`'s sampling frequency [Hz].
         k : int
             Receiving node index.
         dv : DANSEvariables object
@@ -675,6 +751,9 @@ class DANSEvariables(DANSEparameters):
         p : DANSEparameters object
             DANSE parameters.
         """
+
+        # Get data
+        yk = self.yin[k]
 
         # Extract current local data chunk
         yLocalCurr, self.idxBegChunk, self.idxEndChunk =\
@@ -775,7 +854,7 @@ class DANSEvariables(DANSEparameters):
         return skipUpdate
 
 
-    def spatial_covariance_matrix_update(self, k):
+    def spatial_covariance_matrix_update(self, k, p: DANSEparameters):
         """
         Performs the spatial covariance matrices updates.
         
@@ -783,22 +862,43 @@ class DANSEvariables(DANSEparameters):
         ----------
         k : int
             Node index.
+        p : `DANSEparameters` object
+            DANSE parameters.
         """
-        # Useful renaming 
+
+        def _upd(Ryy, Rnn, yyH,
+            vad=self.oVADframes[self.i[k]], beta=self.expAvgBeta[k]
+        ):
+            """Quick helper function to perform exponential averaging."""
+            if vad:
+                Ryy = beta * Ryy + (1 - beta) * yyH
+            else:
+                Rnn = beta * Rnn + (1 - beta) * yyH
+            return Ryy, Rnn
+
+        # Useful renaming
         y = self.yTildeHat[k][:, self.i[k], :]
-        
-        yyH = np.einsum('ij,ik->ijk', y, y.conj())
-
-        if self.oVADframes[self.i[k]]:
-            self.Ryytilde[k] = self.expAvgBeta[k] * self.Ryytilde[k] +\
-                (1 - self.expAvgBeta[k]) * yyH  # update signal + noise matrix
-        else:     
-            self.Rnntilde[k] = self.expAvgBeta[k] * self.Rnntilde[k] +\
-                (1 - self.expAvgBeta[k]) * yyH  # update noise-only matrix
-
+        yyH = np.einsum('ij,ik->ijk', y, y.conj())  # outer product
+        self.Ryytilde[k], self.Rnntilde[k] = _upd(
+            self.Ryytilde[k], self.Rnntilde[k], yyH
+        )  # update
         self.yyH[k][self.i[k], :, :, :] = yyH
 
-    
+        # Consider centralised / local estimation(s)
+        if p.computeLocal:
+            y = self.yHatLocal[k][:, self.i[k], :]
+            yyH = np.einsum('ij,ik->ijk', y, y.conj())
+            self.Ryylocal[k], self.Rnnlocal[k] = _upd(
+                self.Ryylocal[k], self.Rnnlocal[k], yyH
+            )  # update local
+        if p.computeCentralised:
+            y = self.yHatCentr[k][:, self.i[k], :]
+            yyH = np.einsum('ij,ik->ijk', y, y.conj())
+            self.Ryycentr[k], self.Rnncentr[k] = _upd(
+                self.Ryycentr[k], self.Rnncentr[k], yyH
+            )  # update centralised
+
+
     def perform_gevd_noforloop(self, k, rank=1, refSensorIdx=0):
         """
         GEVD computations for DANSE, `for`-loop free.

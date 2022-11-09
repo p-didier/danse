@@ -1,26 +1,17 @@
 
 import sys
-from pathlib import Path, PurePath
-
-rootFolder = 'sounds-phd'
-pathToRoot = Path(__file__)
-while PurePath(pathToRoot).name != rootFolder:
-    pathToRoot = pathToRoot.parent
-sys.path.append(f'{pathToRoot}')
-
-PATHTOROOT = pathToRoot
-SIGNALSPATH = f'{PATHTOROOT}/02_data/00_raw_signals'
-
-import numpy as np
 import random
+import numpy as np
+import pyroomacoustics as pra
+from pathlib import Path
 from danse.siggen.classes import *
 import danse.siggen.utils as sig_ut
 import danse.danse_toolbox.d_base as base
 import danse.danse_toolbox.d_core as core
 from danse.danse_toolbox.d_classes import *
-import danse.danse_toolbox.d_post as postproc
-from dataclasses import dataclass
+import danse.danse_toolbox.d_post as pp
 
+SIGNALSPATH = f'{Path(__file__).parent}/sigs'
 @dataclass
 class TestParameters:
     # TODO: vvv self-noise
@@ -32,6 +23,7 @@ class TestParameters:
         sigDur=5
     )
     danseParams: DANSEparameters = DANSEparameters()
+    exportFolder: str = Path(__file__).parent   # folder to export outputs
     #
     seed: int = 12345
 
@@ -90,15 +82,17 @@ def main():
         )
     )
 
+    # Build room
     room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasn)
-    # sig_ut.plot_mic_sigs(room, vad)  # <-- plot signals
 
     # Build WASN (asynchronicities, topology)
     wasn = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasn)
 
     # DANSE
     out = danse_it_up(wasn, p)
-    stop = 1
+
+    # Visualize results
+    postprocess(out, wasn, room, p)
 
 
 def danse_it_up(wasn: list[Node], p: TestParameters):
@@ -122,10 +116,61 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
     # Launch DANSE
     out = core.danse(wasn, p.danseParams)
 
-    # Visualize results
-    # postproc.plot_sros(out)
-    postproc.plot_des_sig_est(out)
+    return out
+
+
+def postprocess(out: pp.DANSEoutputs,
+        wasn: list[Node],
+        room: pra.room.ShoeBox,
+        p: TestParameters):
+    """
+    Defines the post-processing steps to be undertaken after a DANSE run.
+    Using the `danse.danse_toolbox.d_post` [abbrev. `pp`] functions.
+
+    Parameters
+    ----------
+    out : `danse.danse_toolbox.d_post.DANSEoutputs` object
+        DANSE outputs (signals, etc.)
+    wasn : list of `Node` objects
+        WASN under consideration, after DANSE processing.
+    room : `pyroomacoustics.room.ShoeBox` object
+        Acoustic scenario under consideration.
+    p : `TestParameters` object
+        Test parameters.
+    """
+
+    # Default booleans
+    runit = True   # by default, run
+    # Check whether export folder exists
+    if Path(p.exportFolder).is_dir():
+        # Check whether the folder contains something
+        if Path(p.exportFolder).stat().st_size > 0:
+            inp = input(f'The folder\n"{p.exportFolder}"\ncontains data. Overwrite? [y/[n]]:  ')
+            if inp not in ['y', 'Y']:
+                runit = False   # don't run
+                print('Aborting export.')
+    else:
+        print(f'Create export folder "{p.exportFolder}".')
+        Path(p.exportFolder).mkdir()
+
+    if runit:
+        # Export .wav files
+        out.export_sounds(wasn, p.exportFolder)
+
+        # Plot (+ export) acoustic scenario (WASN)
+        pp.plot_asc(room, p.wasn, p.exportFolder)
+
+        # Plot performance metrics (+ export)
+        out.plot_perf(wasn, p.exportFolder)
+
+        # Plot signals at specific nodes (+ export)
+        out.plot_sigs(wasn, p.exportFolder)
+
     stop = 1
+
+    return None
+
+
 
 
 if __name__ == '__main__':
