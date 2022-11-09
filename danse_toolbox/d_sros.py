@@ -1,5 +1,5 @@
 import numpy as np
-from danse.danse_toolbox.d_classes import *
+from danse_toolbox.d_classes import *
 from paderwasn.synchronization.time_shift_estimation import max_time_lag_search
 
 

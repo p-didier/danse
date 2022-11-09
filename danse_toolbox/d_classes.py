@@ -1,11 +1,11 @@
 import copy
 import numpy as np
 import scipy.linalg as sla
-from danse.siggen.classes import Node, WASNparameters
+from siggen.classes import Node, WASNparameters
 from dataclasses import dataclass, field
-import danse.danse_toolbox.d_base as base
-import danse.danse_toolbox.d_sros as sros
-from danse.danse_toolbox.d_eval import DynamicMetricsParameters
+import danse_toolbox.d_base as base
+import danse_toolbox.d_sros as sros
+from danse_toolbox.d_eval import DynamicMetricsParameters
 
 @dataclass
 class DANSEeventInstant:
@@ -356,7 +356,7 @@ class DANSEvariables(DANSEparameters):
         self.zLocal = zLocal
 
         # For centralised and local estimates
-        self.yinStacked = np.concatenate((x for x in self.yin), axis=-1)
+        self.yinStacked = np.concatenate(tuple([x for x in self.yin]), axis=-1)
 
         return self
 

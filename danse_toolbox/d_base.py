@@ -8,7 +8,7 @@ import numpy as np
 from numba import njit
 import scipy.linalg as sla
 import matplotlib.pyplot as plt
-from danse.danse_toolbox.d_classes import *
+from danse_toolbox.d_classes import *
 from scipy.signal._arraytools import zero_ext
 
 

@@ -4,14 +4,15 @@ import random
 import numpy as np
 import pyroomacoustics as pra
 from pathlib import Path
-from danse.siggen.classes import *
-import danse.siggen.utils as sig_ut
-import danse.danse_toolbox.d_base as base
-import danse.danse_toolbox.d_core as core
-from danse.danse_toolbox.d_classes import *
-import danse.danse_toolbox.d_post as pp
+from siggen.classes import *
+import siggen.utils as sig_ut
+import danse_toolbox.d_base as base
+import danse_toolbox.d_core as core
+from danse_toolbox.d_classes import *
+import danse_toolbox.d_post as pp
 
-SIGNALSPATH = f'{Path(__file__).parent}/sigs'
+SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
+
 @dataclass
 class TestParameters:
     # TODO: vvv self-noise
@@ -23,7 +24,7 @@ class TestParameters:
         sigDur=5
     )
     danseParams: DANSEparameters = DANSEparameters()
-    exportFolder: str = Path(__file__).parent   # folder to export outputs
+    exportFolder: str = f'{Path(__file__).parent}/out'  # folder to export outputs
     #
     seed: int = 12345
 
@@ -61,11 +62,10 @@ def main():
                     'whitenoise_signal_1.wav',
                     'whitenoise_signal_2.wav'
                 ]],
-            # SROperNode=np.array([0, 50])
-            SROperNode=np.array([0, 0])
+            SROperNode=np.array([0, 50])
+            # SROperNode=np.array([0, 0])
         ),
         danseParams=DANSEparameters(
-            referenceSensor=0,
             DFTsize=1024,
             WOLAovlp=.5,
             nodeUpdating='seq',
@@ -81,6 +81,7 @@ def main():
             )
         )
     )
+    p.danseParams.get_wasn_info(p.wasn)  # complete parameters
 
     # Build room
     room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasn)
@@ -89,10 +90,10 @@ def main():
     wasn = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasn)
 
     # DANSE
-    out = danse_it_up(wasn, p)
+    out, wasnUpdated = danse_it_up(wasn, p)
 
     # Visualize results
-    postprocess(out, wasn, room, p)
+    postprocess(out, wasnUpdated, room, p)
 
 
 def danse_it_up(wasn: list[Node], p: TestParameters):
@@ -100,23 +101,15 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
     Container function for prepping signals and launching the DANSE algorithm.
     """
 
-    # Prep for FFTs (zero-pad)
     for k in range(p.wasn.nNodes):  # for each node
-        wasn[k].data, wasn[k].timeStamps, _ = base.prep_sigs_for_FFT(
-            y=wasn[k].data,
-            N=p.danseParams.DFTsize,
-            Ns=p.danseParams.Ns,
-            t=wasn[k].timeStamps
-        )
-
         # Derive exponential averaging factor for `Ryy` and `Rnn` updates
         wasn[k].beta = np.exp(np.log(0.5) / \
             (p.danseParams.t_expAvg50p * wasn[k].fs / p.danseParams.Ns))
 
     # Launch DANSE
-    out = core.danse(wasn, p.danseParams)
+    out, wasnUpdated = core.danse(wasn, p.danseParams)
 
-    return out
+    return out, wasnUpdated
 
 
 def postprocess(out: pp.DANSEoutputs,
@@ -165,8 +158,6 @@ def postprocess(out: pp.DANSEoutputs,
 
         # Plot signals at specific nodes (+ export)
         out.plot_sigs(wasn, p.exportFolder)
-
-    stop = 1
 
     return None
 

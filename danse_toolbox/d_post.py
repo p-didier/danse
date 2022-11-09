@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 from pathlib import Path, PurePath
 import pyroomacoustics as pra
 from dataclasses import dataclass, fields
-from danse.siggen.classes import Node, WASNparameters
-from danse.danse_toolbox.d_classes import DANSEparameters, DANSEvariables
-from danse.danse_toolbox.d_eval import *
-import danse.danse_toolbox.dataclass_methods as met
+from siggen.classes import Node, WASNparameters
+from danse_toolbox.d_classes import DANSEparameters, DANSEvariables
+from danse_toolbox.d_eval import *
+import danse_toolbox.dataclass_methods as met
 
 @dataclass
 class DANSEoutputs(DANSEparameters):
@@ -85,7 +85,6 @@ class DANSEoutputs(DANSEparameters):
         figs = plot_signals_all_nodes(self, wasn)
         for k in range(len(figs)):
             figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.png')
-            figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.pdf')
 
 
 def compute_metrics(

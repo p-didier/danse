@@ -8,7 +8,7 @@ from numba import njit
 import scipy.signal as sig
 import pyroomacoustics as pra
 import matplotlib.pyplot as plt
-from danse.siggen import classes
+from siggen import classes
 from scipy.spatial.transform import Rotation as rot
 
 

@@ -7,10 +7,10 @@
 
 import time, datetime
 from pyinstrument import Profiler
-import danse.danse_toolbox.d_base as base
-from danse.danse_toolbox.d_sros import *
-from danse.danse_toolbox.d_classes import *
-from danse.danse_toolbox.d_post import DANSEoutputs
+import danse_toolbox.d_base as base
+from danse_toolbox.d_sros import *
+from danse_toolbox.d_classes import *
+from danse_toolbox.d_post import DANSEoutputs
 
 
 def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:

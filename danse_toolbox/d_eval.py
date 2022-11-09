@@ -3,7 +3,7 @@ from pesq import pesq
 import scipy.signal as sig
 from scipy.signal import stft
 from dataclasses import dataclass, field
-from danse.danse_toolbox.mypystoi import stoi_any_fs as stoi_fcn
+from danse_toolbox.mypystoi import stoi_any_fs as stoi_fcn
 
 
 @dataclass
