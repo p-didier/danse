@@ -6,7 +6,6 @@ import pyroomacoustics as pra
 from pathlib import Path
 from siggen.classes import *
 import siggen.utils as sig_ut
-import danse_toolbox.d_base as base
 import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
 import danse_toolbox.d_post as pp
@@ -47,11 +46,12 @@ def main():
     p = TestParameters(
         selfnoiseSNR=-99,  # TODO:
         wasn=WASNparameters(
+            sigDur=15,
             rd=np.array([5, 5, 5]),
             fs=16000,
             t60=0.2,
-            nNodes=2,
-            nSensorPerNode=[1,1],
+            nNodes=4,
+            nSensorPerNode=[1, 3, 2, 5],
             desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
                 for file in [
                     'speech1.wav',
@@ -62,14 +62,14 @@ def main():
                     'whitenoise_signal_1.wav',
                     'whitenoise_signal_2.wav'
                 ]],
-            SROperNode=np.array([0, 50])
-            # SROperNode=np.array([0, 0])
+            # SROperNode=np.array([0, 50])
+            SROperNode=np.array([0, 0])
         ),
         danseParams=DANSEparameters(
             DFTsize=1024,
             WOLAovlp=.5,
-            nodeUpdating='seq',
-            # nodeUpdating='asy',
+            # nodeUpdating='seq',
+            nodeUpdating='asy',
             # broadcastType='fewSamples',
             broadcastType='wholeChunk',
             estimateSROs='CohDrift',
@@ -78,7 +78,9 @@ def main():
             cohDrift=CohDriftParameters(
                 loop='open',
                 alpha=0.99
-            )
+            ),
+            computeCentralised=True,
+            computeLocal=True,
         )
     )
     p.danseParams.get_wasn_info(p.wasn)  # complete parameters
@@ -160,8 +162,6 @@ def postprocess(out: pp.DANSEoutputs,
         out.plot_sigs(wasn, p.exportFolder)
 
     return None
-
-
 
 
 if __name__ == '__main__':

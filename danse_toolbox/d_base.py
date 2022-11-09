@@ -382,7 +382,7 @@ def local_chunk_for_broadcast(y, t, fs, N):
     return chunk
 
 
-def local_chunk_for_update(y, t, fs, p: DANSEparameters):
+def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
     """
     Extract correct chunk of local signals for DANSE updates.
     
@@ -394,8 +394,12 @@ def local_chunk_for_update(y, t, fs, p: DANSEparameters):
         Current time instant [s].
     fs : int or float
         Transmitting node's sampling frequency [Hz].
-    p : DANSEparameters object
-        DANSE parameters.
+    bd : str
+        Broadcast type ("fewSamples" or "wholeChunk").
+    Ndft : int
+        DFT size.
+    Ns : int
+        Number of new samples at each new WOLA frame.
 
     Returns
     -------
@@ -406,11 +410,6 @@ def local_chunk_for_update(y, t, fs, p: DANSEparameters):
     idxEnd : int
         End index of chunk (w.r.t. `y`).
     """
-
-    # Useful renaming
-    bd = p.broadcastType
-    Ndft = p.DFTsize
-    Ns = p.Ns
 
     # Broadcast scheme: block-wise, in freq.-domain
     # <or> Broadcast scheme: few samples at a time, in time-domain
@@ -883,3 +882,74 @@ def perform_update_noforloop(Ryy, Rnn, refSensorIdx=0):
     w = w[:, :, 0]  # get rid of singleton dimension
     
     return w
+
+
+def get_desired_sig_chunk(
+    desSigProcessingType,
+    w, y, win, normFactWOLA,
+    dChunk, Ns, yTD
+):
+    """
+    Computes STFT-domain frame and time-domain frame of desired
+    signal estimate.
+    
+    Parameters
+    ----------
+    desSigProcessingType : str
+        Type of processing to be used to build the time-domain signal:
+        "wola" for WOLA processing /or/ "conv" for linear convolution via
+        T(z)-approximation of WOLA processing.
+    w : [N x M] np.ndarray (complex)
+        STFT-domain multichannel (`M` channels) filter coefficients
+        at current frame.
+    y : [N x M] np.ndarray (complex)
+        STFT-domain multichannel (`M` channels) signals at current frame.
+    win : [N x 1] np.ndarray (float)
+        WOLA analysis and synthesis window (option to use different windows
+        for analysis and synthesis not yet implemented).
+    normFactWOLA : float
+        WOLA normalisation factor for transforms bw. frequency- & time-domain.
+    dChunk : [N x 1] np.ndarray (float)
+        Previous frame of time-domain desired signal estimate constructed
+        from a WOLA process (only used if `desSigProcessingType == 'wola'`).
+    Ns : int
+        Number of new samples at each new WOLA frame.
+    yTD : [N x M] np.ndarray (float)
+        Time-domain frame of multichannel (`M` channels) signals. 
+    
+    Returns
+    -------
+    dChunk : [N x 1] np.ndarray (float)
+        Latest time-domain frame of desired signal estimate.
+    dhatCurr : [N x 1] np.ndarray (complex)
+        Latest STFT-domain frame of desired signal estimate.
+    """
+    dhatCurr = None  # if `self.desSigProcessingType == 'conv'`
+    if desSigProcessingType == 'wola':
+        # Compute desired signal chunk estimate using WOLA
+        dhatCurr = np.einsum('ij,ij->i', w.conj(), y)
+        # Transform back to time domain (WOLA processing)
+        dChunCurr = normFactWOLA * win *\
+            base.back_to_time_domain(dhatCurr, len(win))
+        # Overlap and add construction of output time-domain signal
+        if len(dChunk) < len(win):
+            dChunk += np.real_if_close(dChunCurr[-len(dChunk):])
+        else:
+            dChunk += np.real_if_close(dChunCurr)
+
+    elif desSigProcessingType == 'conv':
+        # Compute desired signal chunk estimate using T(z) approximation
+        wIR = base.dist_fct_approx(w, win, win, Ns)
+        # Perform convolution
+        yfiltLastSamples = np.zeros((Ns, yTD.shape[-1]))
+        for m in range(yTD.shape[-1]):
+            # Indices required from convolution output vvv
+            idDesired = np.arange(start=len(wIR) - Ns, stop=len(wIR))
+            tmp = base.extract_few_samples_from_convolution(
+                idDesired, wIR[:, m], yTD[:, m]
+            )
+            yfiltLastSamples[:, m] = tmp
+
+        dChunk = np.sum(yfiltLastSamples, axis=1)
+    
+    return dChunk, dhatCurr

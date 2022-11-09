@@ -52,8 +52,8 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
         base.events_parser(
             eventInstants[idx_t],
             dv.startUpdates,
-            p.printout_eventsParser,
-            p.printout_eventsParserNoBC
+            dv.printout_eventsParser,
+            dv.printout_eventsParserNoBC
         )
 
         # Process events at current instant
@@ -64,16 +64,16 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
             if events.type[idx_e] == 'bc':
                 # TODO: maybe not needed to recompute `fs`
                 # (already there in `wasn[k].fs`)
-                dv.broadcast(events.t, fs[k], k, p)
+                dv.broadcast(events.t, fs[k], k)
             # Filter updates and desired signal estimates event
             elif events.type[idx_e] == 'up':
-                dv.update_and_estimate(events.t, fs[k], k, p)
+                dv.update_and_estimate(events.t, fs[k], k)
             else:
                 raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
 
     # Profiling
     profiler.stop()
-    if p.printout_profiler:
+    if dv.printout_profiler:
         profiler.print()
 
     print('\nSimultaneous DANSE processing all done.')
@@ -90,5 +90,9 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
     # Update WASN object
     for k in range(len(wasn)):
         wasn[k].enhancedData = dv.d[:, k]
+        if dv.computeCentralised:
+            wasn[k].enhancedData_c = dv.dCentr[:, k]
+        if dv.computeLocal:
+            wasn[k].enhancedData_l = dv.dLocal[:, k]
 
     return out, wasn

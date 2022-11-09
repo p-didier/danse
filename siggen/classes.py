@@ -58,6 +58,8 @@ class Node:
     cleanspeech: np.ndarray = np.array([])  # mic. signals if no noise present
     data: np.ndarray = np.array([])  # mic. signals
     enhancedData: np.ndarray = np.array([]) # signals after enhancement
+    enhancedData_c: np.ndarray = np.array([]) # after CENTRALISED enhancement
+    enhancedData_l: np.ndarray = np.array([]) # after LOCAL enhancement
     timeStamps: np.ndarray = np.array([])
     neighborsIdx: list[int] = field(default_factory=list)
     vad: np.ndarray = np.array([])
