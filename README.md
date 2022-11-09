@@ -6,7 +6,7 @@ As of 09.11.2022:
 - GEVD-DANSE possible.
 - Including SRO estimation and compensation as described in https://arxiv.org/abs/2211.02489.
 
-To **install** all dependencies --> most straightforwardly done via a Conda virtual environment:
+To **install** all dependencies --> most straightforwardly done via a [Conda](https://www.anaconda.com/products/distribution) virtual environment:
 
 ```
 >>> cd <your-folder-of-choice>
