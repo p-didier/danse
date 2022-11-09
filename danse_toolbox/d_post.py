@@ -14,16 +14,7 @@ from dataclasses import dataclass, fields
 from danse.siggen.classes import Node, WASNparameters
 from danse.danse_toolbox.d_classes import DANSEparameters, DANSEvariables
 from danse.danse_toolbox.d_eval import *
-# Find path to root folder
-if not any("_general_fcts" in s for s in sys.path):
-    rootFolder = 'sounds-phd'
-    pathToRoot = Path(__file__)
-    while PurePath(pathToRoot).name != rootFolder:
-        pathToRoot = pathToRoot.parent
-    sys.path.append(f'{pathToRoot}/_general_fcts')
-import class_methods.dataclass_methods as met
-from general.arrays import normalize_toint16
-
+import danse.danse_toolbox.dataclass_methods as met
 
 @dataclass
 class DANSEoutputs(DANSEparameters):
@@ -749,3 +740,21 @@ def get_stft(x, fs, win, ovlp):
         f = np.array([i[0] for i in f])
 
     return out, f, t
+
+
+def normalize_toint16(nparray):
+    """Normalizes a NumPy array to integer 16.
+    Parameters
+    ----------
+    nparray : np.ndarray
+        Input array to be normalized.
+
+    Returns
+    ----------
+    nparrayNormalized : np.ndarray
+        Normalized array.
+    """
+    amplitude = np.iinfo(np.int16).max
+    nparrayNormalized = (amplitude * nparray / \
+        np.amax(nparray) * 0.5).astype(np.int16)  # 0.5 to avoid clipping
+    return nparrayNormalized
