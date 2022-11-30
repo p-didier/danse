@@ -34,21 +34,34 @@ class AcousticScenarioParameters:
 class WASNparameters(AcousticScenarioParameters):
     SROperNode: np.ndarray = np.array([0])
     topologyType: str = 'fully-connected'       # type of WASN topology
-                # ^^^ valid values: "fully-connected"; TODO: add some
+        # ^^^ valid values: "fully-connected"; TODO: add some
+    selfnoiseSNR: float = 50   # self-noise SNR
+        # [signal: noise-free signal; noise: self-noise]
     
     def __post_init__(self):
         # Dimensionality checks
-        if len(self.SROperNode) != self.nNodes:
-            if all(self.SROperNode == self.SROperNode[0]):
-                print(f'Automatically setting all SROs to the only value provided ({self.SROperNode[0]} PPM).')
-                self.SROperNode = np.full(self.nNodes, fill_value=self.SROperNode[0])
-            else:
-                raise ValueError(f'The number of SRO values ({len(self.SROperNode)}) does not correspond to the number of nodes in the WASN ({self.nNodes}).')
+        if type(self.SROperNode) is not list:
+            # ^^^ required check for JSON export/import
+            if len(self.SROperNode) != self.nNodes:
+                if all(self.SROperNode == self.SROperNode[0]):
+                    print(f'Automatically setting all SROs to the only value provided ({self.SROperNode[0]} PPM).')
+                    self.SROperNode = np.full(
+                        self.nNodes,
+                        fill_value=self.SROperNode[0]
+                    )
+                else:
+                    raise ValueError(f'The number of SRO values ({len(self.SROperNode)}) does not correspond to the number of nodes in the WASN ({self.nNodes}).')
         # Explicitly derive sensor-to-node indices
-        self.sensorToNodeIndices = np.array(list(itertools.chain(*[[ii] * self.nSensorPerNode[ii]\
-            for ii in range(len(self.nSensorPerNode))])))  # itertools trick from https://stackoverflow.com/a/953097
+        self.sensorToNodeIndices = np.array(
+            list(itertools.chain(*[[ii] * self.nSensorPerNode[ii]\
+            for ii in range(len(self.nSensorPerNode))])))  
+            # ^^^ itertools trick from https://stackoverflow.com/a/953097
         # Sampling rate per node
-        self.fsPerNode = self.fs * (1 + self.SROperNode * 1e-6)
+        if type(self.SROperNode) is not list:
+            self.fsPerNode = self.fs * (1 + self.SROperNode * 1e-6)
+        else:  # < --required check for JSON export/import
+            self.fsPerNode = self.fs *\
+                (1 + np.array(self.SROperNode[:-1]) * 1e-6)
 
 @dataclass
 class Node:

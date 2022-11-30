@@ -32,15 +32,21 @@ def build_room(p: classes.WASNparameters):
         Wet (RIR-affected) individual speech signal at the reference
         sensor of each node.
     """
-
-    # Room
+    
+    # Invert Sabine's formula to obtain the parameters for the ISM simulator
+    if p.t60 == 0:
+        max_order = 0
+        e_absorption = 0.5  # <-- arbitrary
+    else:
+        e_absorption, max_order = pra.inverse_sabine(p.t60, p.rd)
+    
+    # Create room
     room = pra.ShoeBox(
         p=p.rd,
         fs=p.fs,
-        max_order=10,
+        max_order=max_order,
         air_absorption=False,
-        materials=pra.Material('rough_concrete'),
-        # TODO: USE p.t60! (reverberation time)
+        materials=pra.Material(e_absorption),
     )
 
     for k in range(p.nNodes):
@@ -381,6 +387,12 @@ def build_wasn(room: pra.room.ShoeBox,
             sro=p.SROperNode[k],
             sto=0.
         )
+        # Apply microphone self-noise
+        sn = np.zeros_like(sigs)
+        for m in range(sigs.shape[-1]):
+            sigs[:, m], sn[:, m] = apply_self_noise(sigs[:, m], p.selfnoiseSNR)
+        sn0 = sn[:, 0]
+
         # also to speech-only signal
         speechonly, _, _ = apply_asynchronicity_at_node(
             y=wetSpeechAtRefSensor[:, k, :],
@@ -388,6 +400,9 @@ def build_wasn(room: pra.room.ShoeBox,
             sro=p.SROperNode[k],
             sto=0.
         )
+        # Add same microphone self-noise
+        speechonly += sn0[:, np.newaxis]
+        
         # Create node
         node = classes.Node(
             nSensors=p.nSensorPerNode[k],
@@ -404,6 +419,17 @@ def build_wasn(room: pra.room.ShoeBox,
         myWASN.append(node)
 
     return myWASN
+
+
+def apply_self_noise(sig, snr):
+    """Apply random self-noise to sensor signal `sig`."""
+    sn = np.random.uniform(-1, 1, size=sig.shape)
+    Pn = np.mean(np.abs(sn) ** 2)
+    Ps = np.mean(np.abs(sig) ** 2)
+    currSNR = 10 * np.log10(Ps / Pn)
+    sn *= 10 ** (-(snr - currSNR) / 20)
+    sig += sn
+    return sig, sn
 
 
 def apply_asynchronicity_at_node(y, fs, sro=0., sto=0.):

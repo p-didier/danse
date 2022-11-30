@@ -1,4 +1,4 @@
-from copy import copy
+import copy
 import pickle, gzip
 from pathlib import Path
 from dataclasses import fields, replace, make_dataclass, is_dataclass
@@ -6,6 +6,7 @@ from pathlib import PurePath
 import json, os
 import dataclass_wizard as dcw
 import numpy as np
+from io import TextIOWrapper
 
 
 def save(self, foldername: str, exportType='pkl'):
@@ -34,6 +35,8 @@ def save(self, foldername: str, exportType='pkl'):
     elif exportType == 'json':
         fullPath += '.json'
         save_to_json(self, fullPath)
+    # Also save as readily readable .txt file
+    save_as_txt(self, foldername)
 
     print(f'<{type(self).__name__}> object data exported to directory\n".../{shortPath}".')
 
@@ -87,24 +90,35 @@ def load(self, foldername: str, silent=False, dataType='pkl'):
     return p
 
 
-def save_as_txt(self, filename):
-    """Saves dataclass to TXT file"""
+def save_as_txt(mycls, foldername):
+    """Saves dataclass to TXT file for quick view."""
 
-    if filename[-4:] != '.txt':
-        if filename[-1] != '/':
-            filename += '/'
-        filename += f'{PurePath(filename).name}.txt'
+    def _write_lines(datacl, f: TextIOWrapper, ntabs=0):
+        """Recursive helper function."""
+        tabbing = ' |' * ntabs
+        f.write(f'{tabbing}>--------{type(datacl).__name__} class instance\n')
+        flds = [(fld.name, getattr(datacl, fld.name))\
+            for fld in fields(datacl)]
+        for ii in range(len(flds)):
+            if is_dataclass(flds[ii][1]):
+                _write_lines(flds[ii][1], f, ntabs+1)
+            else:
+                string = f'{tabbing} - {flds[ii][0]} = {flds[ii][1]}\n'
+                f.write(string)
+        f.write(f'{tabbing}_______\n')
+
+    filename = f'{foldername}/{type(mycls).__name__}_text.txt'
     f = open(filename, 'w')
-    f.write(f'{type(self).__name__} class fields\n\n')
-    flds = [(fld.name, getattr(self, fld.name)) for fld in fields(self)]
-    for ii in range(len(flds)):
-        string = f'Field "{flds[ii][0]}" = {flds[ii][1]}\n'
-        f.write(string)
+    _write_lines(mycls, f)
     f.close()
 
 
 def save_to_json(mycls, filename):
     """Saves dataclass to JSON file"""
+    
+    raise ValueError('NOT YET CORRECTLY IMPLEMENTED')
+
+    mycls = copy.copy(mycls)  # make a copy to not alter the original DC
 
     # Check extension
     filename_alone, file_extension = os.path.splitext(filename)

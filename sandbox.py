@@ -9,12 +9,12 @@ import siggen.utils as sig_ut
 import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
 import danse_toolbox.d_post as pp
+import danse_toolbox.dataclass_methods as met
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 
 @dataclass
 class TestParameters:
-    # TODO: vvv self-noise
     selfnoiseSNR: int = -50 # [dB] microphone self-noise SNR
     #
     referenceSensor: int = 0    # Index of the reference sensor at each node
@@ -31,26 +31,32 @@ class TestParameters:
         np.random.seed(self.seed)  # set random seed
         random.seed(self.seed)  # set random seed
         #
-        self.testid = f'J{self.wasn.nNodes}Mk{list(self.wasn.nSensorPerNode)}\
-            Nn{self.wasn.nNoiseSources}Nd{self.wasn.nDesiredSources}T60_\
-            {int(self.wasn.t60)*1e3}ms'
+        self.testid = f'J{self.wasn.nNodes}Mk{list(self.wasn.nSensorPerNode)}WNn{self.wasn.nNoiseSources}Nd{self.wasn.nDesiredSources}T60_{int(self.wasn.t60)*1e3}ms'
         # Check consistency
         if self.danseParams.nodeUpdating == 'sym' and\
             any(self.wasn.SROperNode != 0):
-            raise ValueError('Simultaneous node-updating impossible in\
-                the presence of SROs.')
+            raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
+
+    def save(self, exportType='pkl'):
+        """Saves dataclass to Pickle archive."""
+        met.save(self, self.exportFolder, exportType=exportType)
+
+    def load(self, foldername, dataType='pkl'):
+        """Loads dataclass to Pickle archive in folder `foldername`."""
+        return met.load(self, foldername, silent=True, dataType=dataType)
 
 
 def main():
 
     p = TestParameters(
-        selfnoiseSNR=-99,  # TODO:
         wasn=WASNparameters(
-            sigDur=15,
+            sigDur=4,
             rd=np.array([5, 5, 5]),
             fs=16000,
             t60=0.2,
             nNodes=4,
+            # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
+            selfnoiseSNR=99,
             nSensorPerNode=[1, 3, 2, 5],
             desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
                 for file in [
@@ -95,10 +101,17 @@ def main():
     out, wasnUpdated = danse_it_up(wasn, p)
 
     # Visualize results
-    postprocess(out, wasnUpdated, room, p)
+    out = postprocess(out, wasnUpdated, room, p)
+
+    # Save `DANSEoutputs` object after metrics computation in `postprocess()`
+    out.save(foldername=p.exportFolder, light=True)
+    p.save()    # save `TestParameters` object
 
 
-def danse_it_up(wasn: list[Node], p: TestParameters):
+def danse_it_up(
+    wasn: list[Node],
+    p: TestParameters
+    ) -> tuple[pp.DANSEoutputs, list[Node]]:
     """
     Container function for prepping signals and launching the DANSE algorithm.
     """
@@ -117,7 +130,7 @@ def danse_it_up(wasn: list[Node], p: TestParameters):
 def postprocess(out: pp.DANSEoutputs,
         wasn: list[Node],
         room: pra.room.ShoeBox,
-        p: TestParameters):
+        p: TestParameters) -> pp.DANSEoutputs:
     """
     Defines the post-processing steps to be undertaken after a DANSE run.
     Using the `danse.danse_toolbox.d_post` [abbrev. `pp`] functions.
@@ -161,7 +174,7 @@ def postprocess(out: pp.DANSEoutputs,
         # Plot signals at specific nodes (+ export)
         out.plot_sigs(wasn, p.exportFolder)
 
-    return None
+    return out
 
 
 if __name__ == '__main__':

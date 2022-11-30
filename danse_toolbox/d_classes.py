@@ -357,6 +357,8 @@ class DANSEvariables(DANSEparameters):
         self.idxEndChunk = None
         self.lastExtFiltUp = np.zeros(nNodes)
         self.neighbors = [node.neighborsIdx for node in wasn]
+        self.nCentrFilterUps = np.zeros(nNodes)
+        self.nLocalFilterUps = np.zeros(nNodes)
         self.nInternalFilterUps = np.zeros(nNodes)
         self.nLocalMic = [node.data.shape[-1] for node in wasn]
         self.numUpdatesRyy = np.zeros(nNodes, dtype=int)
@@ -376,8 +378,12 @@ class DANSEvariables(DANSEparameters):
         self.SROsEstimates = SROsEstimates
         self.SROsResiduals = SROsResiduals
         self.startUpdates = np.full(shape=(nNodes,), fill_value=False)
+        self.startUpdatesCentr = np.full(shape=(nNodes,), fill_value=False)
+        self.startUpdatesLocal = np.full(shape=(nNodes,), fill_value=False)
         self.timeInstants = t
-        self.tStartForMetrics = np.zeros(nNodes)
+        self.tStartForMetrics = np.full(shape=(nNodes,), fill_value=None)
+        self.tStartForMetricsCentr = np.full(shape=(nNodes,), fill_value=None)
+        self.tStartForMetricsLocal = np.full(shape=(nNodes,), fill_value=None)
         self.yin = [node.data for node in wasn]
         self.yyH = yyH
         self.yyHuncomp = yyHuncomp
@@ -520,30 +526,15 @@ class DANSEvariables(DANSEparameters):
         skipUpdate = self.compensate_sros(k, tCurr)
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
-        
-        # Check quality of autocorrelations estimates 
-        # -- once we start updating, do not check anymore.
-        if not self.startUpdates[k] and \
-            self.numUpdatesRyy[k] > np.amax(self.dimYTilde) and \
-                self.numUpdatesRnn[k] > np.amax(self.dimYTilde):
-            self.startUpdates[k] = True
+        # Check quality of covariance matrix estimates 
+        self.check_covariance_matrices(k)
 
-        if self.startUpdates[k] and not self.bypassUpdates and not skipUpdate:
-            # No `for`-loop versions
+        if not skipUpdate:
+            # If covariance matrices estimates are full-rank, update filters
             self.perform_update(k)
-            # Count the number of internal filter updates
-            self.nInternalFilterUps[k] += 1  
-
-            # Useful export for enhancement metrics computations
-            if self.nInternalFilterUps[k] >= self.minFiltUpdatesForMetrics\
-                and self.tStartForMetrics[k] is None:
-                if self.compensateSROs and self.estimateSROs == 'CohDrift':
-                    # Make sure SRO compensation has started
-                    if self.nInternalFilterUps[k] >\
-                        self.cohDrift.startAfterNups:
-                        self.tStartForMetrics[k] = tCurr
-                else:
-                    self.tStartForMetrics[k] = tCurr
+            # ^^^ depends on outcome of `check_covariance_matrices()`.
+            # if self.tStartForMetrics[k] is None:
+            self.evaluate_tstart_for_metrics_computation(k, tCurr)
         else:
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
@@ -564,7 +555,65 @@ class DANSEvariables(DANSEparameters):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
-    
+
+
+    def evaluate_tstart_for_metrics_computation(self, k, t):
+        """
+        Evaluates the start instants for metrics computations.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        t : float
+            Current time instant [s].
+        """ 
+        
+        def _eval(s, nUps):
+            """Helper function."""
+            tstart = None
+            if nUps >= s.minFiltUpdatesForMetrics:
+                if s.compensateSROs and s.estimateSROs == 'CohDrift':
+                    # Make sure SRO compensation has started
+                    if nUps > s.cohDrift.startAfterNups:
+                        tstart = t
+                else:
+                    tstart = t
+            return tstart
+        
+        if self.tStartForMetrics[k] is None:
+            self.tStartForMetrics[k] = _eval(self, self.nInternalFilterUps[k])
+        if self.computeCentralised and self.tStartForMetricsCentr[k] is None:
+            self.tStartForMetricsCentr[k] = _eval(self, self.nCentrFilterUps[k])
+        if self.computeLocal and self.tStartForMetricsLocal[k] is None:
+            self.tStartForMetricsLocal[k] = _eval(self, self.nLocalFilterUps[k])
+
+
+    def check_covariance_matrices(self, k):
+        """
+        Checks that the number of rank-1 covariance matrix estimate updates
+        done in `spatial_covariance_matrix_update()` is at least equal to
+        the dimension of the corresponding covariance matrix (ensuring full-
+        rank property).
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        """
+        if not self.startUpdates[k]:
+            if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
+                self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
+                self.startUpdates[k] = True
+        if self.computeCentralised and not self.startUpdatesCentr[k]:
+            if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
+                self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
+                self.startUpdatesCentr[k] = True
+        if self.computeLocal and not self.startUpdatesLocal[k]:
+            if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
+                self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
+                self.startUpdatesLocal[k] = True
+
 
     def build_ycentr(self, tCurr, fs, k):
         """
@@ -924,6 +973,7 @@ class DANSEvariables(DANSEparameters):
         )  # update
         self.yyH[k][self.i[k], :, :, :] = yyH
 
+        
         # Consider centralised / local estimation(s)
         if self.computeLocal:
             y = self.yHatLocal[k][:, self.i[k], :]
@@ -937,6 +987,7 @@ class DANSEvariables(DANSEparameters):
             self.Ryycentr[k], self.Rnncentr[k] = _upd(
                 self.Ryycentr[k], self.Rnncentr[k], yyH
             )  # update centralised
+
 
 
     def perform_update(self, k):
@@ -1008,24 +1059,33 @@ class DANSEvariables(DANSEparameters):
         else:
             update_fcn = _update_w
 
-        # Udpate filter
-        self.wTilde[k][:, self.i[k] + 1, :] = update_fcn(
-            self.Ryytilde[k],
-            self.Rnntilde[k],
-            self.referenceSensor
-        )
-        if self.computeCentralised:  # centralised filter
-            self.wCentr[k][:, self.i[k] + 1, :] = update_fcn(
-                self.Ryycentr[k],
-                self.Rnncentr[k],
-                self.referenceSensor
-            )
-        if self.computeLocal:        # local filter
-            self.wLocal[k][:, self.i[k] + 1, :] = update_fcn(
-                self.Ryylocal[k],
-                self.Rnnlocal[k],
-                self.referenceSensor
-            )
+        if not self.bypassUpdates:
+            if self.startUpdates[k]:
+                # Update DANSE filter
+                self.wTilde[k][:, self.i[k] + 1, :] = update_fcn(
+                    self.Ryytilde[k],
+                    self.Rnntilde[k],
+                    self.referenceSensor
+                )
+                self.nInternalFilterUps[k] += 1  
+            # Update centralised filter
+            if self.computeCentralised and self.startUpdatesCentr[k]:
+                self.wCentr[k][:, self.i[k] + 1, :] = update_fcn(
+                    self.Ryycentr[k],
+                    self.Rnncentr[k],
+                    self.referenceSensor
+                )
+                self.nCentrFilterUps[k] += 1  
+            # Update local filter
+            if self.computeLocal and self.startUpdatesLocal[k]:
+                self.wLocal[k][:, self.i[k] + 1, :] = update_fcn(
+                    self.Ryylocal[k],
+                    self.Rnnlocal[k],
+                    self.referenceSensor
+                )
+                self.nLocalFilterUps[k] += 1  
+
+    
 
 
     def update_sro_estimates(self, k):

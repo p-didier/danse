@@ -62,8 +62,6 @@ def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
             k = events.nodes[idx_e]  # node index
             # Broadcast event
             if events.type[idx_e] == 'bc':
-                # TODO: maybe not needed to recompute `fs`
-                # (already there in `wasn[k].fs`)
                 dv.broadcast(events.t, fs[k], k)
             # Filter updates and desired signal estimates event
             elif events.type[idx_e] == 'up':

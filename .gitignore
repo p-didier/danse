@@ -1,0 +1,10 @@
+*.gz
+*.wav
+*.csv
+*.png
+*.pdf
+**\__pycache__
+*.pyc
+*.cpython-39.pyc
+*.txt
+*.pkf

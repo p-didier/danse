@@ -34,6 +34,12 @@ class DANSEoutputs(DANSEparameters):
         after DANSE processing.
         """
 
+        # Inits
+        self.TDdesiredSignals_c = None
+        self.STFTDdesiredSignals_c = None
+        self.TDdesiredSignals_l = None
+        self.STFTDdesiredSignals_l = None
+
         # Original microphone signals
         self.micSignals = dv.yin
         # DANSE desired signal estimates
@@ -54,6 +60,8 @@ class DANSEoutputs(DANSEparameters):
         self.filters = dv.wTilde
         # Other useful things
         self.tStartForMetrics = dv.tStartForMetrics
+        self.tStartForMetricsCentr = dv.tStartForMetricsCentr
+        self.tStartForMetricsLocal = dv.tStartForMetricsLocal
 
         # Show initialised status
         self.initialised = True
@@ -61,21 +69,31 @@ class DANSEoutputs(DANSEparameters):
         return self
 
     def check_init(self):
-        """
-        Check if object is correctly initialised.
-        Raise error if not.
-        """
+        """Check if object is correctly initialised."""
         if not self.initialised:
             return ValueError('The DANSEoutputs object is empty.')
+
+    def save(self, foldername, light=False, exportType='pkl'):
+        """Saves dataclass to file."""
+        if light:
+            mycls = copy.copy(self)
+            for f in fields(mycls):
+                if 'signal' in f.name.lower():
+                    delattr(mycls, f)
+            met.save(self, foldername, exportType=exportType)
+        else:
+            met.save(self, foldername, exportType=exportType)
+
+    def load(self, foldername, dataType='pkl'):
+        """Loads dataclass to Pickle archive in folder `foldername`."""
+        return met.load(self, foldername, silent=True, dataType=dataType)
 
     def export_sounds(self, wasn, exportFolder):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
 
     def plot_perf(self, wasn, exportFolder):
-        """
-        Plots DANSE performance.
-        """
+        """Plots DANSE performance."""
         self.check_init()  # check if object is correctly initialised
         self.metrics = compute_metrics(self, wasn)
         figStatic, figDynamic = plot_metrics(self)
@@ -86,9 +104,7 @@ class DANSEoutputs(DANSEparameters):
             figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
 
     def plot_sigs(self, wasn, exportFolder):
-        """
-        Plots signals before/after DANSE.
-        """
+        """Plots signals before/after DANSE."""
         figs = plot_signals_all_nodes(self, wasn)
         for k in range(len(figs)):
             figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.png')
@@ -121,6 +137,8 @@ def compute_metrics(
 
     # Initialisations
     startIdx = np.zeros(out.nNodes, dtype=int)
+    startIdxCentr = np.zeros(out.nNodes, dtype=int)
+    startIdxLocal = np.zeros(out.nNodes, dtype=int)
     snr = _ndict(out.nNodes)  # Unweighted SNR
     fwSNRseg = _ndict(out.nNodes)  # Frequency-weighted segmental SNR
     stoi = _ndict(out.nNodes)  # (extended) Short-Time Objective Intelligibility
@@ -134,9 +152,20 @@ def compute_metrics(
 
         enhan_c, enhan_l = None, None
         if out.computeCentralised:
-            enhan_c = out.TDdesiredSignals_c[startIdx[k]:, k]
+            startIdxCentr[k] = int(np.floor(
+                out.tStartForMetricsCentr[k] * wasn[k].fs
+            ))
+            print(f"Node {k+1}: computing speech enhancement metrics for CENTRALISED PROCESSING from the {startIdxCentr[k] + 1}'th sample on (t_start = {out.tStartForMetricsCentr[k]} s).")
+            enhan_c = out.TDdesiredSignals_c[startIdxCentr[k]:, k]
         if out.computeLocal:
-            enhan_l = out.TDdesiredSignals_l[startIdx[k]:, k]
+            startIdxLocal[k] = int(np.floor(
+                out.tStartForMetricsLocal[k] * wasn[k].fs
+            ))
+            print(f"Node {k+1}: computing speech enhancement metrics for LOCAL PROCESSING from the {startIdxLocal[k] + 1}'th sample on (t_start = {out.tStartForMetricsLocal[k]} s).")
+            enhan_l = out.TDdesiredSignals_l[startIdxLocal[k]:, k]
+
+    # TOFIX: TODO: the `clean` should also start at `startIdxCentr` and `startIdxLocal`
+    # --> give `startIdx`, `startIdxCentr`, and `startIdxLocal` as inputs to `get_metrics()`
 
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
@@ -184,11 +213,10 @@ def plot_metrics(out: DANSEoutputs):
     # Useful variables
     barWidth = 1
     
-    fig1 = plt.figure(figsize=(10,3))
+    fig1 = plt.figure(figsize=(12,3))
     ax = fig1.add_subplot(1, 4, 1)   # Unweighted SNR
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.snr)
     ax.set(title='SNR', ylabel='[dB]')
-    plt.legend()
     #
     ax = fig1.add_subplot(1, 4, 2)   # fwSNRseg
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.fwSNRseg)
@@ -202,6 +230,7 @@ def plot_metrics(out: DANSEoutputs):
     ax = fig1.add_subplot(1, 4, 4)   # PESQ
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.pesq)
     ax.set(title='PESQ')
+    ax.legend(bbox_to_anchor=(1, 0), loc="lower left")
 
     fig1.suptitle("Speech enhancement metrics")
     plt.tight_layout()
@@ -656,6 +685,7 @@ def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
             ovlp=out.WOLAovlp
         )
         axForTitle.set_title(f'Node {k + 1}, ref. sensor (#{out.referenceSensor + 1})')
+        plt.tight_layout()
         figs.append(fig)
 
     return figs
@@ -773,7 +803,6 @@ def plot_signals(node: Node, win, ovlp):
         data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT_c)))
         stft_subplot(ax, t, f, data, [limLow, limHigh], 'Centr. est.')
     ax.set(xlabel='$t$ [s]')
-    plt.tight_layout()
 
     return fig, axForTitle
 
