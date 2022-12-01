@@ -54,9 +54,9 @@ class TestParameters:
 
 BASEPARAMS = TestParameters(
     wasn=WASNparameters(
-        sigDur=4,
+        sigDur=15,
         rd=np.array([5, 5, 5]),
-        fs=16000,
+        fs=8000,
         t60=0.0,
         nNodes=2,
         selfnoiseSNR=99,
@@ -108,7 +108,7 @@ def main():
 
     # Run tests
     for ii in range(len(tests)):
-        print(f'######### Running test {ii+1}/{len(tests)}... #########')
+        print(f'######### Running test {ii+1}/{len(tests)} ({tests[ii]})... #########')
         run(tests[ii])
     print(f'######### All testing done. #########')
 
@@ -136,20 +136,24 @@ def run(test: dict):
         if test['basic']:
             p.wasn.SROperNode = [0, 100]
         else:
-            p.wasn.SROperNode = [0, 100, -100, 200]
+            p.wasn.SROperNode = [0, 50, -50, 100]
     else:
         p.wasn.SROperNode = [0] * p.wasn.nNodes
 
     if test['estcomp']:
         p.danseParams.compensateSROs = True
+        p.danseParams.broadcastType = 'fewSamples'
     else:
         p.danseParams.compensateSROs = False
+        p.danseParams.broadcastType = 'wholeChunk'
     # Complete the parameters update
     p.wasn.__post_init__()
     p.danseParams.get_wasn_info(p.wasn)
 
     # Build export folder name
     foldername = '_'.join([ii for ii in list(test.keys()) if test[ii]])
+    if len(foldername) > 0:
+        foldername = '_' + foldername
     p.exportFolder = f'{Path(__file__).parent}/out/benchmark/test{foldername}'
 
     # Launch test

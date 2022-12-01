@@ -151,7 +151,6 @@ def compute_metrics(
         print(f'Computing signal enhancement evaluation metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
         # Compute starting indices for centralised and localised estimates
-        startIdxCentr, startIdxLocal = None, None  # default values
         if out.computeCentralised:
             startIdxCentr[k] = int(np.floor(
                 out.tStartForMetricsCentr[k] * wasn[k].fs
