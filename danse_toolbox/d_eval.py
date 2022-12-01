@@ -73,7 +73,8 @@ def get_metrics(
         clean, noisy, enhan,
         fs, VAD,
         dynamic: DynamicMetricsParameters=None,
-        enhan_c=None, enhan_l=None,
+        startIdx=0,
+        startIdxCentr=None, startIdxLocal=None,
         gamma=0.2, fLen=0.03
     ):
     """
@@ -94,10 +95,12 @@ def get_metrics(
         Voice Activity Detector (1: voice + noise; 0: noise only).
     dynamic : DynamicMetricsParameters object
         Parameters for dynamic metrics estimation
-    enhan_c : [N x 1] np.ndarray (float)
-        The enhanced signal (post-CENTRALISED signal enhancement).
-    enhan_l : [N x 1] np.ndarray (float)
-        The enhanced signal (post-LOCAL signal enhancement).
+    startIdx : int
+        Sample index to start at when computing the metrics.
+    startIdxCentr : int
+        Same as above, for the centralised estimates.
+    startIdxLocal : int
+        Same as above, for the local estimates.
     gamma : float
         Gamma exponent for fwSNRseg computation.
     fLen : float
@@ -120,6 +123,20 @@ def get_metrics(
     fwSNRseg = Metric()
     myStoi = Metric()
     myPesq = Metric()
+
+    # Adapt lengths
+    clean_c = clean[startIdxCentr:]
+    clean_l = clean[startIdxLocal:]
+    clean = clean[startIdx:]
+    enhan_c = enhan[startIdxCentr:]
+    enhan_l = enhan[startIdxLocal:]
+    enhan = enhan[startIdx:]
+    # noisy_c = noisy[startIdxCentr:]
+    # noisy_l = noisy[startIdxLocal:]
+    noisy = noisy[startIdx:]
+    VAD_c = VAD[startIdxCentr:]
+    VAD_l = VAD[startIdxLocal:]
+    VAD = VAD[startIdx:]
     
     # Unweighted SNR
     snr.before = get_snr(noisy, VAD)
@@ -150,27 +167,27 @@ def get_metrics(
         myPesq.after = pesq(fs, clean, enhan, mode)
         myPesq.diff = myPesq.after - myPesq.before
         if enhan_c is not None:
-            myPesq.afterCentr = pesq(fs, clean, enhan_c, mode)
+            myPesq.afterCentr = pesq(fs, clean_c, enhan_c, mode)
         if enhan_l is not None:
-            myPesq.afterLocal = pesq(fs, clean, enhan_l, mode)
+            myPesq.afterLocal = pesq(fs, clean_l, enhan_l, mode)
     else:
         print(f'Cannot calculate PESQ for fs different from 16 or 8 kHz (current value: {fs/1e3} kHz). Keeping `myPesq` attributes at 0.')
 
     # Consider centralised and local estimates
     if enhan_c is not None:
-        snr.afterCentr = get_snr(enhan_c, VAD)
+        snr.afterCentr = get_snr(enhan_c, VAD_c)
         fwSNRseg_allFrames = get_fwsnrseg(
-            clean, enhan_c, fs, fLen, gamma
+            clean_c, enhan_c, fs, fLen, gamma
         )
         fwSNRseg.afterCentr = np.mean(fwSNRseg_allFrames)
-        myStoi.afterCentr = stoi_fcn(clean, enhan_c, fs, extended=True)
+        myStoi.afterCentr = stoi_fcn(clean_c, enhan_c, fs, extended=True)
     if enhan_l is not None:
-        snr.afterLocal = get_snr(enhan_l, VAD)
+        snr.afterLocal = get_snr(enhan_l, VAD_l)
         fwSNRseg_allFrames = get_fwsnrseg(
-            clean, enhan_l, fs, fLen, gamma
+            clean_l, enhan_l, fs, fLen, gamma
         )
         fwSNRseg.afterLocal = np.mean(fwSNRseg_allFrames)
-        myStoi.afterLocal = stoi_fcn(clean, enhan_l, fs, extended=True)
+        myStoi.afterLocal = stoi_fcn(clean_l, enhan_l, fs, extended=True)
 
     # Compute dynamic metrics
     # TODO: go through this if needed + account for centralised

@@ -13,6 +13,7 @@ from scipy.signal._arraytools import zero_ext
 from danse_toolbox.d_eval import DynamicMetricsParameters
 from siggen.classes import WASNparameters
 
+
 @dataclass
 class DANSEeventInstant:
     t: float = 0.   # event time instant [s]
@@ -883,7 +884,7 @@ def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
     # WOLA synthesis stage
     if zqPrevious is not None:
         # IDFT
-        zqCurr = base.back_to_time_domain(zqHat, n, axis=0)
+        zqCurr = back_to_time_domain(zqHat, n, axis=0)
         zqCurr = np.real_if_close(zqCurr)
         zqCurr *= f    # multiply by synthesis window
 
@@ -955,7 +956,7 @@ def danse_compression_few_samples(
             start=len(wIR) - L + 1,
             stop=len(wIR) + 1
         )
-        tmp = base.extract_few_samples_from_convolution(
+        tmp = extract_few_samples_from_convolution(
             idDesired,
             wIR[:, idxSensor],
             yq[:, idxSensor]
@@ -1003,7 +1004,7 @@ def dist_fct_approx(wHat, h, f, R, jitted=True):
 
     n = len(h)
 
-    wTD = base.back_to_time_domain(wHat.conj(), n, axis=0)
+    wTD = back_to_time_domain(wHat.conj(), n, axis=0)
     wTD = np.real_if_close(wTD)         
     wIR_out = np.zeros((2 * n - 1, wTD.shape[1]))
     for m in range(wTD.shape[1]):
@@ -1100,7 +1101,7 @@ def get_desired_sig_chunk(
         dhatCurr = np.einsum('ij,ij->i', w.conj(), y)
         # Transform back to time domain (WOLA processing)
         dChunCurr = normFactWOLA * win *\
-            base.back_to_time_domain(dhatCurr, len(win))
+            back_to_time_domain(dhatCurr, len(win))
         # Overlap and add construction of output time-domain signal
         if len(dChunk) < len(win):
             dChunk += np.real_if_close(dChunCurr[-len(dChunk):])
@@ -1109,13 +1110,13 @@ def get_desired_sig_chunk(
 
     elif desSigProcessingType == 'conv':
         # Compute desired signal chunk estimate using T(z) approximation
-        wIR = base.dist_fct_approx(w, win, win, Ns)
+        wIR = dist_fct_approx(w, win, win, Ns)
         # Perform convolution
         yfiltLastSamples = np.zeros((Ns, yTD.shape[-1]))
         for m in range(yTD.shape[-1]):
             # Indices required from convolution output vvv
             idDesired = np.arange(start=len(wIR) - Ns, stop=len(wIR))
-            tmp = base.extract_few_samples_from_convolution(
+            tmp = extract_few_samples_from_convolution(
                 idDesired, wIR[:, m], yTD[:, m]
             )
             yfiltLastSamples[:, m] = tmp

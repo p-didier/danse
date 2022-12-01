@@ -2,19 +2,19 @@
 # visualizing DANSE outputs.
 #
 # ~created on 20.10.2022 by Paul Didier
-import sys
 import time
 import copy
 import numpy as np
 from scipy.io import wavfile
 import matplotlib.pyplot as plt
-from pathlib import Path, PurePath
+from pathlib import Path
 import pyroomacoustics as pra
 from dataclasses import dataclass, fields
 from siggen.classes import Node, WASNparameters
-from danse_toolbox.d_classes import DANSEparameters, DANSEvariables
+from danse_toolbox.d_classes import DANSEvariables
 from danse_toolbox.d_eval import *
 import danse_toolbox.dataclass_methods as met
+from danse_toolbox.d_base import DANSEparameters
 
 @dataclass
 class DANSEoutputs(DANSEparameters):
@@ -150,37 +150,33 @@ def compute_metrics(
         print(f"Node {k+1}: computing speech enhancement metrics from the {startIdx[k] + 1}'th sample on (t_start = {out.tStartForMetrics[k]} s --> avoid bias due to initial filters guesses in first iterations)...")
         print(f'Computing signal enhancement evaluation metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
-        enhan_c, enhan_l = None, None
+        # Compute starting indices for centralised and localised estimates
+        startIdxCentr, startIdxLocal = None, None  # default values
         if out.computeCentralised:
             startIdxCentr[k] = int(np.floor(
                 out.tStartForMetricsCentr[k] * wasn[k].fs
             ))
             print(f"Node {k+1}: computing speech enhancement metrics for CENTRALISED PROCESSING from the {startIdxCentr[k] + 1}'th sample on (t_start = {out.tStartForMetricsCentr[k]} s).")
-            enhan_c = out.TDdesiredSignals_c[startIdxCentr[k]:, k]
         if out.computeLocal:
             startIdxLocal[k] = int(np.floor(
                 out.tStartForMetricsLocal[k] * wasn[k].fs
             ))
             print(f"Node {k+1}: computing speech enhancement metrics for LOCAL PROCESSING from the {startIdxLocal[k] + 1}'th sample on (t_start = {out.tStartForMetricsLocal[k]} s).")
-            enhan_l = out.TDdesiredSignals_l[startIdxLocal[k]:, k]
-
-    # TOFIX: TODO: the `clean` should also start at `startIdxCentr` and `startIdxLocal`
-    # --> give `startIdx`, `startIdxCentr`, and `startIdxLocal` as inputs to `get_metrics()`
 
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
-            clean=wasn[k].cleanspeechCombined[startIdx[k]:],
+            clean=wasn[k].cleanspeechCombined,
             # Microphone signals
-            noisy=wasn[k].data[startIdx[k]:, out.referenceSensor],
+            noisy=wasn[k].data[:, out.referenceSensor],
             # DANSE outputs (desired signal estimates)
-            enhan=out.TDdesiredSignals[startIdx[k]:, k],
-            # Centralised desired signal estimates
-            enhan_c=enhan_c,
-            # Local desired signal estimates
-            enhan_l=enhan_l,
-            #
+            enhan=out.TDdesiredSignals[:, k],
+            # Start indices
+            startIdx=startIdx[k],
+            startIdxCentr=startIdxCentr[k],
+            startIdxLocal=startIdxLocal[k],
+            # Other parameters
             fs=wasn[k].fs,
-            VAD=wasn[k].vadCombined[startIdx[k]:],
+            VAD=wasn[k].vadCombined,
             dynamic=out.dynMetrics,
             gamma=out.gammafwSNRseg,
             fLen=out.frameLenfwSNRseg

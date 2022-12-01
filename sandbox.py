@@ -10,6 +10,7 @@ import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
 import danse_toolbox.d_post as pp
 import danse_toolbox.dataclass_methods as met
+from danse_toolbox.d_base import DANSEparameters, CohDriftParameters
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 
@@ -88,7 +89,7 @@ p = TestParameters(
 )
 p.danseParams.get_wasn_info(p.wasn)  # complete parameters
 
-def main(p):
+def main(p: TestParameters):
 
     # Build room
     room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasn)
