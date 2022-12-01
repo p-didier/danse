@@ -45,51 +45,50 @@ class TestParameters:
         """Loads dataclass to Pickle archive in folder `foldername`."""
         return met.load(self, foldername, silent=True, dataType=dataType)
 
-
-def main():
-
-    p = TestParameters(
-        wasn=WASNparameters(
-            sigDur=4,
-            rd=np.array([5, 5, 5]),
-            fs=16000,
-            t60=0.2,
-            nNodes=4,
-            # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
-            selfnoiseSNR=99,
-            nSensorPerNode=[1, 3, 2, 5],
-            desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
-                for file in [
-                    'speech1.wav',
-                    'speech2.wav'
-                ]],
-            noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}'\
-                for file in [
-                    'whitenoise_signal_1.wav',
-                    'whitenoise_signal_2.wav'
-                ]],
-            # SROperNode=np.array([0, 50])
-            SROperNode=np.array([0, 0])
+p = TestParameters(
+    wasn=WASNparameters(
+        sigDur=4,
+        rd=np.array([5, 5, 5]),
+        fs=16000,
+        t60=0.2,
+        nNodes=4,
+        # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
+        selfnoiseSNR=99,
+        nSensorPerNode=[1, 3, 2, 5],
+        desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
+            for file in [
+                'speech1.wav',
+                'speech2.wav'
+            ]],
+        noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}'\
+            for file in [
+                'whitenoise_signal_1.wav',
+                'whitenoise_signal_2.wav'
+            ]],
+        # SROperNode=np.array([0, 50])
+        SROperNode=np.array([0, 0])
+    ),
+    danseParams=DANSEparameters(
+        DFTsize=1024,
+        WOLAovlp=.5,
+        # nodeUpdating='seq',
+        nodeUpdating='asy',
+        # broadcastType='fewSamples',
+        broadcastType='wholeChunk',
+        estimateSROs='CohDrift',
+        # compensateSROs=True,
+        compensateSROs=False,
+        cohDrift=CohDriftParameters(
+            loop='open',
+            alpha=0.99
         ),
-        danseParams=DANSEparameters(
-            DFTsize=1024,
-            WOLAovlp=.5,
-            # nodeUpdating='seq',
-            nodeUpdating='asy',
-            # broadcastType='fewSamples',
-            broadcastType='wholeChunk',
-            estimateSROs='CohDrift',
-            # compensateSROs=True,
-            compensateSROs=False,
-            cohDrift=CohDriftParameters(
-                loop='open',
-                alpha=0.99
-            ),
-            computeCentralised=True,
-            computeLocal=True,
-        )
+        computeCentralised=True,
+        computeLocal=True,
     )
-    p.danseParams.get_wasn_info(p.wasn)  # complete parameters
+)
+p.danseParams.get_wasn_info(p.wasn)  # complete parameters
+
+def main(p):
 
     # Build room
     room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasn)
@@ -178,4 +177,4 @@ def postprocess(out: pp.DANSEoutputs,
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(p=p))

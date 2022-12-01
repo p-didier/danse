@@ -13,7 +13,7 @@ from danse_toolbox.d_classes import *
 from danse_toolbox.d_post import DANSEoutputs
 
 
-def danse(wasn: list[Node], p: DANSEparameters) -> DANSEoutputs:
+def danse(wasn: list[Node], p: base.DANSEparameters) -> DANSEoutputs:
     """
     Main DANSE function.
 

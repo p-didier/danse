@@ -1,191 +1,19 @@
 import copy
 import numpy as np
 import scipy.linalg as sla
-from siggen.classes import Node, WASNparameters
+from siggen.classes import Node
 from dataclasses import dataclass, field
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
-from danse_toolbox.d_eval import DynamicMetricsParameters
-
-@dataclass
-class DANSEeventInstant:
-    t: float = 0.   # event time instant [s]
-    nodes: np.ndarray = np.array([0])   # node(s) concerned
-    type: list[str] = field(default_factory=list)   # event type
-    bypass: list[bool] = field(default_factory=list)  
-        # ^^^ if True, bypass event at that instant and for that node.
-        # This value is adapted, e.g., depending on the node-updating strategy
-        # chosen (may be set to True for certain updates if sequential DANSE
-        # node-updating is used). 
-
-    def __post_init__(self):
-        self.nEvents = len(self.nodes)
 
 
 @dataclass
-class CohDriftParameters():
-    """
-    Dataclass containing the required parameters for the
-    "Coherence drift" SRO estimation method.
-
-    Attributes
-    ----------
-    alpha : float
-        Exponential averaging constant.
-    segLength : int 
-        Number of DANSE filter updates per SRO estimation segment
-    estEvery : int
-        Estimate SRO every `estEvery` signal frames.
-    startAfterNupdates : int 
-        Minimum number of DANSE filter updates before first SRO estimation
-    estimationMethod : str
-        SRO estimation methods once frequency-wise estimates are obtained.
-        Options: "gs" (golden section search in time domain [1]), 
-                "mean" (similar to Online WACD implementation [2]),
-                "ls" (least-squares estimate over frequency bins [3])
-    alphaEps : float
-        Residual SRO incrementation factor:
-        $\\hat{\\varepsilon}^i = \\hat{\\varepsilon}^{i-1} + `alphaEps` * 
-        \\Delta\\varepsilon^i$
-
-    References
-    ----------
-    [1] Gburrek, Tobias, Joerg Schmalenstroeer, and Reinhold Haeb-Umbach.
-        "On Synchronization of Wireless Acoustic Sensor Networks in the
-        Presence of Time-Varying Sampling Rate Offsets and Speaker Changes."
-        ICASSP 2022-2022 IEEE International Conference on Acoustics,
-        Speech and Signal Processing (ICASSP). IEEE, 2022.
-        
-    [2] Chinaev, Aleksej, et al. "Online Estimation of Sampling Rate
-        Offsets in Wireless Acoustic Sensor Networks with Packet Loss."
-        2021 29th European Signal Processing Conference (EUSIPCO). IEEE, 2021.
-        
-    [3] Bahari, Mohamad Hasan, Alexander Bertrand, and Marc Moonen.
-        "Blind sampling rate offset estimation for wireless acoustic sensor
-        networks through weighted least-squares coherence drift estimation."
-        IEEE/ACM Transactions on Audio, Speech, and Language Processing 25.3
-        (2017): 674-686.
-    """
-    alpha : float = .95                 
-    segLength : int = 10                # segment length: use phase angle
-        # bw. values spaced by `segLength` signal frames to estimate the SRO.
-    estEvery : int = 1                  # estimate SRO every `estEvery` frames.
-    startAfterNups : int = 11       # only start estimating the SRO after 
-        # `startAfterNupdates` signal frames.
-    estimationMethod : str = 'gs'       # options: "gs" (golden section [1]),
-                                        # "ls" (least-squares [3])
-    alphaEps : float = .05              # residual SRO incrementation factor
-    loop : str = 'closed'               # SRO estimation + compensation loop
-        # - "closed": feedback loop, using SRO-compensated signals
-        # - "open": no feedback, using SRO-uncompensated signals
-    
-
-@dataclass
-class Hyperparameters:
-    # Efficiency
-    efficientSpSBC: bool = True     # if True, perform efficient sample-per-
-        # sample broadcast by adapting the DANSE-events creation mechanism.
-    # Printouts
-    printout_profiler: bool = True      # controls printouts of Profiler.
-    printout_eventsParser: bool = True      # controls printouts in
-                                            # `events_parser()` function.
-    printout_eventsParserNoBC: bool = False     # if True, do not print out the
-                                                # broadcasts in event parser.
-    printout_externalFilterUpdate: bool = True      # controls printouts of
-                                                    # external filter updates.
-    # Other
-    bypassUpdates: bool = False   # if True, do not update filters.
-
-
-@dataclass
-class DANSEparameters(Hyperparameters):
-    """
-    Parameters for the DANSE algorithm.
-
-    References
-    ----------
-    - [1] Bertrand, A., & Moonen, M. (2010). Distributed adaptive node-specific
-    signal estimation in fully connected sensor networks—Part I: Sequential
-    node updating. IEEE Transactions on Signal Processing, 58(10), 5277-5291.
-
-    - [2] Bertrand, A., & Moonen, M. (2010). Distributed adaptive node-specific
-    signal estimation in fully connected sensor networks—Part II: Simultaneous
-    and asynchronous node updating. IEEE Transactions on Signal Processing,
-    58(10), 5292-5306.
-
-    """
-    DFTsize: int = 1024    # DFT size
-    WOLAovlp: float = .5   # WOLA window overlap [*100%]
-    nodeUpdating: str = 'seq'   # node-updating strategy
-        # - "seq": round-robin updating [1]
-        # - "sim": simultaneous updating [2]
-        # - "asy": asynchronous updating [2]
-    broadcastType: str = 'wholeChunk'    # type of broadcast
-        # -- 'wholeChunk': chunks of compressed signals in time-domain,
-        # -- 'fewSamples': T(z)-approximation of WOLA compression process.
-        # broadcast L ≪ Ns samples at a time.
-    winWOLAanalysis: np.ndarray = np.sqrt(np.hanning(DFTsize))      # window
-    winWOLAsynthesis: np.ndarray = np.sqrt(np.hanning(DFTsize))     # window
-    normFactWOLA: float = sum(winWOLAanalysis)  # (I)FFT normalization factor
-    # T(z)-approximation | Sample-wise broadcasts
-    upTDfilterEvery: float = 1. # [s] duration of pause between two 
-                                    # consecutive time-domain filter updates.
-    # SROs
-    compensateSROs: bool = False    # if True, compensate for SROs
-    estimateSROs: str = 'Oracle'    # SRO estimation method. If 'Oracle',
-        # no estimation: using oracle if `compensateSROs == True`.
-    cohDrift: CohDriftParameters = CohDriftParameters()
-    # General
-    performGEVD: bool = True    # if True, perform GEVD
-    GEVDrank: int = 1           # GEVD rank
-    timeBtwExternalFiltUpdates: float = 1.  # [s] bw. external filter updates.
-    # ^ TODO: make that used only if the node-updating is sim/asy.
-    alphaExternalFilters: float = .5    # exponential averaging constant
-                                        # for external filter target update.
-    t_expAvg50p: float = 2.     # [s] Time in the past at which the value is
-                                # weighted by 50% via exponential averaging.
-    # Desired signal estimation
-    desSigProcessingType: str = 'wola'  # processing scheme used to compute
-        # the desired signal estimates: "wola": WOLA synthesis,
-                                    # "conv": T(z)-approximation.
-    computeCentralised: bool = False    # if True, compute centralised
-        # estimate (using all microphone signals in network). TODO: TODO: TODO: TODO: 
-    computeLocal: bool = False  # if True, compute local estimate at each node TODO: TODO: TODO: TODO: 
-    # Metrics
-    dynMetrics: DynamicMetricsParameters = DynamicMetricsParameters()
-    gammafwSNRseg: float = 0.2  # gamma exponent for fwSNRseg
-    frameLenfwSNRseg: float = 0.03  # [s] time window duration for fwSNRseg
-    minFiltUpdatesForMetrics: int = 10   # minimum number of DANSE
-    # updates before start of speech enhancement metrics computation
-    
-    def __post_init__(self):
-        """
-        Adapt some fields depending on the value of others, after 
-        dataclass instance initialisation.
-        """
-        self.Ns = int(self.DFTsize * (1 - self.WOLAovlp))
-        if self.broadcastType == 'wholeChunk':
-            self.broadcastLength = self.Ns
-        elif self.broadcastType == 'fewSamples':
-            self.broadcastLength = 1
-
-    def get_wasn_info(self, wasn: WASNparameters):
-        """
-        Adds useful info to DANSEparameters object from WASNparameters
-        object. 
-        """
-        self.nNodes = wasn.nNodes
-        self.nSensorPerNode = wasn.nSensorPerNode
-        self.referenceSensor = wasn.referenceSensor
-
-
-@dataclass
-class DANSEvariables(DANSEparameters):
+class DANSEvariables(base.DANSEparameters):
     """
     Main DANSE class. Stores all relevant variables and core functions on 
     those variables.
     """
-    def import_params(self, p: DANSEparameters):
+    def import_params(self, p: base.DANSEparameters):
         self.__dict__.update(p.__dict__)
 
     def init_from_wasn(self, wasn: list[Node]):
