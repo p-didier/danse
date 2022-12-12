@@ -25,7 +25,7 @@ SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 # - 'estcomp': if True, estimate and compensate for SROs. Else, do not.
 # - 'basic': if True, consider a 2-nodes WASN with 1 sensor each.
 #    Else, consider a 'realistic' WASN with more nodes, multiple sensors each.
-PARAMETERS = ['rev', 'SROs', 'estcomp', 'basic']
+PARAMETERS = ['seq', 'rev', 'SROs', 'estcomp', 'basic']
 
 @dataclass
 class TestParameters:
@@ -54,7 +54,7 @@ class TestParameters:
 
 BASEPARAMS = TestParameters(
     wasn=WASNparameters(
-        sigDur=15,
+        sigDur=10,
         rd=np.array([5, 5, 5]),
         fs=8000,
         t60=0.0,
@@ -120,6 +120,11 @@ def run(test: dict):
 
     # Prepare parameters
     p = BASEPARAMS
+    if test['seq']:
+        p.danseParams.nodeUpdating = 'seq'  # sequential node-updating
+    else:
+        p.danseParams.nodeUpdating = 'asy'  # asynchronous node-updating
+
     if test['rev']:
         p.wasn.t60 = 0.2
     else:
