@@ -423,24 +423,56 @@ class DANSEvariables(base.DANSEparameters):
         done in `spatial_covariance_matrix_update()` is at least equal to
         the dimension of the corresponding covariance matrix (ensuring full-
         rank property).
+        >> Addition on 12.12.2022:
+        -If GEVD is to be performed: check positive-definiteness of noise-only
+        covariance matrices. 
+        >> Addition on 13.12.2022:
+        -If GEVD is to be performed: explicitly check full-rank property.
 
         Parameters
         ----------
         k : int
             Node index.
         """
+
+        def _is_pos_def(x):  # https://stackoverflow.com/a/16270026
+            """Finds out whether matrix `x` is positive definite."""
+            return np.all(np.linalg.eigvals(x) > 0)
+        
         if not self.startUpdates[k]:
             if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
-                self.startUpdates[k] = True
+                if self.performGEVD:
+                    if _is_pos_def(self.Rnntilde[k]) and _is_pos_def(self.Ryytilde[k])\
+                        and (np.linalg.matrix_rank(self.Rnntilde[k]) == self.Rnntilde[k].shape[-1]).all()\
+                        and (np.linalg.matrix_rank(self.Ryytilde[k]) == self.Ryytilde[k].shape[-1]).all():
+                        self.startUpdates[k] = True
+                else:
+                    self.startUpdates[k] = True
+
+        # Centralised estimate
         if self.computeCentralised and not self.startUpdatesCentr[k]:
             if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
-                self.startUpdatesCentr[k] = True
+                if self.performGEVD:
+                    if _is_pos_def(self.Rnncentr[k]) and _is_pos_def(self.Ryycentr[k])\
+                        and (np.linalg.matrix_rank(self.Rnncentr[k]) == self.Rnncentr[k].shape[-1]).all()\
+                        and (np.linalg.matrix_rank(self.Ryycentr[k]) == self.Ryycentr[k].shape[-1]).all():
+                        self.startUpdatesCentr[k] = True
+                else:
+                    self.startUpdatesCentr[k] = True
+
+        # Local estimate
         if self.computeLocal and not self.startUpdatesLocal[k]:
             if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
-                self.startUpdatesLocal[k] = True
+                if self.performGEVD:
+                    if _is_pos_def(self.Rnnlocal[k]) and _is_pos_def(self.Ryylocal[k])\
+                        and (np.linalg.matrix_rank(self.Rnnlocal[k]) == self.Rnnlocal[k].shape[-1]).all()\
+                        and (np.linalg.matrix_rank(self.Ryylocal[k]) == self.Ryylocal[k].shape[-1]).all():
+                        self.startUpdatesLocal[k] = True
+                else:
+                    self.startUpdatesLocal[k] = True
 
 
     def build_ycentr(self, tCurr, fs, k):

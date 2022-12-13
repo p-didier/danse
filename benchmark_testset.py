@@ -20,6 +20,7 @@ SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 
 # List of booleans parameters to consider.
 # 01.12.2022: all booleans commutations are considered.
+# - 'seq': if True, sequential node-updating. Else, asynchronous.
 # - 'rev': if True, reverberant room. Else, anechoic.
 # - 'SROs': if True, asynchronous WASN. Else, synchronous.
 # - 'estcomp': if True, estimate and compensate for SROs. Else, do not.
@@ -54,7 +55,7 @@ class TestParameters:
 
 BASEPARAMS = TestParameters(
     wasn=WASNparameters(
-        sigDur=10,
+        sigDur=5,
         rd=np.array([5, 5, 5]),
         fs=8000,
         t60=0.0,
@@ -148,18 +149,19 @@ def run(test: dict):
     if test['estcomp']:
         p.danseParams.compensateSROs = True
         p.danseParams.broadcastType = 'fewSamples'
+        p.danseParams.broadcastLength = 1
     else:
         p.danseParams.compensateSROs = False
         p.danseParams.broadcastType = 'wholeChunk'
-    # Complete the parameters update
+        p.danseParams.broadcastLength = p.danseParams.DFTsize // 2
+    
+    # Finalize parameters update
     p.wasn.__post_init__()
     p.danseParams.get_wasn_info(p.wasn)
 
     # Build export folder name
-    foldername = '_'.join([ii for ii in list(test.keys()) if test[ii]])
-    if len(foldername) > 0:
-        foldername = '_' + foldername
-    p.exportFolder = f'{Path(__file__).parent}/out/benchmark/test{foldername}'
+    foldername = '_'.join([f'{ii}{int(test[ii])}' for ii in list(test.keys())])
+    p.exportFolder = f'{Path(__file__).parent}/out/benchmark/{foldername}'
 
     # Launch test
     out = launch(p)
