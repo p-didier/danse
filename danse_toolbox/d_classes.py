@@ -435,15 +435,30 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
 
-        def _is_pos_def(x):  # https://stackoverflow.com/a/16270026
-            """Finds out whether matrix `x` is positive definite."""
-            return np.all(np.linalg.eigvals(x) > 0)
-        
+        # def _is_pos_def(x):  # https://stackoverflow.com/a/16270026
+        #     """Finds out whether matrix `x` is positive definite."""
+        #     return np.all(np.linalg.eigvals(x) > 0)
+        def _is_hermitian_and_posdef(x):
+            """Finds out whether 3D complex matrix `x` is Hermitian along 
+            the two last axes, as well as positive definite."""
+            # Get rid of machine-precision residual imaginary parts
+            x = np.real_if_close(x)
+            # Assess Hermitian-ness
+            b1 = np.allclose(np.transpose(x, axes=(0,2,1)).conj(), x)
+            # Assess positive-definiteness
+            b2 = True
+            for ii in range(x.shape[0]):
+                if any(np.linalg.eigvalsh(x[ii, :, :]) < 0):
+                    b2 = False
+                    break
+            return b1 and b2
+
         if not self.startUpdates[k]:
             if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
                 if self.performGEVD:
-                    if _is_pos_def(self.Rnntilde[k]) and _is_pos_def(self.Ryytilde[k])\
+                    # if _is_pos_def(self.Rnntilde[k]) and _is_pos_def(self.Ryytilde[k])\
+                    if _is_hermitian_and_posdef(self.Rnntilde[k]) and _is_hermitian_and_posdef(self.Ryytilde[k])\
                         and (np.linalg.matrix_rank(self.Rnntilde[k]) == self.Rnntilde[k].shape[-1]).all()\
                         and (np.linalg.matrix_rank(self.Ryytilde[k]) == self.Ryytilde[k].shape[-1]).all():
                         self.startUpdates[k] = True
@@ -455,7 +470,8 @@ class DANSEvariables(base.DANSEparameters):
             if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
                 if self.performGEVD:
-                    if _is_pos_def(self.Rnncentr[k]) and _is_pos_def(self.Ryycentr[k])\
+                    # if _is_pos_def(self.Rnncentr[k]) and _is_pos_def(self.Ryycentr[k])\
+                    if _is_hermitian_and_posdef(self.Rnncentr[k]) and _is_hermitian_and_posdef(self.Ryycentr[k])\
                         and (np.linalg.matrix_rank(self.Rnncentr[k]) == self.Rnncentr[k].shape[-1]).all()\
                         and (np.linalg.matrix_rank(self.Ryycentr[k]) == self.Ryycentr[k].shape[-1]).all():
                         self.startUpdatesCentr[k] = True
@@ -467,7 +483,8 @@ class DANSEvariables(base.DANSEparameters):
             if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
                 if self.performGEVD:
-                    if _is_pos_def(self.Rnnlocal[k]) and _is_pos_def(self.Ryylocal[k])\
+                    # if _is_pos_def(self.Rnnlocal[k]) and _is_pos_def(self.Ryylocal[k])\
+                    if _is_hermitian_and_posdef(self.Rnnlocal[k]) and _is_hermitian_and_posdef(self.Ryylocal[k])\
                         and (np.linalg.matrix_rank(self.Rnnlocal[k]) == self.Rnnlocal[k].shape[-1]).all()\
                         and (np.linalg.matrix_rank(self.Ryylocal[k]) == self.Ryylocal[k].shape[-1]).all():
                         self.startUpdatesLocal[k] = True

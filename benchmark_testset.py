@@ -55,7 +55,7 @@ class TestParameters:
 
 BASEPARAMS = TestParameters(
     wasn=WASNparameters(
-        sigDur=5,
+        sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=8000,
         t60=0.0,
@@ -139,9 +139,9 @@ def run(test: dict):
         p.wasn.nSensorPerNode = [1,3,2,5]
 
     if test['SROs']:
-        if test['basic']:
+        if test['basic']:  # only two nodes
             p.wasn.SROperNode = [0, 100]
-        else:
+        else:   # more nodes
             p.wasn.SROperNode = [0, 50, -50, 100]
     else:
         p.wasn.SROperNode = [0] * p.wasn.nNodes
