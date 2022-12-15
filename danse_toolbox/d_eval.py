@@ -70,12 +70,19 @@ class DynamicMetric:
 
 
 def get_metrics(
-        clean, noisy, enhan,
-        fs, VAD,
+        clean,
+        noisy,
+        enhan,
+        enhan_c=None,
+        enhan_l=None,
+        fs=16e3,
+        VAD=None,
         dynamic: DynamicMetricsParameters=None,
         startIdx=0,
-        startIdxCentr=None, startIdxLocal=None,
-        gamma=0.2, fLen=0.03
+        startIdxCentr=None,
+        startIdxLocal=None,
+        gamma=0.2,
+        fLen=0.03
     ):
     """
     Compute evaluation metrics for signal enhancement
@@ -89,6 +96,10 @@ def get_metrics(
         The noisy signal (pre-signal enhancement).
     enhan : [N x 1] np.ndarray (float)
         The enhanced signal (post-signal enhancement).
+    enhan_c : [N x 1] np.ndarray (float)
+        The enhanced signal (after centralised processing).
+    enhan_l : [N x 1] np.ndarray (float)
+        The enhanced signal (after local processing).
     fs : int
         Sampling frequency [samples/s].
     VAD : [N x 1] np.ndarray (float)
@@ -128,8 +139,8 @@ def get_metrics(
     clean_c = clean[startIdxCentr:]
     clean_l = clean[startIdxLocal:]
     clean = clean[startIdx:]
-    enhan_c = enhan[startIdxCentr:]
-    enhan_l = enhan[startIdxLocal:]
+    enhan_c = enhan_c[startIdxCentr:]
+    enhan_l = enhan_l[startIdxLocal:]
     enhan = enhan[startIdx:]
     # noisy_c = noisy[startIdxCentr:]
     # noisy_l = noisy[startIdxLocal:]

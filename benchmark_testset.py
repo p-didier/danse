@@ -226,11 +226,12 @@ def postprocess(out: pp.DANSEoutputs,
     # Check whether export folder exists
     if Path(p.exportFolder).is_dir():
         # Check whether the folder contains something
-        if Path(p.exportFolder).stat().st_size > 0:
-            inp = input(f'The folder\n"{p.exportFolder}"\ncontains data. Overwrite? [y/[n]]:  ')
-            if inp not in ['y', 'Y']:
-                runit = False   # don't run
-                print('Aborting export.')
+        # if Path(p.exportFolder).stat().st_size > 0:
+        #     inp = input(f'The folder\n"{p.exportFolder}"\ncontains data. Overwrite? [y/[n]]:  ')
+        #     if inp not in ['y', 'Y']:
+        #         runit = False   # don't run
+        #         print('Aborting export.') # TODO: TMP TMP TMP 
+        runit = False
     else:
         print(f'Create export folder "{p.exportFolder}".')
         os.makedirs(p.exportFolder)  # better than Path().mkdir()
