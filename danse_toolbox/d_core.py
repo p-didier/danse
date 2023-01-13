@@ -13,7 +13,10 @@ from danse_toolbox.d_classes import *
 from danse_toolbox.d_post import DANSEoutputs
 
 
-def danse(wasn: list[Node], p: base.DANSEparameters) -> DANSEoutputs:
+def danse(
+    wasn: list[Node],
+    p: base.DANSEparameters
+    ) -> tuple[DANSEoutputs, list[str]]:
     """
     Main DANSE function.
 
@@ -41,8 +44,12 @@ def danse(wasn: list[Node], p: base.DANSEparameters) -> DANSEoutputs:
     eventInstants, fs = base.initialize_events(dv.timeInstants, p)
 
     # Profiling
-    profiler = Profiler()
-    profiler.start()
+    def is_interactive():
+        import __main__ as main
+        return not hasattr(main, '__file__')
+    if not is_interactive():
+        profiler = Profiler()
+        profiler.start()
     t0 = time.perf_counter()    # timing
 
     # Loop over event instants
@@ -70,9 +77,10 @@ def danse(wasn: list[Node], p: base.DANSEparameters) -> DANSEoutputs:
                 raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
 
     # Profiling
-    profiler.stop()
-    if dv.printout_profiler:
-        profiler.print()
+    if not is_interactive():
+        profiler.stop()
+        if dv.printout_profiler:
+            profiler.print()
 
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0

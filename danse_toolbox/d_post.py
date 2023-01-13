@@ -54,8 +54,11 @@ class DANSEoutputs(DANSEparameters):
             self.TDdesiredSignals_l = dv.dLocal
             self.STFTDdesiredSignals_l = dv.dHatLocal
         # SROs
+        self.SROgroundTruth = dv.SROsppm
         self.SROsEstimates = dv.SROsEstimates
         self.SROsResiduals = dv.SROsResiduals
+        self.flagIterations = dv.flagIterations
+        self.firstUpRefSensor = dv.firstDANSEupdateRefSensor
         # Filters
         self.filters = dv.wTilde
         # Other useful things
@@ -92,22 +95,177 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
 
-    def plot_perf(self, wasn, exportFolder):
+    def plot_perf(self, wasn, exportFolder=None):
         """Plots DANSE performance."""
         self.check_init()  # check if object is correctly initialised
         self.metrics = compute_metrics(self, wasn)
         figStatic, figDynamic = plot_metrics(self)
-        figStatic.savefig(f'{exportFolder}/metrics.png')
-        figStatic.savefig(f'{exportFolder}/metrics.pdf')
-        if figDynamic is not None:
-            figDynamic.savefig(f'{exportFolder}/metrics_dyn.png')
-            figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
+        print(exportFolder)
+        if exportFolder is not None:
+            figStatic.savefig(f'{exportFolder}/metrics.png')
+            figStatic.savefig(f'{exportFolder}/metrics.pdf')
+            if figDynamic is not None:
+                figDynamic.savefig(f'{exportFolder}/metrics_dyn.png')
+                figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
 
-    def plot_sigs(self, wasn, exportFolder):
+    def plot_sro_perf(self, Ns, fs, xaxistype='both'):
+        """
+        Shows evolution of SRO estimates / residuals through time.
+        
+        Parameters
+        ----------
+        fs : float or int
+            Sampling frequency of the reference node [Hz].
+        Ns : int
+            Number of new samples per DANSE iteration.
+        xaxistype : str
+            Type of x-axis ticks/label:
+            "iterations" = DANSE iteration indices
+            "time" = time instants [s]
+            "both" = both of the above
+
+        Returns
+        -------
+        fig : figure handle
+            Figure handle for further processing.
+        """
+        nNodes = len(self.SROsResiduals)
+
+        # TODO: get correct values from somewhere
+        self.neighbourIndex = [0 for _ in range(nNodes)] # FIXME:FIXME:FIXME:
+
+        fig = plt.figure(figsize=(6,2))
+        ax = fig.add_subplot(111)
+        for k in range(nNodes):
+            if self.compensateSROs:
+                if k == 0:
+                    ax.plot(
+                        self.SROsResiduals[k] * 1e6, f'C{k}-',
+                        label=f'$\\Delta\\hat{{\\varepsilon}}_{{{k+1}{self.neighbourIndex[k]+1}}}$'
+                    )
+                    ax.plot(
+                        self.SROsEstimates[k] * 1e6,
+                        f'C{k}--', label=f'$\\hat{{\\varepsilon}}_{{{k+1}{self.neighbourIndex[k]+1}}}$'
+                    )
+                else:  # adapt labels for condensed legend
+                    ax.plot(
+                        self.SROsResiduals[k] * 1e6,
+                        f'C{k}-',
+                        label=f'Node {k+1}'
+                    )
+                    ax.plot(self.SROsEstimates[k] * 1e6, f'C{k}--')
+            else:
+                if k == 0:
+                    ax.plot(
+                        self.SROsResiduals[k] * 1e6,
+                        f'C{k}-',
+                        label=f'$\\hat{{\\varepsilon}}_{{{k+1}{self.neighbourIndex[k]+1}}}$'
+                    )
+                else:  # adapt labels for condensed legend
+                    ax.plot(
+                        self.SROsResiduals[k] * 1e6,
+                        f'C{k}-',
+                        label=f'$(k,q)=({k+1},{self.neighbourIndex[k]+1})$'
+                    )
+            # Always showing ground truths with respect to 1st neighbour:
+            # - For node k==0: 1st neighbour is k==1
+            # - For any other node: 1st neighbour is k==0
+            if k == 0:
+                ax.hlines(
+                    y=(self.SROgroundTruth[self.neighbourIndex[k]] -\
+                        self.SROgroundTruth[k]) * 1e6,
+                    xmin=0,
+                    xmax=len(self.SROsResiduals[0]),
+                    colors=f'C{k}',
+                    linestyles='dotted',
+                    label=f'$\\varepsilon_{{{k+1}{self.neighbourIndex[k]+1}}}$'
+                )
+            else:  # adapt labels for condensed legend
+                
+                ax.hlines(
+                    y=(self.SROgroundTruth[self.neighbourIndex[k]] -\
+                        self.SROgroundTruth[k]) * 1e6,
+                    xmin=0,
+                    xmax=len(self.SROsResiduals[0]),
+                    colors=f'C{k}',
+                    linestyles='dotted'
+                )
+        ylims = ax.get_ylim()
+
+        for k in range(nNodes):
+            if len(self.flagIterations[k]) > 0:
+                if k == 0:
+                    ax.vlines(
+                        x=self.flagIterations[k],
+                        ymin=np.amin(ylims),
+                        ymax=np.amax(ylims),
+                        colors=f'C{k}',
+                        linestyles='dashdot',
+                        label=f'Flags {k+1}--{self.neighbourIndex[k]+1}'
+                    )
+                else:
+                    ax.vlines(
+                        x=self.flagIterations[k],
+                        ymin=np.amin(ylims),
+                        ymax=np.amax(ylims),
+                        colors=f'C{k}',
+                        linestyles='dashdot'
+                    )
+        ax.grid()
+        ax.set_ylabel('[ppm]')
+        ax.set_xlabel('DANSE iteration $i$', loc='left')
+        ax.set_xlim([0, len(self.SROsResiduals[k])])
+        handles, labels = plt.gca().get_legend_handles_labels()
+
+        # Adapt legend handles/labels order
+        if not self.compensateSROs and len(self.flagIterations[0]) > 0:
+            order = [0] + list(np.arange(nNodes, nNodes+2)) +\
+                list(np.arange(1, nNodes))
+        elif not self.compensateSROs:
+            order = [0] + list(np.arange(nNodes-1, nNodes+1)) +\
+                list(np.arange(1, nNodes-1))
+        elif len(self.flagIterations[0]) > 0:
+            # if there were flags, change legend handles order counting
+            # the flags-handle in.
+            order = [0,1] + list(np.arange(nNodes+1, nNodes+3)) +\
+                list(np.arange(2, nNodes+1))
+        else:  
+            # otherwise, do not count the flags-handle in, because it
+            # has not been generated.
+            order = [0,1] + list(np.arange(nNodes, nNodes+2)) +\
+                list(np.arange(2, nNodes))
+
+        plt.legend(
+            [handles[idx] for idx in order],
+            [labels[idx] for idx in order],
+            bbox_to_anchor=(1.05, 1.05)
+        )
+        if xaxistype == 'both':
+            ax2 = ax.twiny()
+            ax2.set_xlabel('DANSE iteration $i$', loc='left')
+            ax2.set_xticks(ax.get_xticks())
+        if xaxistype in ['time', 'both']:
+            xticks = np.linspace(
+                start=0,
+                stop=len(self.SROsResiduals[0]),
+                num=9
+            )
+            ax.set_xticks(xticks)
+            ax.set_xticklabels(
+                np.round(xticks * Ns / fs + self.firstUpRefSensor, 2)
+            )
+            ax.set_xlabel('Time at reference node [s]', loc='left')
+        plt.title('SRO estimation through time')
+        plt.tight_layout()
+        
+        return fig
+
+    def plot_sigs(self, wasn, exportFolder=None):
         """Plots signals before/after DANSE."""
         figs = plot_signals_all_nodes(self, wasn)
-        for k in range(len(figs)):
-            figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.png')
+        if exportFolder is not None:
+            for k in range(len(figs)):
+                figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.png')
 
 
 def compute_metrics(
@@ -787,6 +945,8 @@ def plot_signals(node: Node, win, ovlp):
     stft_subplot(ax, t, f, data, [limLow, limHigh], 'Noisy')
     plt.xticks([])
     ax = fig.add_subplot(nRows,2,6)   # Enhanced signals (global)
+    # Avoid divide-by-zero error
+    np.seterr(divide = 'ignore')
     data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT)))
     stft_subplot(ax, t, f, data, [limLow, limHigh], 'Global DANSE')
     currSubplotIdx = 6
@@ -800,6 +960,7 @@ def plot_signals(node: Node, win, ovlp):
         data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT_c)))
         stft_subplot(ax, t, f, data, [limLow, limHigh], 'Centr. est.')
     ax.set(xlabel='$t$ [s]')
+    np.seterr(divide = 'warn')  # reset divide-by-zero error warning
 
     return fig, axForTitle
 
@@ -887,3 +1048,5 @@ def normalize_toint16(nparray):
     nparrayNormalized = (amplitude * nparray / \
         np.amax(nparray) * 0.5).astype(np.int16)  # 0.5 to avoid clipping
     return nparrayNormalized
+
+

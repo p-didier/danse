@@ -2,6 +2,17 @@ import numpy as np
 from danse_toolbox.d_classes import *
 from paderwasn.synchronization.time_shift_estimation import max_time_lag_search
 
+from pathlib import Path, PurePath
+import sys
+
+# Find path to root folder
+rootFolder = 'sounds-phd'
+pathToRoot = Path(__file__)
+while PurePath(pathToRoot).name != rootFolder:
+    pathToRoot = pathToRoot.parent
+sys.path.append(f'{pathToRoot}/danse/dxcpphat')
+import sro_estimation as dxcp
+
 
 def cohdrift_sro_estimation(
         wPos: np.ndarray,
@@ -14,7 +25,8 @@ def cohdrift_sro_estimation(
         flagFirstSROEstimate=False,
         bufferFlagPos=0,
         bufferFlagPri=0):
-    """Estimates residual SRO using a coherence drift technique.
+    """
+    Estimates a(n) (residual) SRO using a coherence drift technique.
     
     Parameters
     ----------
@@ -57,11 +69,13 @@ def cohdrift_sro_estimation(
         -1
     )
     # Account for potential buffer flags (extra / missing sample)
-    res_prod *= np.exp(1j * 2 * np.pi / len(res_prod) * np.arange(len(res_prod)) * (bufferFlagPos - bufferFlagPri))
+    res_prod *= np.exp(1j * 2 * np.pi / len(res_prod) *\
+        np.arange(len(res_prod)) * (bufferFlagPos - bufferFlagPri))
 
     # Update the average coherence product
     if flagFirstSROEstimate:
-        avgResProd_out = res_prod     # <-- 1st SRO estimation, no exponential averaging (initialization)
+        avgResProd_out = res_prod     
+        # ^^^ 1st SRO estimation, no exponential averaging (initialization)
     else:
         avgResProd_out = alpha * avgResProd + (1 - alpha) * res_prod 
 
@@ -77,3 +91,49 @@ def cohdrift_sro_estimation(
         sro_est = - b.T @ np.angle(avgResProd_out[-len(kappa):]) / (b.T @ b)
 
     return sro_est, avgResProd_out
+
+
+def dxcpphat_sro_estimation(
+    fs,
+    fsref,
+    N,
+    localSig: np.ndarray,
+    neighboursSig: np.ndarray,
+    refSensorIdx=0):
+    """
+    Estimates a(n) (residual) SRO using the DXCP-PhaT technique [1].
+
+    References
+    ----------
+    - [1] A. Chinaev, P. Thüne, and G. Enzner (2021). Double-cross-correlation
+    processing for blind sampling-rate and time-offset estimation. IEEE/ACM
+    Transactions on Audio, Speech, and Language Processing, vol. 29,
+    pp. 1881-1896.
+
+    Parameters
+    ----------
+    fs : int or float
+        Sampling frequency of current node. 
+    TODO:
+
+    Returns
+    -------
+    TODO:
+    """
+
+    # Check dimensionality
+    if len(localSig.shape) == 1:
+        localSig = localSig[:, np.newaxis]
+
+    DXCPPhatInstance = dxcp.DXCPPhaT(
+        RefSampRate_fs_Hz=fsref,
+        FrameSize_input=N
+    )
+
+    # For each neighbour, compute SRO
+    for q in range(neighboursSig.shape[-1]):
+        OutputDXCPPhaTcl = DXCPPhatInstance.process_data(
+            x_12_ell=np.stack((localSig, neighboursSig[:, q]), axis=1)
+        )
+
+    stop = 1

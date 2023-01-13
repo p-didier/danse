@@ -7,6 +7,7 @@ import copy
 import numpy as np
 from numba import njit
 import scipy.linalg as sla
+from dataclasses import field
 import matplotlib.pyplot as plt
 from danse_toolbox.d_classes import *
 from scipy.signal._arraytools import zero_ext
@@ -118,6 +119,16 @@ class DANSEparameters(Hyperparameters):
     and asynchronous node updating. IEEE Transactions on Signal Processing,
     58(10), 5292-5306.
 
+    - [3] P. Didier, T. van Waterschoot, S. Doclo, and M. Moonen (2022).
+    Sampling rate offset estimation and compensation for distributed adaptive 
+    node-specific signal estimation in wireless acoustic sensor networks.
+    arXiv preprint arXiv:2211.02489.
+
+    - [4] A. Chinaev, P. Thüne, and G. Enzner (2021). Double-cross-correlation
+    processing for blind sampling-rate and time-offset estimation. IEEE/ACM
+    Transactions on Audio, Speech, and Language Processing, vol. 29,
+    pp. 1881-1896.
+
     """
     DFTsize: int = 1024    # DFT size
     WOLAovlp: float = .5   # WOLA window overlap [*100%]
@@ -137,8 +148,11 @@ class DANSEparameters(Hyperparameters):
                                     # consecutive time-domain filter updates.
     # SROs
     compensateSROs: bool = False    # if True, compensate for SROs
-    estimateSROs: str = 'Oracle'    # SRO estimation method. If 'Oracle',
-        # no estimation: using oracle if `compensateSROs == True`.
+    estimateSROs: str = 'Oracle'    # SRO estimation method.
+        # If 'Oracle', no estimation: using oracle if `compensateSROs == True`.
+        # If "CohDrift", use coherence-drift method (see [3]).
+        # If "DXCPPhaT", use DXCP-PhaT method from [4] (implemented based on
+        #   https://github.com/fgnt/asnsig).
     cohDrift: CohDriftParameters = CohDriftParameters()
     # General
     performGEVD: bool = True    # if True, perform GEVD
@@ -173,6 +187,8 @@ class DANSEparameters(Hyperparameters):
             self.broadcastLength = self.Ns
         elif self.broadcastType == 'fewSamples':
             self.broadcastLength = 1
+        if self.estimateSROs not in ['Oracle', 'CohDrift', 'DXCPPhaT']:
+            raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
 
     def get_wasn_info(self, wasn: WASNparameters):
         """
@@ -829,7 +845,19 @@ def events_parser(
                         else:
                             updatesTxt += ','
                         updatesTxt += f'{k + 1}'
-            print(txt + broadcastsTxt + '; ' + updatesTxt)
+            # Get ready to print
+            fullTxt = txt + broadcastsTxt + '; ' + updatesTxt
+            if is_interactive():  # if we are running from a notebook
+                # Print on the same line
+                print(f"\r{fullTxt}", end="")
+            else:
+                # Print on the next line
+                print(fullTxt)
+
+
+def is_interactive():  # https://stackoverflow.com/a/22424821
+    import __main__ as main
+    return not hasattr(main, '__file__')
 
 
 def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):

@@ -2,10 +2,10 @@ import copy
 import numpy as np
 import scipy.linalg as sla
 from siggen.classes import Node
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
-
+import dxcpphat
 
 @dataclass
 class DANSEvariables(base.DANSEparameters):
@@ -335,6 +335,10 @@ class DANSEvariables(base.DANSEparameters):
             Receiving node index.
         """
 
+        if k == self.referenceSensor and self.nInternalFilterUps[k] == 0:
+            # Save first update instant (for, e.g., SRO plot)
+            self.firstDANSEupdateRefSensor = tCurr
+
         # Process buffers
         self.process_incoming_signals_buffers(k, tCurr)
         # Wipe local buffers
@@ -375,7 +379,7 @@ class DANSEvariables(base.DANSEparameters):
         # Update external filters (for broadcasting)
         self.update_external_filters(k, tCurr)
         # Update SRO estimates
-        self.update_sro_estimates(k)
+        self.update_sro_estimates(k, fs)
         # Update phase shifts for SRO compensation
         if self.compensateSROs:
             self.build_phase_shifts_for_srocomp(k)
@@ -960,12 +964,10 @@ class DANSEvariables(base.DANSEparameters):
                     self.Rnnlocal[k],
                     self.referenceSensor
                 )
-                self.nLocalFilterUps[k] += 1  
-
-    
+                self.nLocalFilterUps[k] += 1
 
 
-    def update_sro_estimates(self, k):
+    def update_sro_estimates(self, k, fs):
         """
         Update SRO estimates.
         
@@ -973,6 +975,8 @@ class DANSEvariables(base.DANSEparameters):
         ----------
         k : int
             Node index.
+        fs : int or float
+            Sampling frequency of current node. 
         """
         # Useful variables (compact coding)
         nNeighs = len(self.neighbors[k])
@@ -1058,6 +1062,23 @@ class DANSEvariables(base.DANSEparameters):
                 
                     sroOut[q] = sroRes
                     self.avgProdResiduals[k][:, q] = apr
+
+        elif self.estimateSROs == 'DXCPPhaT':
+            # DXCP-PhaT-based SRO estimation
+            sros.dxcpphat_sro_estimation(
+                fs=fs,
+                fsref=16e3,  # FIXME: HARD-CODED!!
+                N=self.DFTsize,
+                localSig=self.yin[k][
+                    self.idxBegChunk:self.idxEndChunk,
+                    self.referenceSensor
+                ],
+                neighboursSig=self.yin[k][
+                    self.idxBegChunk:self.idxEndChunk,
+                    self.nSensorPerNode[k]:
+                ],
+                refSensorIdx=self.referenceSensor,
+            )
 
         elif self.estimateSROs == 'Oracle':
             # No data-based dynamic SRO estimation: use oracle knowledge
