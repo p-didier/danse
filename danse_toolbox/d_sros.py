@@ -121,19 +121,19 @@ def dxcpphat_sro_estimation(
     TODO:
     """
 
-    # Check dimensionality
-    if len(localSig.shape) == 1:
-        localSig = localSig[:, np.newaxis]
-
     DXCPPhatInstance = dxcp.DXCPPhaT(
         RefSampRate_fs_Hz=fsref,
         FrameSize_input=N
     )
 
     # For each neighbour, compute SRO
+    sroEst = np.zeros(neighboursSig.shape[-1])
     for q in range(neighboursSig.shape[-1]):
         OutputDXCPPhaTcl = DXCPPhatInstance.process_data(
             x_12_ell=np.stack((localSig, neighboursSig[:, q]), axis=1)
         )
+        sroEst[q] = OutputDXCPPhaTcl['SROppm_est_out']
 
-    stop = 1
+        # FIXME: 16.01.2023: outputs ZEROS only??!
+
+    return sroEst

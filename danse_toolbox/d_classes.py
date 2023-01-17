@@ -5,7 +5,6 @@ from siggen.classes import Node
 from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
-import dxcpphat
 
 @dataclass
 class DANSEvariables(base.DANSEparameters):
@@ -1065,16 +1064,18 @@ class DANSEvariables(base.DANSEparameters):
 
         elif self.estimateSROs == 'DXCPPhaT':
             # DXCP-PhaT-based SRO estimation
-            sros.dxcpphat_sro_estimation(
+            sroOut = sros.dxcpphat_sro_estimation(
                 fs=fs,
                 fsref=16e3,  # FIXME: HARD-CODED!!
                 N=self.DFTsize,
-                localSig=self.yin[k][
-                    self.idxBegChunk:self.idxEndChunk,
+                localSig=self.yTilde[k][
+                    :,
+                    self.i[k],
                     self.referenceSensor
                 ],
-                neighboursSig=self.yin[k][
-                    self.idxBegChunk:self.idxEndChunk,
+                neighboursSig=self.yTilde[k][
+                    :,
+                    self.i[k],
                     self.nSensorPerNode[k]:
                 ],
                 refSensorIdx=self.referenceSensor,

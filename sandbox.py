@@ -24,7 +24,7 @@ class TestParameters:
         sigDur=5
     )
     danseParams: DANSEparameters = DANSEparameters()
-    exportFolder: str = f'{Path(__file__).parent}/out'  # folder to export outputs
+    exportFolder: str = f'{Path(__file__).parent}/out/dxcptests'  # folder to export outputs
     #
     seed: int = 12345
 
@@ -52,10 +52,12 @@ p = TestParameters(
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.2,
-        nNodes=4,
+        nNodes=2,
+        # nNodes=4,
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
-        nSensorPerNode=[1, 3, 2, 5],
+        # nSensorPerNode=[1, 3, 2, 5],
+        nSensorPerNode=[1, 1],
         desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
             for file in [
                 'speech1.wav',
@@ -66,8 +68,8 @@ p = TestParameters(
                 'whitenoise_signal_1.wav',
                 'whitenoise_signal_2.wav'
             ]],
-        # SROperNode=np.array([0, 50])
-        SROperNode=np.array([0, 0])
+        SROperNode=np.array([0, 50])
+        # SROperNode=np.array([0, 0])
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
@@ -76,9 +78,10 @@ p = TestParameters(
         nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
-        estimateSROs='CohDrift',
-        # compensateSROs=True,
-        compensateSROs=False,
+        # estimateSROs='CohDrift',
+        estimateSROs='DXCPPhaT',
+        compensateSROs=True,
+        # compensateSROs=False,
         cohDrift=CohDriftParameters(
             loop='open',
             alpha=0.99
@@ -167,6 +170,15 @@ def postprocess(out: pp.DANSEoutputs,
 
         # Plot (+ export) acoustic scenario (WASN)
         pp.plot_asc(room, p.wasn, p.exportFolder)
+
+        # Plot SRO estimation performance
+        fig = out.plot_sro_perf(
+            Ns=p.danseParams.Ns,
+            fs=p.wasn.fs,
+            xaxistype='both'  # "both" == iterations [-] _and_ instants [s]
+        )
+        fig.savefig(f'{p.exportFolder}/sroEvolution.png')
+        fig.savefig(f'{p.exportFolder}/sroEvolution.pdf')
 
         # Plot performance metrics (+ export)
         out.plot_perf(wasn, p.exportFolder)

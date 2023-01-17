@@ -7,9 +7,9 @@ import copy
 import numpy as np
 from numba import njit
 import scipy.linalg as sla
-from dataclasses import field
+from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
-from danse_toolbox.d_classes import *
+# from danse_toolbox.d_classes import 
 from scipy.signal._arraytools import zero_ext
 from danse_toolbox.d_eval import DynamicMetricsParameters
 from siggen.classes import WASNparameters
