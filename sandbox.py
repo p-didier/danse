@@ -69,8 +69,8 @@ p = TestParameters(
                 'whitenoise_signal_1.wav',
                 'whitenoise_signal_2.wav'
             ]],
-        SROperNode=np.array([0, 50])
-        # SROperNode=np.array([0, 0])
+        # SROperNode=np.array([0, 50])
+        SROperNode=np.array([0, 0])
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
@@ -167,7 +167,8 @@ def postprocess(out: pp.DANSEoutputs,
 
     if runit:
         # Export convergence plot
-        out.plot_convergence(wasn)
+        # out.plot_convergence(wasn)
+        out.plot_convergence()
 
         # Export .wav files
         out.export_sounds(wasn, p.exportFolder)
