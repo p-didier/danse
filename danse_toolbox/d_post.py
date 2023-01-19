@@ -110,86 +110,48 @@ class DANSEoutputs(DANSEparameters):
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.png')
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
 
-    def plot_convergence(self, wasn: list[Node]):
+    def plot_convergence(self, nodeIdx=0):
         """
         Shows convergence of DANSE.
         Created on 19.01.2023 (as a result of OJSP reviewers' suggestions).
-
-        References
-        ----------
-        [1] S. Ruiz, T. van Waterschoot and M. Moonen, "Distributed Combined
-        Acoustic Echo Cancellation and Noise Reduction in Wireless Acoustic
-        Sensor and Actuator Networks," in IEEE/ACM Transactions on Audio,
-        Speech, and Language Processing, vol. 30, pp. 534-547, 2022.
-
-        [2] A. Bertrand and M. Moonen, "Distributed Adaptive Node-Specific
-        Signal Estimation in Fully Connected Sensor Networks—Part I: Sequential
-        Node Updating," in IEEE Transactions on Signal Processing, vol. 58, no.
-        10, pp. 5277-5291, Oct. 2010.
         """
-
-        # Compute convergence metric
-        TDdesSig = np.array(
-            [wasn[k].cleanspeechCombined for k in range(len(wasn))]
-        ).T  # get clean desired signal at each node from `wasn` object
-
-        # Option 1 as in [1], see Eq. (63): NMSE [dB]
-        # convMetric = 10 * np.log10(
-        #     (TDdesSig - self.TDdesiredSignals_est)**2 / TDdesSig**2
-        # )
-        # yLabel = 'NMSE (DANSE vs. MWF) [dB]'
-        # Option 2 as in [2], see Eq. (57): MSE [dB]
-        convMetric = 10 * np.log10(
-            np.abs(TDdesSig - self.TDdesiredSignals_est)**2
-        )
-        yLabel = 'MSE (DANSE vs. MWF) [dB]'
-        # Option 3: root-MSE (RMSE)
-        # convMetric = np.sqrt(np.abs(TDdesSig - self.TDdesiredSignals_est)**2)
-        # yLabel = 'RMSE (DANSE vs. MWF) [dB]'
-
-        convMetricPerIter = np.zeros((
-            self.STFTDdesiredSignals_est.shape[1],
-            convMetric.shape[1]
-        ))
-        for ii in range(self.STFTDdesiredSignals_est.shape[1]):
-            idxBeg = ii * self.Ns
-            idxEnd = idxBeg + self.DFTsize
-            convMetricPerIter[ii, :] = np.mean(
-                convMetric[idxBeg:idxEnd, :], axis=0
-            )
-        # Option 2 ...
-        x = None
-
-        fig, axes = plt.subplots(2,1)
-        fig.set_size_inches(8.5, 3.5)
-        for k in range(self.nNodes):
-            axes[0].plot(convMetricPerIter[:, k], label=f'Node {k + 1}')
-        # axes.hlines(y=0, xmin=0, xmax=len(convMetricPerIter), colors='k')
-        axes[0].grid()
-        axes[0].set_ylabel(yLabel)
-        # Make double x-axis (top and bottom)
-        axes2 = axes[0].twiny()
-        axes2.set_xlabel('DANSE updates (frame index $i$)', loc='left')
-        axes2.set_xticks(axes[0].get_xticks())  # FIXME: starting at negative iteration index...
-        xticks = np.linspace(
-            start=0, stop=len(convMetricPerIter), num=9
-        )
-        axes[0].set_xticks(xticks)
-        axes[0].set_xticklabels(
-            np.round(
-                xticks * self.Ns / self.baseFs + self.firstUpRefSensor
-                , 2
-            )
-        )
-        axes[0].set_xlabel('Time [s]', loc='left')
-        # Legend
-        axes[0].legend()
-        #
-        # Axes[1]: waveform
-        axes[1].plot(TDdesSig[:, 0], label='$d_1(t)$')
-        axes[1].plot(self.TDdesiredSignals_est[:, 0], label='$\hat{d}_1(t)$')
         
-        plt.tight_layout()	
+        def _format_ax(ax, title):
+            """Helper function to format plot axes."""
+            ax.grid()
+            ax.set_title(title)
+            # Make double x-axis (top and bottom)
+            axes2 = ax.twiny()
+            axes2.set_xlabel('DANSE updates (frame index $i$)', loc='left')
+            axes2.set_xticks(ax.get_xticks())
+            xticks = np.linspace(
+                start=0, stop=self.filters[nodeIdx].shape[1], num=9
+            )
+            ax.set_xticks(xticks)
+            ax.set_xticklabels(
+                np.round(
+                    xticks * self.Ns / self.baseFs + self.firstUpRefSensor
+                    , 2
+                )
+            )
+            ax.set_xlabel('Time [s]', loc='left')
+            ax.legend()
+        
+        diffFiltersReal = 20 * np.log10(np.mean(np.abs(
+            np.real(self.filters[nodeIdx][:, :, self.referenceSensor].T) - \
+            np.real(self.filtersCentr[nodeIdx][:, :, self.referenceSensor].T)
+        ), axis=1))
+        diffFiltersImag = 20 * np.log10(np.mean(np.abs(
+            np.imag(self.filters[nodeIdx][:, :, self.referenceSensor].T) - \
+            np.imag(self.filtersCentr[nodeIdx][:, :, self.referenceSensor].T)
+        ), axis=1))
+
+        fig, axes = plt.subplots(1,1)
+        fig.set_size_inches(5.5, 3.5)
+        axes.plot(diffFiltersReal, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Re(\\tilde{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i]) - Re(\\hat{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
+        axes.plot(diffFiltersImag, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Im(\\tilde{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i]) - Im(\\hat{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
+        _format_ax(axes, title='Convergence of DANSE towards centralised estimate')
+        plt.tight_layout()
         plt.show(block=False)
 
         stop = 1
