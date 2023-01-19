@@ -190,15 +190,16 @@ class DANSEparameters(Hyperparameters):
         if self.estimateSROs not in ['Oracle', 'CohDrift', 'DXCPPhaT']:
             raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
 
-    def get_wasn_info(self, wasn: WASNparameters):
+    def get_wasn_info(self, wasnParams: WASNparameters):
         """
         Adds useful info to DANSEparameters object from WASNparameters
         object. 
         """
-        self.nNodes = wasn.nNodes
-        self.nSensorPerNode = wasn.nSensorPerNode
-        self.referenceSensor = wasn.referenceSensor
-
+        self.nNodes = wasnParams.nNodes
+        self.nSensorPerNode = wasnParams.nSensorPerNode
+        self.referenceSensor = wasnParams.referenceSensor
+        self.baseFs = wasnParams.fs
+    
 def prep_sigs_for_FFT(y, N, Ns, t):
     """
     Zero-padding and signals length adaptation to ensure correct

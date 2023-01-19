@@ -35,24 +35,24 @@ class DANSEoutputs(DANSEparameters):
         """
 
         # Inits
-        self.TDdesiredSignals_c = None
-        self.STFTDdesiredSignals_c = None
-        self.TDdesiredSignals_l = None
-        self.STFTDdesiredSignals_l = None
+        self.TDdesiredSignals_est_c = None
+        self.STFTDdesiredSignals_est_c = None
+        self.TDdesiredSignals_est_l = None
+        self.STFTDdesiredSignals_est_l = None
 
         # Original microphone signals
         self.micSignals = dv.yin
         # DANSE desired signal estimates
-        self.TDdesiredSignals = dv.d
-        self.STFTDdesiredSignals = dv.dhat
+        self.TDdesiredSignals_est = dv.d
+        self.STFTDdesiredSignals_est = dv.dhat
         if self.computeCentralised:
             # Centralised desired signal estimates
-            self.TDdesiredSignals_c = dv.dCentr
-            self.STFTDdesiredSignals_c = dv.dHatCentr
+            self.TDdesiredSignals_est_c = dv.dCentr
+            self.STFTDdesiredSignals_est_c = dv.dHatCentr
         if self.computeLocal:
             # Local desired signal estimates
-            self.TDdesiredSignals_l = dv.dLocal
-            self.STFTDdesiredSignals_l = dv.dHatLocal
+            self.TDdesiredSignals_est_l = dv.dLocal
+            self.STFTDdesiredSignals_est_l = dv.dHatLocal
         # SROs
         self.SROgroundTruth = dv.SROsppm
         self.SROsEstimates = dv.SROsEstimates
@@ -110,45 +110,89 @@ class DANSEoutputs(DANSEparameters):
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.png')
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
 
-    def plot_convergence(self, nodeIdx=0):
+    def plot_convergence(self, wasn: list[Node]):
         """
         Shows convergence of DANSE.
         Created on 19.01.2023 (as a result of OJSP reviewers' suggestions).
+
+        References
+        ----------
+        [1] S. Ruiz, T. van Waterschoot and M. Moonen, "Distributed Combined
+        Acoustic Echo Cancellation and Noise Reduction in Wireless Acoustic
+        Sensor and Actuator Networks," in IEEE/ACM Transactions on Audio,
+        Speech, and Language Processing, vol. 30, pp. 534-547, 2022.
+
+        [2] A. Bertrand and M. Moonen, "Distributed Adaptive Node-Specific
+        Signal Estimation in Fully Connected Sensor Networks—Part I: Sequential
+        Node Updating," in IEEE Transactions on Signal Processing, vol. 58, no.
+        10, pp. 5277-5291, Oct. 2010.
         """
 
-        fig, axes = plt.subplots(1,1)
-        fig.set_size_inches(8.5, 3.5)
-        axes.plot(
-            np.abs(self.filters[nodeIdx][:, :, self.referenceSensor].T)
+        # Compute convergence metric
+        TDdesSig = np.array(
+            [wasn[k].cleanspeechCombined for k in range(len(wasn))]
+        ).T  # get clean desired signal at each node from `wasn` object
+
+        # Option 1 as in [1], see Eq. (63): NMSE [dB]
+        # convMetric = 10 * np.log10(
+        #     (TDdesSig - self.TDdesiredSignals_est)**2 / TDdesSig**2
+        # )
+        # yLabel = 'NMSE (DANSE vs. MWF) [dB]'
+        # Option 2 as in [2], see Eq. (57): MSE [dB]
+        convMetric = 10 * np.log10(
+            np.abs(TDdesSig - self.TDdesiredSignals_est)**2
         )
-        if self.computeCentralised:
-            # Compare to centralised filter convergence
-            axes.plot(
-                np.abs(
-                    self.filtersCentr[nodeIdx][:, :, self.referenceSensor].T
-                ),
-                'k'
+        yLabel = 'MSE (DANSE vs. MWF) [dB]'
+        # Option 3: root-MSE (RMSE)
+        # convMetric = np.sqrt(np.abs(TDdesSig - self.TDdesiredSignals_est)**2)
+        # yLabel = 'RMSE (DANSE vs. MWF) [dB]'
+
+        convMetricPerIter = np.zeros((
+            self.STFTDdesiredSignals_est.shape[1],
+            convMetric.shape[1]
+        ))
+        for ii in range(self.STFTDdesiredSignals_est.shape[1]):
+            idxBeg = ii * self.Ns
+            idxEnd = idxBeg + self.DFTsize
+            convMetricPerIter[ii, :] = np.mean(
+                convMetric[idxBeg:idxEnd, :], axis=0
             )
-        axes.grid()
-        axes.set_ylabel('$|w_{{11,1}}[\\nu,i]|$')
+        # Option 2 ...
+        x = None
+
+        fig, axes = plt.subplots(2,1)
+        fig.set_size_inches(8.5, 3.5)
+        for k in range(self.nNodes):
+            axes[0].plot(convMetricPerIter[:, k], label=f'Node {k + 1}')
+        # axes.hlines(y=0, xmin=0, xmax=len(convMetricPerIter), colors='k')
+        axes[0].grid()
+        axes[0].set_ylabel(yLabel)
         # Make double x-axis (top and bottom)
-        axes2 = axes.twiny()
+        axes2 = axes[0].twiny()
         axes2.set_xlabel('DANSE updates (frame index $i$)', loc='left')
-        axes2.set_xticks(axes.get_xticks())
+        axes2.set_xticks(axes[0].get_xticks())  # FIXME: starting at negative iteration index...
         xticks = np.linspace(
-            start=0, stop=self.filters[nodeIdx].shape[1], num=9
+            start=0, stop=len(convMetricPerIter), num=9
         )
-        axes.set_xticks(xticks)
-        axes.set_xticklabels(
+        axes[0].set_xticks(xticks)
+        axes[0].set_xticklabels(
             np.round(
                 xticks * self.Ns / self.baseFs + self.firstUpRefSensor
                 , 2
             )
         )
-        axes.set_xlabel('Time [s]', loc='left')
+        axes[0].set_xlabel('Time [s]', loc='left')
+        # Legend
+        axes[0].legend()
+        #
+        # Axes[1]: waveform
+        axes[1].plot(TDdesSig[:, 0], label='$d_1(t)$')
+        axes[1].plot(self.TDdesiredSignals_est[:, 0], label='$\hat{d}_1(t)$')
         
         plt.tight_layout()	
         plt.show(block=False)
+
+        stop = 1
 
         return None
 
@@ -370,9 +414,9 @@ def compute_metrics(
             # Microphone signals
             noisy=wasn[k].data[:, out.referenceSensor],
             # DANSE outputs (desired signal estimates)
-            enhan=out.TDdesiredSignals[:, k],
-            enhan_c=out.TDdesiredSignals_c[:, k],
-            enhan_l=out.TDdesiredSignals_l[:, k],
+            enhan=out.TDdesiredSignals_est[:, k],
+            enhan_c=out.TDdesiredSignals_est_c[:, k],
+            enhan_l=out.TDdesiredSignals_est_l[:, k],
             # Start indices
             startIdx=startIdx[k],
             startIdxCentr=startIdxCentr[k],
@@ -640,24 +684,24 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
             int(wasn[k].fs), data
         )
         # vvv if enhancement has been performed
-        if len(out.TDdesiredSignals[:, k]) > 0:
-            data = normalize_toint16(out.TDdesiredSignals[:, k])
+        if len(out.TDdesiredSignals_est[:, k]) > 0:
+            data = normalize_toint16(out.TDdesiredSignals_est[:, k])
             wavfile.write(
                 f'{folder}/wav/enhanced_N{k + 1}.wav',
                 int(wasn[k].fs), data
             )
         # vvv if enhancement has been performed and centralised estimate computed
         if out.computeCentralised:
-            if len(out.TDdesiredSignals_c[:, k]) > 0:
-                data = normalize_toint16(out.TDdesiredSignals_c[:, k])
+            if len(out.TDdesiredSignals_est_c[:, k]) > 0:
+                data = normalize_toint16(out.TDdesiredSignals_est_c[:, k])
                 wavfile.write(
                     f'{folder}/wav/enhancedCentr_N{k + 1}.wav',
                     int(wasn[k].fs), data
                 )
         # vvv if enhancement has been performed and local estimate computed
         if out.computeLocal:
-            if len(out.TDdesiredSignals_l[:, k]) > 0:
-                data = normalize_toint16(out.TDdesiredSignals_l[:, k])
+            if len(out.TDdesiredSignals_est_l[:, k]) > 0:
+                data = normalize_toint16(out.TDdesiredSignals_est_l[:, k])
                 wavfile.write(
                     f'{folder}/wav/enhancedLocal_N{k + 1}.wav',
                     int(wasn[k].fs), data

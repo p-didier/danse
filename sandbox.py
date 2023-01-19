@@ -20,11 +20,12 @@ class TestParameters:
     #
     referenceSensor: int = 0    # Index of the reference sensor at each node
     #
-    wasn: WASNparameters = WASNparameters(
+    wasnParams: WASNparameters = WASNparameters(
         sigDur=5
     )
     danseParams: DANSEparameters = DANSEparameters()
-    exportFolder: str = f'{Path(__file__).parent}/out/dxcptests'  # folder to export outputs
+    # exportFolder: str = f'{Path(__file__).parent}/out/dxcptests'  # folder to export outputs
+    exportFolder: str = f'{Path(__file__).parent}/out/20230119_convergencePlotTest'  # folder to export outputs
     #
     seed: int = 12345
 
@@ -32,10 +33,10 @@ class TestParameters:
         np.random.seed(self.seed)  # set random seed
         random.seed(self.seed)  # set random seed
         #
-        self.testid = f'J{self.wasn.nNodes}Mk{list(self.wasn.nSensorPerNode)}WNn{self.wasn.nNoiseSources}Nd{self.wasn.nDesiredSources}T60_{int(self.wasn.t60)*1e3}ms'
+        self.testid = f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60)*1e3}ms'
         # Check consistency
         if self.danseParams.nodeUpdating == 'sym' and\
-            any(self.wasn.SROperNode != 0):
+            any(self.wasnParams.SROperNode != 0):
             raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
 
     def save(self, exportType='pkl'):
@@ -47,8 +48,8 @@ class TestParameters:
         return met.load(self, foldername, silent=True, dataType=dataType)
 
 p = TestParameters(
-    wasn=WASNparameters(
-        sigDur=4,
+    wasnParams=WASNparameters(
+        sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.2,
@@ -90,15 +91,15 @@ p = TestParameters(
         computeLocal=True,
     )
 )
-p.danseParams.get_wasn_info(p.wasn)  # complete parameters
+p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
 
 def main(p: TestParameters):
 
     # Build room
-    room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasn)
+    room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasnParams)
 
     # Build WASN (asynchronicities, topology)
-    wasn = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasn)
+    wasn = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasnParams)
 
     # DANSE
     out, wasnUpdated = danse_it_up(wasn, p)
@@ -119,7 +120,7 @@ def danse_it_up(
     Container function for prepping signals and launching the DANSE algorithm.
     """
 
-    for k in range(p.wasn.nNodes):  # for each node
+    for k in range(p.wasnParams.nNodes):  # for each node
         # Derive exponential averaging factor for `Ryy` and `Rnn` updates
         wasn[k].beta = np.exp(np.log(0.5) / \
             (p.danseParams.t_expAvg50p * wasn[k].fs / p.danseParams.Ns))
@@ -165,16 +166,19 @@ def postprocess(out: pp.DANSEoutputs,
         Path(p.exportFolder).mkdir()
 
     if runit:
+        # Export convergence plot
+        out.plot_convergence(wasn)
+
         # Export .wav files
         out.export_sounds(wasn, p.exportFolder)
 
         # Plot (+ export) acoustic scenario (WASN)
-        pp.plot_asc(room, p.wasn, p.exportFolder)
+        pp.plot_asc(room, p.wasnParams, p.exportFolder)
 
         # Plot SRO estimation performance
         fig = out.plot_sro_perf(
             Ns=p.danseParams.Ns,
-            fs=p.wasn.fs,
+            fs=p.wasnParams.fs,
             xaxistype='both'  # "both" == iterations [-] _and_ instants [s]
         )
         fig.savefig(f'{p.exportFolder}/sroEvolution.png')
