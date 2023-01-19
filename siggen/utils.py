@@ -1,14 +1,15 @@
-
+import os
 import copy
 import librosa
 import resampy
 import numpy as np
 import pickle, gzip
 from numba import njit
+from pathlib import Path
+from siggen import classes
 import scipy.signal as sig
 import pyroomacoustics as pra
 import matplotlib.pyplot as plt
-from siggen import classes
 from scipy.spatial.transform import Rotation as rot
 
 
@@ -32,6 +33,17 @@ def build_room(p: classes.WASNparameters):
         Wet (RIR-affected) individual speech signal at the reference
         sensor of each node.
     """
+
+    # if p.loadFrom is not None:
+    #     # Check `p.loadFrom` is a valid path to a pre-built acoustic scenario
+    #     if Path(p.loadFrom + '/AcousticScenario.pkl.gz').is_file():
+    #         print(f'Loading ASC from path: "{p.loadFrom}"')
+    #         load_asc_from_folder(p.loadFrom)
+    #     else:
+    #         inp = input(f'Path: "{p.loadFrom}" does not correspond to ASC. Continue? [[y]/n]  ')
+    #         if inp in ['n', 'N']:
+    #             raise ValueError('Aborted.')
+
     
     # Invert Sabine's formula to obtain the parameters for the ISM simulator
     if p.t60 == 0:
@@ -114,6 +126,18 @@ def build_room(p: classes.WASNparameters):
     vad, wetSpeechAtRefSensor = get_vad(rirsNodes, desiredSignalsRaw, p)
 
     return room, vad, wetSpeechAtRefSensor
+
+
+# def load_asc_from_folder(path):
+#     """Load an existing acoustic scenario from a directory."""
+
+#     # Load raw
+#     asc = classes.AcousticScenario().load(path)
+
+#     # Process to match format of non-loaded ASCs
+#     stop = 1
+
+#     return None
 
 
 def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):

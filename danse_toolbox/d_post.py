@@ -110,7 +110,7 @@ class DANSEoutputs(DANSEparameters):
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.png')
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
 
-    def plot_convergence(self, nodeIdx=0):
+    def plot_convergence(self, exportFolder):
         """
         Shows convergence of DANSE.
         Created on 19.01.2023 (as a result of OJSP reviewers' suggestions).
@@ -123,9 +123,9 @@ class DANSEoutputs(DANSEparameters):
             # Make double x-axis (top and bottom)
             axes2 = ax.twiny()
             axes2.set_xlabel('DANSE updates (frame index $i$)', loc='left')
-            axes2.set_xticks(ax.get_xticks())
+            axes2.set_xticks(copy.copy(ax.get_xticks()))
             xticks = np.linspace(
-                start=0, stop=self.filters[nodeIdx].shape[1], num=9
+                start=0, stop=self.filters[k].shape[1], num=9
             )
             ax.set_xticks(xticks)
             ax.set_xticklabels(
@@ -137,22 +137,46 @@ class DANSEoutputs(DANSEparameters):
             ax.set_xlabel('Time [s]', loc='left')
             ax.legend()
         
-        diffFiltersReal = 20 * np.log10(np.mean(np.abs(
-            np.real(self.filters[nodeIdx][:, :, self.referenceSensor].T) - \
-            np.real(self.filtersCentr[nodeIdx][:, :, self.referenceSensor].T)
-        ), axis=1))
-        diffFiltersImag = 20 * np.log10(np.mean(np.abs(
-            np.imag(self.filters[nodeIdx][:, :, self.referenceSensor].T) - \
-            np.imag(self.filtersCentr[nodeIdx][:, :, self.referenceSensor].T)
-        ), axis=1))
+        for k in range(self.nNodes):
+            diffFiltersReal = 20 * np.log10(np.mean(np.abs(
+                np.real(self.filters[k][:, :, self.referenceSensor].T) - \
+                np.real(self.filtersCentr[k][:, :, self.referenceSensor].T)
+            ), axis=1))
+            diffFiltersImag = 20 * np.log10(np.mean(np.abs(
+                np.imag(self.filters[k][:, :, self.referenceSensor].T) - \
+                np.imag(self.filtersCentr[k][:, :, self.referenceSensor].T)
+            ), axis=1))
 
-        fig, axes = plt.subplots(1,1)
-        fig.set_size_inches(5.5, 3.5)
-        axes.plot(diffFiltersReal, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Re(\\tilde{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i]) - Re(\\hat{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
-        axes.plot(diffFiltersImag, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Im(\\tilde{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i]) - Im(\\hat{{w}}_{{{nodeIdx+1}{nodeIdx+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
-        _format_ax(axes, title='Convergence of DANSE towards centralised estimate')
-        plt.tight_layout()
-        plt.show(block=False)
+            fig, axes = plt.subplots(1,1)
+            fig.set_size_inches(5.5, 3.5)
+            axes.plot(diffFiltersReal, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Re(\\tilde{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i]) - Re(\\hat{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
+            axes.plot(diffFiltersImag, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Im(\\tilde{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i]) - Im(\\hat{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
+            #
+            axes.set_title(f'DANSE convergence towards centr. MWF estimate: node {k+1}')
+            axes.set_xlim([0, len(diffFiltersReal)])
+            # Make double x-axesis (top and bottom)
+            axes2 = axes.twiny()
+            axes2.set_xlabel('DANSE updates (frame index $i$)', loc='left')
+            axes2.set_xticks(copy.copy(axes.get_xticks()))
+            xticks = np.linspace(
+                start=0, stop=self.filters[k].shape[1], num=9
+            )
+            axes.set_xticks(xticks)
+            axes.set_xticklabels(
+                np.round(
+                    xticks * self.Ns / self.baseFs + self.firstUpRefSensor
+                    , 2
+                )
+            )
+            axes.set_xlabel('Time [s]', loc='left')
+            axes.legend()
+            axes.grid()
+            #
+            plt.tight_layout()
+            plt.show(block=False)
+            # Export
+            fig.savefig(f'{exportFolder}/converg_node{k+1}.png')
+            fig.savefig(f'{exportFolder}/converg_node{k+1}.pdf')
 
         stop = 1
 
