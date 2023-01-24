@@ -2,19 +2,26 @@
 # visualizing DANSE outputs.
 #
 # ~created on 20.10.2022 by Paul Didier
+import gzip
 import time
 import copy
+import pickle
 import numpy as np
-from scipy.io import wavfile
-import matplotlib.pyplot as plt
 from pathlib import Path
+from scipy.io import wavfile
 import pyroomacoustics as pra
-from dataclasses import dataclass, fields
-from siggen.classes import Node, WASNparameters
-from danse_toolbox.d_classes import DANSEvariables
+import matplotlib.pyplot as plt
 from danse_toolbox.d_eval import *
+from dataclasses import dataclass, fields
 import danse_toolbox.dataclass_methods as met
+from siggen.classes import Node, WASNparameters
 from danse_toolbox.d_base import DANSEparameters
+from danse_toolbox.d_classes import DANSEvariables
+
+@dataclass
+class ConvergenceData:
+    DANSEfilters: np.ndarray = np.array([])
+    DANSEfiltersCentr: np.ndarray = np.array([])
 
 @dataclass
 class DANSEoutputs(DANSEparameters):
@@ -115,28 +122,17 @@ class DANSEoutputs(DANSEparameters):
         Shows convergence of DANSE.
         Created on 19.01.2023 (as a result of OJSP reviewers' suggestions).
         """
-        
-        def _format_ax(ax, title):
-            """Helper function to format plot axes."""
-            ax.grid()
-            ax.set_title(title)
-            # Make double x-axis (top and bottom)
-            axes2 = ax.twiny()
-            axes2.set_xlabel('DANSE updates (frame index $i$)', loc='left')
-            axes2.set_xticks(copy.copy(ax.get_xticks()))
-            xticks = np.linspace(
-                start=0, stop=self.filters[k].shape[1], num=9
-            )
-            ax.set_xticks(xticks)
-            ax.set_xticklabels(
-                np.round(
-                    xticks * self.Ns / self.baseFs + self.firstUpRefSensor
-                    , 2
-                )
-            )
-            ax.set_xlabel('Time [s]', loc='left')
-            ax.legend()
-        
+
+        DANSEfilters_all = np.zeros((
+            self.filters[0].shape[1],
+            self.filters[0].shape[0],  # inverted dimensions because of transpose
+            self.nNodes
+        ), dtype=complex)
+        DANSEfiltersCentr_all = np.zeros((
+            self.filtersCentr[0].shape[1],
+            self.filtersCentr[0].shape[0],  # inverted dimensions because of transpose
+            self.nNodes
+        ), dtype=complex)
         for k in range(self.nNodes):
             diffFiltersReal = 20 * np.log10(np.mean(np.abs(
                 np.real(self.filters[k][:, :, self.referenceSensor].T) - \
@@ -177,10 +173,26 @@ class DANSEoutputs(DANSEparameters):
             # Export
             fig.savefig(f'{exportFolder}/converg_node{k+1}.png')
             fig.savefig(f'{exportFolder}/converg_node{k+1}.pdf')
-
-        stop = 1
+            # Aggregate for export
+            DANSEfilters_all[:, :, k] =\
+                self.filters[k][:, :, self.referenceSensor].T
+            DANSEfiltersCentr_all[:, :, k] =\
+                self.filtersCentr[k][:, :, self.referenceSensor].T
+        
+        # Export for further post-processing
+        convData = ConvergenceData(
+            DANSEfilters=DANSEfilters_all,
+            DANSEfiltersCentr=DANSEfiltersCentr_all
+        )
+        pickle.dump(
+            convData,
+            gzip.open(
+                f'{exportFolder}/{type(convData).__name__}.pkl.gz', 'wb'
+            )
+        )
 
         return None
+
 
     def plot_sro_perf(self, Ns, fs, xaxistype='both'):
         """
@@ -205,8 +217,8 @@ class DANSEoutputs(DANSEparameters):
         """
         nNodes = len(self.SROsResiduals)
 
-        # TODO: get correct values from somewhere
-        self.neighbourIndex = [0 for _ in range(nNodes)] # FIXME:FIXME:FIXME:
+        self.neighbourIndex = [0 if k > 0 else 1 for k in range(nNodes)] # TODO: for now just valid for fully connected topology
+        idxFirstNeighbour = [0 for _ in range(nNodes)]   # TODO: for now just valid for fully connected topology
 
         fig = plt.figure(figsize=(6,2))
         ax = fig.add_subplot(111)
@@ -214,30 +226,30 @@ class DANSEoutputs(DANSEparameters):
             if self.compensateSROs:
                 if k == 0:
                     ax.plot(
-                        self.SROsResiduals[k] * 1e6, f'C{k}-',
+                        self.SROsResiduals[k][:, idxFirstNeighbour[k]] * 1e6, f'C{k}-',
                         label=f'$\\Delta\\hat{{\\varepsilon}}_{{{k+1}{self.neighbourIndex[k]+1}}}$'
                     )
                     ax.plot(
-                        self.SROsEstimates[k] * 1e6,
+                        self.SROsEstimates[k][:, idxFirstNeighbour[k]] * 1e6,
                         f'C{k}--', label=f'$\\hat{{\\varepsilon}}_{{{k+1}{self.neighbourIndex[k]+1}}}$'
                     )
                 else:  # adapt labels for condensed legend
                     ax.plot(
-                        self.SROsResiduals[k] * 1e6,
+                        self.SROsResiduals[k][:, idxFirstNeighbour[k]] * 1e6,
                         f'C{k}-',
                         label=f'Node {k+1}'
                     )
-                    ax.plot(self.SROsEstimates[k] * 1e6, f'C{k}--')
+                    ax.plot(self.SROsEstimates[k][:, idxFirstNeighbour[k]] * 1e6, f'C{k}--')
             else:
                 if k == 0:
                     ax.plot(
-                        self.SROsResiduals[k] * 1e6,
+                        self.SROsResiduals[k][:, idxFirstNeighbour[k]] * 1e6,
                         f'C{k}-',
                         label=f'$\\hat{{\\varepsilon}}_{{{k+1}{self.neighbourIndex[k]+1}}}$'
                     )
                 else:  # adapt labels for condensed legend
                     ax.plot(
-                        self.SROsResiduals[k] * 1e6,
+                        self.SROsResiduals[k][:, idxFirstNeighbour[k]] * 1e6,
                         f'C{k}-',
                         label=f'$(k,q)=({k+1},{self.neighbourIndex[k]+1})$'
                     )
@@ -247,7 +259,7 @@ class DANSEoutputs(DANSEparameters):
             if k == 0:
                 ax.hlines(
                     y=(self.SROgroundTruth[self.neighbourIndex[k]] -\
-                        self.SROgroundTruth[k]) * 1e6,
+                        self.SROgroundTruth[k]),
                     xmin=0,
                     xmax=len(self.SROsResiduals[0]),
                     colors=f'C{k}',
@@ -258,7 +270,7 @@ class DANSEoutputs(DANSEparameters):
                 
                 ax.hlines(
                     y=(self.SROgroundTruth[self.neighbourIndex[k]] -\
-                        self.SROgroundTruth[k]) * 1e6,
+                        self.SROgroundTruth[k]),
                     xmin=0,
                     xmax=len(self.SROsResiduals[0]),
                     colors=f'C{k}',

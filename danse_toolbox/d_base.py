@@ -168,8 +168,11 @@ class DANSEparameters(Hyperparameters):
         # the desired signal estimates: "wola": WOLA synthesis,
                                     # "conv": T(z)-approximation.
     computeCentralised: bool = False    # if True, compute centralised
-        # estimate (using all microphone signals in network). TODO: TODO: TODO: TODO: 
-    computeLocal: bool = False  # if True, compute local estimate at each node TODO: TODO: TODO: TODO: 
+        # estimate (using all microphone signals in network).
+    computeLocal: bool = False  # if True, compute local estimate at each node.
+    computeNoiseFree: bool = False  # if True, compute estimate with the
+        # DANSE filters, but using noise-free signals (y_k's and z_q's).
+        # TODO: TODO: TODO: TODO: TODO: TODO: TODO: 
     # Metrics
     dynMetrics: DynamicMetricsParameters = DynamicMetricsParameters()
     gammafwSNRseg: float = 0.2  # gamma exponent for fwSNRseg

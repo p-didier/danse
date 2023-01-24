@@ -53,11 +53,12 @@ p = TestParameters(
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.2,
+        interSensorDist=0.2,
         # nNodes=2,
         nNodes=4,
+        nSensorPerNode=[1, 3, 2, 5],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
-        nSensorPerNode=[1, 3, 2, 5],
         # nSensorPerNode=[1, 1],
         desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
             for file in [
@@ -69,8 +70,11 @@ p = TestParameters(
                 'whitenoise_signal_1.wav',
                 'whitenoise_signal_2.wav'
             ]],
+        # SROperNode=np.array([0, 200, -200, 400])
+        SROperNode=np.array([0, 20, -20, 40])
+        # SROperNode=np.array([0, 0, 0, 0])
         # SROperNode=np.array([0, 50])
-        SROperNode=np.array([0, 0]),
+        # SROperNode=np.array([0, 0]),
         # loadFrom=None,
         # loadFrom='C:/Users/pdidier/Dropbox/PC/Documents/sounds-phd/02_data/01_acoustic_scenarios/for_submissions/icassp2023/J4Mk[1_3_2_5]_Ns1_Nn2/AS18_RT150ms'
     ),
@@ -81,13 +85,13 @@ p = TestParameters(
         nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
-        # estimateSROs='CohDrift',
-        estimateSROs='DXCPPhaT',
-        compensateSROs=True,
-        # compensateSROs=False,
+        estimateSROs='CohDrift',
+        # estimateSROs='DXCPPhaT',
+        # compensateSROs=True,
+        compensateSROs=False,
         cohDrift=CohDriftParameters(
             loop='open',
-            alpha=0.99
+            alpha=0.95
         ),
         computeCentralised=True,
         computeLocal=True,
