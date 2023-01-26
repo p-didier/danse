@@ -1,10 +1,46 @@
 import copy
+import random
 import numpy as np
+from pathlib import Path
 import scipy.linalg as sla
+from siggen.classes import *
 from siggen.classes import Node
 from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
+
+@dataclass
+class TestParameters:
+    selfnoiseSNR: int = -50 # [dB] microphone self-noise SNR
+    #
+    referenceSensor: int = 0    # Index of the reference sensor at each node
+    #
+    wasnParams: WASNparameters = WASNparameters(
+        sigDur=5
+    )
+    danseParams: base.DANSEparameters = base.DANSEparameters()
+    exportFolder: str = ''  # folder to export outputs
+    #
+    seed: int = 12345
+
+    def __post_init__(self):
+        np.random.seed(self.seed)  # set random seed
+        random.seed(self.seed)  # set random seed
+        #
+        self.testid = f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60)*1e3}ms'
+        # Check consistency
+        if self.danseParams.nodeUpdating == 'sym' and\
+            any(self.wasnParams.SROperNode != 0):
+            raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
+
+    def save(self, exportType='pkl'):
+        """Saves dataclass to Pickle archive."""
+        met.save(self, self.exportFolder, exportType=exportType)
+
+    def load(self, foldername, dataType='pkl'):
+        """Loads dataclass to Pickle archive in folder `foldername`."""
+        return met.load(self, foldername, silent=True, dataType=dataType)
+
 
 @dataclass
 class DANSEvariables(base.DANSEparameters):

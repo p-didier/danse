@@ -1,53 +1,19 @@
 
 import sys
-import random
 import numpy as np
-import pyroomacoustics as pra
 from pathlib import Path
 from siggen.classes import *
 import siggen.utils as sig_ut
+import pyroomacoustics as pra
+import danse_toolbox.d_post as pp
 import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
-import danse_toolbox.d_post as pp
-import danse_toolbox.dataclass_methods as met
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 
-@dataclass
-class TestParameters:
-    selfnoiseSNR: int = -50 # [dB] microphone self-noise SNR
-    #
-    referenceSensor: int = 0    # Index of the reference sensor at each node
-    #
-    wasnParams: WASNparameters = WASNparameters(
-        sigDur=5
-    )
-    danseParams: DANSEparameters = DANSEparameters()
-    # exportFolder: str = f'{Path(__file__).parent}/out/dxcptests'  # folder to export outputs
-    exportFolder: str = f'{Path(__file__).parent}/out/20230119_convergencePlotTest'  # folder to export outputs
-    #
-    seed: int = 12345
-
-    def __post_init__(self):
-        np.random.seed(self.seed)  # set random seed
-        random.seed(self.seed)  # set random seed
-        #
-        self.testid = f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60)*1e3}ms'
-        # Check consistency
-        if self.danseParams.nodeUpdating == 'sym' and\
-            any(self.wasnParams.SROperNode != 0):
-            raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
-
-    def save(self, exportType='pkl'):
-        """Saves dataclass to Pickle archive."""
-        met.save(self, self.exportFolder, exportType=exportType)
-
-    def load(self, foldername, dataType='pkl'):
-        """Loads dataclass to Pickle archive in folder `foldername`."""
-        return met.load(self, foldername, silent=True, dataType=dataType)
-
 p = TestParameters(
+    exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
     wasnParams=WASNparameters(
         sigDur=15,
         rd=np.array([5, 5, 5]),
@@ -56,10 +22,10 @@ p = TestParameters(
         interSensorDist=0.2,
         # nNodes=2,
         nNodes=4,
+        # nSensorPerNode=[1, 1],
         nSensorPerNode=[1, 3, 2, 5],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
-        # nSensorPerNode=[1, 1],
         desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
             for file in [
                 'speech1.wav',
@@ -70,13 +36,14 @@ p = TestParameters(
                 'whitenoise_signal_1.wav',
                 'whitenoise_signal_2.wav'
             ]],
-        # SROperNode=np.array([0, 200, -200, 400])
-        SROperNode=np.array([0, 20, -20, 40])
-        # SROperNode=np.array([0, 0, 0, 0])
-        # SROperNode=np.array([0, 50])
+        # SROperNode=np.array([0, 200, -200, 400]),
+        SROperNode=np.array([0, 50, -50, 100]),
+        # SROperNode=np.array([0, 20, -20, 40]),
+        # SROperNode=np.array([0, 0, 0, 0]),
+        # SROperNode=np.array([0, 50]),
         # SROperNode=np.array([0, 0]),
         # loadFrom=None,
-        # loadFrom='C:/Users/pdidier/Dropbox/PC/Documents/sounds-phd/02_data/01_acoustic_scenarios/for_submissions/icassp2023/J4Mk[1_3_2_5]_Ns1_Nn2/AS18_RT150ms'
+        # loadFrom='C:/Users/pdidier/Dropbox/PC/Documents/sounds-phd/02_data/01_acoustic_scenarios/for_submissions/icassp2023/J4Mk[1_3_2_5]_Ns1_Nn2/AS18_RT150ms',
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
