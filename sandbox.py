@@ -19,10 +19,17 @@ p = TestParameters(
     wasnParams=WASNparameters(
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
-            topologyType='fully-connected',
-            commDistance=1.,  # [m]
+            # topologyType='fully-connected',
+            topologyType='user-defined',
+            commDistance=4.,  # [m]
             seed=SEED,
-            # plotTopo=True
+            # plotTopo=True,
+            userDefinedTopo=np.array([
+                [1, 0, 0, 0],  # Node 1
+                [0, 1, 1, 0],  # Node 2
+                [0, 1, 1, 0],  # Node 3
+                [0, 0, 0, 1],  # Node 4
+            ])
         ),
         sigDur=15,
         rd=np.array([5, 5, 5]),
@@ -51,8 +58,6 @@ p = TestParameters(
         # SROperNode=np.array([0, 0, 0, 0]),
         # SROperNode=np.array([0, 50]),
         # SROperNode=np.array([0, 0]),
-        # loadFrom=None,
-        # loadFrom='C:/Users/pdidier/Dropbox/PC/Documents/sounds-phd/02_data/01_acoustic_scenarios/for_submissions/icassp2023/J4Mk[1_3_2_5]_Ns1_Nn2/AS18_RT150ms',
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,

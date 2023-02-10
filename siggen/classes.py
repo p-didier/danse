@@ -44,13 +44,16 @@ class TopologyParameters:
     topologyType: str = 'fully-connected'       # type of WASN topology
         # ^^^ valid values:
         #  - "fully-connected": Fully connected WASN;
-        #  - "ad-hoc": Ad-hoc topology WASN;
+        #  - "ad-hoc": Ad-hoc topology WASN, based on `commDistance` field;
+        #  - "user-defined": User-defined topology.
     #
     # vvv Only used if `topologyType == 'ad-hoc'`:
     commDistance: float = 0.    # maximum inter-node communication distance [m]
     seed: int = 12345     # random-generator seed
     plotTopo: bool = False  # if True, plots a visualization of the topology,
                             # once created in `siggen.utils.get_topo()`.
+    userDefinedTopo: np.ndarray = np.array([])  # connectivity matrix
+    # ^^^ used only iff `topologyType == 'user-defined'`.
 
 @dataclass
 class WASNparameters(AcousticScenarioParameters):
