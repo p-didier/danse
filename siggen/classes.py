@@ -30,10 +30,10 @@ class AcousticScenarioParameters:
     VADenergyFactor: float = 4000           # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
     VADwinLength: float = 40e-3             # [s] VAD window length
     #
-    nNodes: int = 1        # number of nodes in scenario
+    nNodes: int = 0        # number of nodes in scenario
     nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node
     #
-    loadFrom: str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))
+    loadFrom: str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))')
 
 
 @dataclass
@@ -86,6 +86,8 @@ class WASNparameters(AcousticScenarioParameters):
         else:  # < --required check for JSON export/import
             self.fsPerNode = self.fs *\
                 (1 + np.array(self.SROperNode[:-1]) * 1e-6)
+        if self.nNodes != len(self.nSensorPerNode):
+            raise ValueError(f'The length of the list containing the numbers of sensor per node ({len(self.nSensorPerNode)}) does not match the number of nodes ({self.nNodes}).')
 
 @dataclass
 class Node:

@@ -25,10 +25,9 @@ p = TestParameters(
             seed=SEED,
             # plotTopo=True,
             userDefinedTopo=np.array([
-                [1, 0, 0, 0],  # Node 1
-                [0, 1, 1, 0],  # Node 2
-                [0, 1, 1, 0],  # Node 3
-                [0, 0, 0, 1],  # Node 4
+                [1, 0, 0],  # Node 1
+                [0, 1, 1],  # Node 2
+                [0, 1, 1],  # Node 3
             ])
         ),
         sigDur=15,
@@ -37,9 +36,11 @@ p = TestParameters(
         t60=0.2,
         interSensorDist=0.2,
         # nNodes=2,
-        nNodes=4,
+        nNodes=3,
+        # nNodes=4,
         # nSensorPerNode=[1, 1],
-        nSensorPerNode=[1, 3, 2, 5],
+        nSensorPerNode=[1, 3, 2],
+        # nSensorPerNode=[1, 3, 2, 5],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
         desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
@@ -53,11 +54,12 @@ p = TestParameters(
                 'whitenoise_signal_2.wav'
             ]],
         # SROperNode=np.array([0, 200, -200, 400]),
-        SROperNode=np.array([0, 50, -50, 100]),
+        # SROperNode=np.array([0, 50, -50, 100]),
         # SROperNode=np.array([0, 20, -20, 40]),
         # SROperNode=np.array([0, 0, 0, 0]),
         # SROperNode=np.array([0, 50]),
         # SROperNode=np.array([0, 0]),
+        SROperNode=np.array([0]),
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
