@@ -537,13 +537,6 @@ def get_topo(
     # Infer useful variables
     numNodes = np.amax(sensorToNodeIndices) + 1
 
-    # Connectivity matrix. 
-    # If `{topo}_{i,j} == 0`: `i` and `j` are not connected.
-    # If `{topo}_{i,j} == 1`: `i` and `j` can communicate with each other.
-    # Potential TODO : oriented graph vvv
-    # If `{topo}_{i,j} == 2`: `i` can send data to `j` but not vice-versa.
-    # If `{topo}_{i,j} == 3`: `j` can send data to `i` but not vice-versa.
-
     # Get geometrical central coordinates of each node
     geomCentreCoords = np.zeros((3, numNodes))
     for k in range(numNodes):
@@ -551,9 +544,15 @@ def get_topo(
             sensorCoords[:, sensorToNodeIndices == k],
             axis=1
         )
+
+    # Potential TODO : oriented graph vvv
+    # If `{topo}_{i,j} == 2`: `i` can send data to `j` but not vice-versa.
+    # If `{topo}_{i,j} == 3`: `j` can send data to `i` but not vice-versa.
     
+    # ------- FULLY CONNECTED -------
     if topoParams.topologyType == 'fully-connected':
         topo = np.ones((numNodes, numNodes), dtype=int)
+    # ------- AD HOC -------
     elif topoParams.topologyType == 'ad-hoc':
         topo = np.zeros((numNodes, numNodes), dtype=int)
         for k in range(numNodes):
@@ -564,6 +563,7 @@ def get_topo(
                 axis=0
             )
             topo[k, :] = distWrtOthers < topoParams.commDistance
+    # ------- USER DEFINED -------
     elif topoParams.topologyType == 'user-defined':
         # User-defined topology
         if topoParams.userDefinedTopo.shape != (numNodes, numNodes):
@@ -578,6 +578,7 @@ def get_topo(
         ):
             raise ValueError('The user-defined WASN connectivity matrix must be symmetrical.')
         topo = topoParams.userDefinedTopo
+    # ------- INVALID -------
     else:
         raise ValueError(f'Invalid topology type: "{topoParams.topologyType}".')
 
