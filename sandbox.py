@@ -11,10 +11,19 @@ from danse_toolbox.d_classes import *
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
+SEED = 12345
 
 p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
+    seed=SEED,
     wasnParams=WASNparameters(
+        topologyParams=TopologyParameters(  # topology-related parameters
+            # topologyType='ad-hoc',
+            topologyType='fully-connected',
+            commDistance=1.,  # [m]
+            seed=SEED,
+            # plotTopo=True
+        ),
         sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
@@ -72,13 +81,19 @@ def main(p: TestParameters):
     room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasnParams)
 
     # Build WASN (asynchronicities, topology)
-    wasn = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasnParams)
+    connecMatrix, wasn = sig_ut.build_wasn(
+        room,
+        vad,
+        wetSpeechAtRefSensor,
+        p.wasnParams
+    )
 
+    pp.plot_asc(room, p.wasnParams, p.exportFolder, connecMatrix)
     # DANSE
     out, wasnUpdated = danse_it_up(wasn, p)
 
     # Visualize results
-    out = postprocess(out, wasnUpdated, room, p)
+    out = postprocess(out, wasnUpdated, room, p, connecMatrix)
 
     # Save `DANSEoutputs` object after metrics computation in `postprocess()`
     out.save(foldername=p.exportFolder, light=True)
@@ -107,7 +122,9 @@ def danse_it_up(
 def postprocess(out: pp.DANSEoutputs,
         wasn: list[Node],
         room: pra.room.ShoeBox,
-        p: TestParameters) -> pp.DANSEoutputs:
+        p: TestParameters,
+        connecMatrix
+    ) -> pp.DANSEoutputs:
     """
     Defines the post-processing steps to be undertaken after a DANSE run.
     Using the `danse.danse_toolbox.d_post` [abbrev. `pp`] functions.
@@ -122,6 +139,8 @@ def postprocess(out: pp.DANSEoutputs,
         Acoustic scenario under consideration.
     p : `TestParameters` object
         Test parameters.
+    connecMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Connectivity matrix.
     """
 
     # Default booleans
@@ -147,7 +166,7 @@ def postprocess(out: pp.DANSEoutputs,
         out.export_sounds(wasn, p.exportFolder)
 
         # Plot (+ export) acoustic scenario (WASN)
-        pp.plot_asc(room, p.wasnParams, p.exportFolder)
+        pp.plot_asc(room, p.wasnParams, p.exportFolder, connecMatrix)
 
         # Plot SRO estimation performance
         fig = out.plot_sro_perf(

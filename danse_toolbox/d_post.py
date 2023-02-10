@@ -710,7 +710,8 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
 def plot_asc(
         asc: pra.room.ShoeBox,
         p: WASNparameters,
-        folder=None
+        folder='',
+        topology=np.array([])
     ):
     """
     Plots an acoustic scenario nicely.
@@ -723,7 +724,31 @@ def plot_asc(
         WASN parameters.
     folder : str
         Folder where to export figure (if not `None`).
+    topology : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Connectivity matrix.
     """
+
+    def _plot_connections(sensorCoords):
+        """Helper function to plot connections based on WASN topology."""
+        # Get geometrical central coordinates of each node in current 2D plane
+        nodeCoords = np.zeros((2, p.nNodes))
+        for k in range(p.nNodes):
+            nodeCoords[:, k] = np.mean(
+                sensorCoords[:, p.sensorToNodeIndices == k],
+                axis=1
+            )
+        # Add topology connectivity lines
+        for k in range(topology.shape[0]):
+            for q in range(topology.shape[1]):
+                # Only consider upper triangular matrix without diagonal
+                # (redundant, otherwise)
+                if k > q and topology[k, q] == 1:
+                    ax.plot(
+                        [nodeCoords[0, k], nodeCoords[0, q]],
+                        [nodeCoords[1, k], nodeCoords[1, q]],
+                        color='0.75',
+                        linestyle='--'
+                    )
 
     # Determine appropriate node radius for ASC subplots
     nodeRadius = 0
@@ -741,7 +766,7 @@ def plot_asc(
 
     fig = plt.figure()
     fig.set_size_inches(6.5, 3.5)
-
+    #
     ax = fig.add_subplot(1, 2, 1)
     plot_side_room(
         ax,
@@ -754,6 +779,9 @@ def plot_asc(
         showLegend=False,
         nodeRadius=nodeRadius
     )
+    if topology != np.array([]):
+        # Add topology lines
+        _plot_connections(sensorCoords=asc.mic_array.R[:2, :])
     ax.set(xlabel='$x$ [m]', ylabel='$y$ [m]', title='Top view')
     #
     ax = fig.add_subplot(1, 2, 2)
@@ -768,12 +796,15 @@ def plot_asc(
         showLegend=False,
         nodeRadius=nodeRadius
     )
+    if topology != np.array([]):
+        # Add topology lines
+        _plot_connections(sensorCoords=asc.mic_array.R[-2:, :])
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
 
     plt.tight_layout()
 
     # Export
-    if folder is not None:
+    if folder != '':
         fig.savefig(f'{folder}/asc.png')
         fig.savefig(f'{folder}/asc.pdf')
         

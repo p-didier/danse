@@ -395,12 +395,18 @@ def build_wasn(room: pra.room.ShoeBox,
 
     Returns
     -------
+    connecMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Connectivity matrix.
     myWASN : list of `Node` objects
         WASN.
     """
 
     # Create network topological map (inter-node links)
-    neighbors = get_topo(p.topologyType, p.nNodes)
+    connecMatrix, neighbors = get_topo(
+        p.topologyParams,
+        sensorToNodeIndices=p.sensorToNodeIndices,
+        sensorCoords=room.mic_array.R  # microphones positions
+    )
 
     myWASN = []
     for k in range(p.nNodes):
@@ -442,7 +448,7 @@ def build_wasn(room: pra.room.ShoeBox,
         # Add to WASN
         myWASN.append(node)
 
-    return myWASN
+    return connecMatrix, myWASN
 
 
 def apply_self_noise(sig, snr):
@@ -496,7 +502,12 @@ def apply_asynchronicity_at_node(y, fs, sro=0., sto=0.):
     return yAsync, t, fsSRO
 
 
-def get_topo(topoType, K):
+def get_topo(
+    topoParams: classes.TopologyParameters,
+    sensorToNodeIndices,
+    sensorCoords,
+    roomDim=[5, 5, 5]
+    ):
     """
     Create inter-node connections matrix 
     depending on the type of WASN topology,
@@ -505,35 +516,68 @@ def get_topo(topoType, K):
 
     Parameters
     ----------
-    topoType : str 
-        Topology type.
-    K : int
-        Number of nodes in the WASN.
+    topoParams : TopologyParameters class instance
+        Topology parameters (type, max. comm. distance, etc.).
+    sensorToNodeIndices : list (int)
+        Sensor-to-node indices for each sensor in the WASN.
+    sensorCoords : [3 x Nsensors] np.ndarray (float)
+        3-D coordinates of all sensors [m].
+    roomDim : [3 x 1] list or np.ndarray (float)
+        Room dimensions [x, y, z] (for plotting if 
+        `topoParams.plotTopo == True`).
 
     Returns
     -------
+    topo : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Connectivity matrix.
     neighbors : [K x 1] list of [variable-dim x 1] lists (int)
         Node-specific lists of neighbor nodes indices.
     """
 
+    # Infer useful variables
+    numNodes = np.amax(sensorToNodeIndices) + 1
+
     # Connectivity matrix. 
     # If `{topo}_{i,j} == 0`: `i` and `j` are not connected.
     # If `{topo}_{i,j} == 1`: `i` and `j` can communicate with each other.
-    # TODO vvv oriented graph
+    # Potential TODO : oriented graph vvv
     # If `{topo}_{i,j} == 2`: `i` can send data to `j` but not vice-versa.
     # If `{topo}_{i,j} == 3`: `j` can send data to `i` but not vice-versa.
-    if topoType == 'fully-connected':
-        topo = np.ones((K, K), dtype=int)
+
+    # Get geometrical central coordinates of each node
+    geomCentreCoords = np.zeros((3, numNodes))
+    for k in range(numNodes):
+        geomCentreCoords[:, k] = np.mean(
+            sensorCoords[:, sensorToNodeIndices == k],
+            axis=1
+        )
+    
+    if topoParams.topologyType == 'fully-connected':
+        topo = np.ones((numNodes, numNodes), dtype=int)
+    elif topoParams.topologyType == 'ad-hoc':
+        topo = np.zeros((numNodes, numNodes), dtype=int)
+        for k in range(numNodes):
+            currCoords = geomCentreCoords[:, k]
+            # Compute inter-node distances
+            distWrtOthers = np.linalg.norm(
+                geomCentreCoords - currCoords[:, np.newaxis],
+                axis=0
+            )
+            topo[k, :] = distWrtOthers < topoParams.commDistance
     else:
-        raise ValueError(f'Topology type "{topoType}" not implemented yet.')
+        raise ValueError(f'Invalid topology type: "{topoParams.topologyType}".')
+
+    # Plot if asked
+    if topoParams.plotTopo:
+        plot_topology(topo, geomCentreCoords, roomDim)
+        plt.show()
 
     # Get node-specific lists of neighbor nodes indices
-    allNodes = np.arange(K)
+    allNodes = np.arange(numNodes)
     neighbors = [list(allNodes[(topo[:, k] > 0) &\
-        (allNodes != k)]) for k in range(K)]
+        (allNodes != k)]) for k in range(numNodes)]
 
-    return neighbors
-
+    return topo, neighbors
 
 
 def resample_for_sro(x, baseFs, SROppm):
@@ -581,3 +625,61 @@ def resample_for_sro(x, baseFs, SROppm):
     return xResamp, t, fsSRO
 
 
+def plot_topology(connectivityMatrix, nodeCoords, rd):
+    """
+    Plots a visualization of the WASN topology as a 3-D graph.
+    
+    Parameters
+    ----------
+    connectivityMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Connectivity matrix.
+    nodeCoords : [3 x K] np.ndarray (float)
+        3-D coordinates of the geometrical centre of each node in the WASN.
+    rd : [3 x 1] list (or np.ndarray) (float)
+        Room dimensions ([x, y, z]) [m].
+
+    Returns
+    -------
+    fig : matplotlib.pyplot figure handle
+        Figure handle (for, e.g., subsequent export of the figure).
+    """
+
+    def _plot_connection(ax, coordsNode1, coordsNode2):
+        """Helper function to plot a single connection between two nodes."""
+        ax.plot(
+            [coordsNode1[0], coordsNode2[0]],
+            [coordsNode1[1], coordsNode2[1]],
+            [coordsNode1[2], coordsNode2[2]],
+            'k'
+        )
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    fig.set_size_inches(8.5, 3.5)
+    for k in range(nodeCoords.shape[1]):
+        ax.scatter(
+            nodeCoords[0, k],
+            nodeCoords[1, k],
+            nodeCoords[2, k],
+            marker='o',
+            label=f'Node $k={k+1}$'
+        )
+    # Add topology connectivity lines
+    for k in range(connectivityMatrix.shape[0]):
+        for q in range(connectivityMatrix.shape[1]):
+            # Only consider upper triangular matrix without diagonal
+            # (redundant, otherwise)
+            if k > q and connectivityMatrix[k, q] == 1:
+                _plot_connection(ax, nodeCoords[:, k], nodeCoords[:, q])
+    # Format axes
+    ax.set_xlim([0, rd[0]])
+    ax.set_ylim([0, rd[1]])
+    ax.set_zlim([0, rd[2]])
+    ax.set_xlabel('$x$ [m]')
+    ax.set_ylabel('$y$ [m]')
+    ax.set_zlabel('$z$ [m]')
+    ax.legend()
+    ax.grid()
+    plt.tight_layout()	
+    
+    return fig

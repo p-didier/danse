@@ -37,10 +37,25 @@ class AcousticScenarioParameters:
 
 
 @dataclass
+class TopologyParameters:
+    """
+    Class for simulation parameters related to the WASN's topology.
+    """
+    topologyType: str = 'fully-connected'       # type of WASN topology
+        # ^^^ valid values:
+        #  - "fully-connected": Fully connected WASN;
+        #  - "ad-hoc": Ad-hoc topology WASN;
+    #
+    # vvv Only used if `topologyType == 'ad-hoc'`:
+    commDistance: float = 0.    # maximum inter-node communication distance [m]
+    seed: int = 12345     # random-generator seed
+    plotTopo: bool = False  # if True, plots a visualization of the topology,
+                            # once created in `siggen.utils.get_topo()`.
+
+@dataclass
 class WASNparameters(AcousticScenarioParameters):
     SROperNode: np.ndarray = np.array([0])
-    topologyType: str = 'fully-connected'       # type of WASN topology
-        # ^^^ valid values: "fully-connected"; TODO: add some
+    topologyParams: TopologyParameters = TopologyParameters()
     selfnoiseSNR: float = 50   # self-noise SNR
         # [signal: noise-free signal; noise: self-noise]
     
