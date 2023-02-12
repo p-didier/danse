@@ -25,8 +25,8 @@ p = TestParameters(
             seed=SEED,
             # plotTopo=True,
             userDefinedTopo=np.array([
-                [1, 0, 0],  # Node 1
-                [0, 1, 1],  # Node 2
+                [1, 1, 0],  # Node 1
+                [1, 1, 1],  # Node 2
                 [0, 1, 1],  # Node 3
             ])
         ),

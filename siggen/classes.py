@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
 import danse_toolbox.dataclass_methods as met
+import networkx as nx
 
 @dataclass
 class AcousticScenarioParameters:
@@ -55,6 +56,14 @@ class TopologyParameters:
     userDefinedTopo: np.ndarray = np.array([])  # connectivity matrix
     # ^^^ used only iff `topologyType == 'user-defined'`.
 
+    def __post_init__(self):
+        """Post-initialization checks (automatically conducted when invoking
+        a class instance)."""
+        if self.topologyType == 'user-defined':
+            # Check that the WASN is connected
+            if not nx.is_connected(nx.from_numpy_array(self.userDefinedTopo)):
+                raise ValueError('The provided "user-defined" adjacency matrix corresponds to an unconnected graph.')
+
 @dataclass
 class WASNparameters(AcousticScenarioParameters):
     SROperNode: np.ndarray = np.array([0])
@@ -63,6 +72,8 @@ class WASNparameters(AcousticScenarioParameters):
         # [signal: noise-free signal; noise: self-noise]
     
     def __post_init__(self):
+        """Post-initialization checks (automatically conducted when invoking
+        a class instance)."""
         # Dimensionality checks
         if type(self.SROperNode) is not list:
             # ^^^ required check for JSON export/import
