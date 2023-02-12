@@ -96,7 +96,7 @@ def main(p: TestParameters):
         p.wasnParams
     )
 
-    pp.plot_asc(room, p.wasnParams, p.exportFolder, connecMatrix)
+    # pp.plot_asc(room, p.wasnParams, p.exportFolder, connecMatrix)
     # DANSE
     out, wasnUpdated = danse_it_up(wasn, p)
 

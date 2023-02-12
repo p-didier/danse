@@ -1155,7 +1155,8 @@ def get_desired_sig_chunk(
 
 def prune_wasn_to_tree(
     wasn: list[Node],
-    algorithm='prim'
+    algorithm='prim',
+    plotit=False
     ) -> nx.Graph:
     """
     Prunes a WASN to a tree topology.
@@ -1169,6 +1170,8 @@ def prune_wasn_to_tree(
         Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
         >> According to Paul Didier's testings from December 2022: 
             'kruskal' and 'prim' are faster and more scalable than 'boruvka'.
+    plotit : bool
+        If True, plots a visualization of the original graph and pruned graphs. 
 
     Returns
     -------
@@ -1186,13 +1189,101 @@ def prune_wasn_to_tree(
         Gnx[e[0]][e[1]]['weight'] = weight
     
     # Compute minimum spanning tree
-    prunedWasn = nx.minimum_spanning_tree(
+    prunedWasnNX = nx.minimum_spanning_tree(
         Gnx,
         weight='weight',
         algorithm=algorithm
     )
 
+    # Translate back to `list[Node]` object
+    prunedWasn = update_nodes_list_from_nxgraph(wasn, prunedWasnNX)
+
+    if plotit:
+        # Plot original and pruned WASN
+        fig = visualise_3d_wasn(Gnx, nodesPos, prunedWasnNX)
+        plt.show()
+
     return prunedWasn
+
+
+def update_nodes_list_from_nxgraph(originalList: list[Node], Gnx: nx.Graph):
+    """
+    Updates connectivity parameters in a list of `Node` object instances
+    based on a Networkx `Graph` object.
+
+    Parameters
+    ----------
+    originalList list of `Node` objects
+        WASN under consideration.
+    Gnx : nx.Graph object
+        NetworkX graph object.
+    """
+    adjMat = nx.adjacency_matrix(Gnx).toarray()
+    nNodes = adjMat.shape[0]
+
+    listOut = copy.deepcopy(originalList)
+    allNodeIndices = np.arange(nNodes)
+    for k in range(nNodes):
+        listOut[k].neighborsIdx = allNodeIndices[adjMat[:, k] > 0]
+
+    return listOut
+
+
+def visualise_3d_wasn(Gnx, nodesPos, prunedWasn=None):
+    """
+    Plots a 3D graph of a WASN (and its pruned version, if provided.)
+
+    Parameters
+    ----------
+    Gnx : nx.Graph object
+        WASN (ad-hoc topology) as NetworkX graph object.
+    nodesPos : dict({int: [3 x 1] np.ndarray})
+        Nodes positions, formatted for NetworkX package.
+    prunedWasn : nx.Graph object, or None
+        Pruned WASN (tree topology) as NetworkX graph object.
+
+    Returns
+    -------
+    fig : plt figure handle
+        Figure handle for further post-processing.
+    """
+    # Base checks
+    if len(nodesPos[0]) != 3:
+        print('/!\ The provided WASN graph is not 3D. Aborting plotting.')
+        return None
+
+    def _plot_3d_nxgraph(ax, graph):
+        """Helper function to plot a NetworkX graph in 3d.
+        Inspired by https://networkx.org/documentation/stable/auto_examples/3d_drawing/plot_basic.html
+        """
+        # Extract node and edge positions from the layout
+        node_xyz = np.array([nodesPos[v] for v in sorted(graph)])
+        edge_xyz = np.array(
+            [(nodesPos[u], nodesPos[v]) for u, v in graph.edges()]
+        )
+        # Plot the nodes - alpha is scaled by "depth" automatically
+        ax.scatter(*node_xyz.T, s=100, ec="w")
+        # Plot the edges
+        for vizedge in edge_xyz:
+            ax.plot(*vizedge.T, color="tab:gray")
+    
+    # Generate figure
+    fig = plt.figure()
+    fig.set_size_inches(8.5, 3.5)
+    #
+    if prunedWasn is not None:
+        axes = fig.add_subplot(1, 2, 1, projection='3d')
+    else:
+        axes = fig.add_subplot(111)
+    _plot_3d_nxgraph(axes, Gnx)
+    axes.set_title('Original topology')
+    #
+    if prunedWasn is not None:
+        axes = fig.add_subplot(1, 2, 2, projection='3d')
+        _plot_3d_nxgraph(axes, prunedWasn)
+        axes.set_title('Pruned topology')
+
+    return fig
 
 
 def generate_graph_for_wasn(wasn: list[Node]) -> nx.Graph:
