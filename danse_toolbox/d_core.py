@@ -153,7 +153,8 @@ def tidanse(
     # Import variables from WASN object
     dv.init_from_wasn(wasnTree)
 
-
+    # Compute events  # TODO:TODO:TODO:TODO:
+    eventInstants, fs = base.initialize_events(dv.timeInstants, p)
 
     stop = 1
 

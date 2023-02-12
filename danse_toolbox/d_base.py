@@ -1263,6 +1263,14 @@ def visualise_3d_wasn(Gnx, nodesPos, prunedWasn=None):
         )
         # Plot the nodes - alpha is scaled by "depth" automatically
         ax.scatter(*node_xyz.T, s=100, ec="w")
+        # Add node numbers
+        for ii in range(len(nodesPos)):
+            ax.text(
+                node_xyz[ii][0],
+                node_xyz[ii][1],
+                node_xyz[ii][2],
+                f'{ii+1}'
+            )
         # Plot the edges
         for vizedge in edge_xyz:
             ax.plot(*vizedge.T, color="tab:gray")
