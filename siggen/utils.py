@@ -432,6 +432,10 @@ def build_wasn(room: pra.room.ShoeBox,
         )
         # Add same microphone self-noise
         speechonly += sn0[:, np.newaxis]
+
+        # Get geometrical parameters
+        sensorPositions = room.mic_array.R[:, p.sensorToNodeIndices == k]
+        nodePosition = np.mean(sensorPositions, axis=1)
         
         # Create node
         node = classes.Node(
@@ -442,7 +446,9 @@ def build_wasn(room: pra.room.ShoeBox,
             cleanspeech=speechonly,
             timeStamps=t,
             neighborsIdx=neighbors[k],
-            vad=vad[:, k, :]
+            vad=vad[:, k, :],
+            sensorPositions=sensorPositions,
+            nodePosition=nodePosition
         )
         
         # Add to WASN

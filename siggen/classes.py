@@ -63,6 +63,10 @@ class TopologyParameters:
             # Check that the WASN is connected
             if not nx.is_connected(nx.from_numpy_array(self.userDefinedTopo)):
                 raise ValueError('The provided "user-defined" adjacency matrix corresponds to an unconnected graph.')
+            # If fully connected, adapt fields
+            if (self.userDefinedTopo == 1).all():
+                print('User-defined topology is fully connected. Changing field "topologyType" to "fully-connected".')
+                self.topologyType = 'fully-connected'
 
 @dataclass
 class WASNparameters(AcousticScenarioParameters):
@@ -115,6 +119,9 @@ class Node:
     vad: np.ndarray = np.array([])
     beta: float = 1.    # exponential averaging (forgetting factor)
                         # for Ryy and Rnn updates at this node
+    # Geometrical parameters
+    sensorPositions: np.ndarray = np.array([])  # coordinates of each sensor
+    nodePosition: np.ndarray = np.array([])     # global node coordinates
 
     def __post_init__(self):
         # Combined VAD
