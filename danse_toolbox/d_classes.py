@@ -4,7 +4,6 @@ import numpy as np
 from pathlib import Path
 import scipy.linalg as sla
 from siggen.classes import *
-from siggen.classes import Node
 from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
@@ -40,6 +39,9 @@ class TestParameters:
     def load(self, foldername, dataType='pkl'):
         """Loads dataclass to Pickle archive in folder `foldername`."""
         return met.load(self, foldername, silent=True, dataType=dataType)
+
+    def is_fully_connected_wasn(self):
+        return self.wasnParams.topologyParams.topologyType == 'fully-connected'
 
 
 @dataclass
@@ -271,6 +273,10 @@ class DANSEvariables(base.DANSEparameters):
         self.yinStacked = np.concatenate(tuple([x for x in self.yin]), axis=-1)
 
         return self
+
+    def init_for_adhoc_topology(self):
+        """Additional parameters required for TI-DANSE in ad-hoc WASNs."""
+        pass  # TODO:
 
     def broadcast(self, tCurr, fs, k):
         """

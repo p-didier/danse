@@ -70,14 +70,32 @@ class TopologyParameters:
 
 @dataclass
 class WASNparameters(AcousticScenarioParameters):
+    generateRandomWASNwithSeed: int = 0     # if > 0: ignore all other
+        # parameters and generate a completely random WASN.
     SROperNode: np.ndarray = np.array([0])
     topologyParams: TopologyParameters = TopologyParameters()
     selfnoiseSNR: float = 50   # self-noise SNR
         # [signal: noise-free signal; noise: self-noise]
     
     def __post_init__(self):
-        """Post-initialization checks (automatically conducted when invoking
-        a class instance)."""
+        """Post-initialization commands, automatically conducted when invoking
+        a class instance."""
+        if int(self.generateRandomWASNwithSeed) > 0:
+            rng = np.random.default_rng(int(self.generateRandomWASNwithSeed))
+            # Generate random WASN
+            self.nNodes = int((10 - 5) * rng.random() + 5)
+            self.nSensorPerNode = np.array([
+                int((5 - 1) * rng.random() + 1) for _ in range(self.nNodes)
+            ])
+            self.topologyParams.topologyType = 'ad-hoc'
+            # Inform user
+            print(f"""
+            RANDOMLY GENERATED WASN (`p.WASNparameters.generateRandomWASNwithSeed > 0`):
+            >> {self.nNodes} nodes;
+            >> # sensor(s) per node: {self.nSensorPerNode};
+            >> Topology: ad-hoc.
+            """)
+        
         # Dimensionality checks
         if type(self.SROperNode) is not list:
             # ^^^ required check for JSON export/import

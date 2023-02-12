@@ -17,6 +17,7 @@ p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
     seed=SEED,
     wasnParams=WASNparameters(
+        generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
             # topologyType='fully-connected',
@@ -101,7 +102,7 @@ def main(p: TestParameters):
 
     # Visualize results
     out = postprocess(out, wasnUpdated, room, p, connecMatrix)
-
+# 
     # Save `DANSEoutputs` object after metrics computation in `postprocess()`
     out.save(foldername=p.exportFolder, light=True)
     p.save()    # save `TestParameters` object
@@ -121,7 +122,12 @@ def danse_it_up(
             (p.danseParams.t_expAvg50p * wasn[k].fs / p.danseParams.Ns))
 
     # Launch DANSE
-    out, wasnUpdated = core.danse(wasn, p.danseParams)
+    if p.is_fully_connected_wasn():
+        # Fully connected WASN case
+        out, wasnUpdated = core.danse(wasn, p.danseParams)
+    else:
+        # Ad-hoc WASN topology case
+        out, wasnUpdated = core.tidanse(wasn, p.danseParams)
 
     return out, wasnUpdated
 

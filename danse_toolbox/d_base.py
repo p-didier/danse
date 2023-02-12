@@ -5,14 +5,14 @@
 
 import copy
 import numpy as np
+import networkx as nx
 from numba import njit
 import scipy.linalg as sla
-from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
-# from danse_toolbox.d_classes import 
+from dataclasses import dataclass, field
 from scipy.signal._arraytools import zero_ext
+from siggen.classes import WASNparameters, Node
 from danse_toolbox.d_eval import DynamicMetricsParameters
-from siggen.classes import WASNparameters
 
 
 @dataclass
@@ -128,7 +128,6 @@ class DANSEparameters(Hyperparameters):
     processing for blind sampling-rate and time-offset estimation. IEEE/ACM
     Transactions on Audio, Speech, and Language Processing, vol. 29,
     pp. 1881-1896.
-
     """
     DFTsize: int = 1024    # DFT size
     WOLAovlp: float = .5   # WOLA window overlap [*100%]
@@ -181,10 +180,8 @@ class DANSEparameters(Hyperparameters):
     # updates before start of speech enhancement metrics computation
     
     def __post_init__(self):
-        """
-        Adapt some fields depending on the value of others, after 
-        dataclass instance initialisation.
-        """
+        """Adapt some fields depending on the value of others, after 
+        dataclass instance initialisation."""
         self.Ns = int(self.DFTsize * (1 - self.WOLAovlp))
         if self.broadcastType == 'wholeChunk':
             self.broadcastLength = self.Ns
@@ -194,10 +191,8 @@ class DANSEparameters(Hyperparameters):
             raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
 
     def get_wasn_info(self, wasnParams: WASNparameters):
-        """
-        Adds useful info to DANSEparameters object from WASNparameters
-        object. 
-        """
+        """Adds useful info to DANSEparameters object from WASNparameters
+        object."""
         self.nNodes = wasnParams.nNodes
         self.nSensorPerNode = wasnParams.nSensorPerNode
         self.referenceSensor = wasnParams.referenceSensor
@@ -1091,7 +1086,7 @@ def get_desired_sig_chunk(
     desSigProcessingType,
     w, y, win, normFactWOLA,
     dChunk, Ns, yTD
-):
+    ):
     """
     Computes STFT-domain frame and time-domain frame of desired
     signal estimate.
@@ -1156,3 +1151,74 @@ def get_desired_sig_chunk(
         dChunk = np.sum(yfiltLastSamples, axis=1)
     
     return dChunk, dhatCurr
+
+
+def prune_wasn_to_tree(
+    wasn: list[Node],
+    algorithm='prim'
+    ) -> nx.Graph:
+    """
+    Prunes a WASN to a tree topology.
+    
+    Parameters
+    ----------
+    wasn : list of `Node` objects
+        WASN under consideration.
+    algorithm : str
+        Minimum-Spanning-Tree algorithm to be used.
+        Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
+        >> According to Paul Didier's testings from December 2022: 
+            'kruskal' and 'prim' are faster and more scalable than 'boruvka'.
+
+    Returns
+    -------
+    prunedWasn : list of `Node` objects
+        WASN pruned to a tree topology.
+    """
+    # Generate NetworkX graph
+    Gnx = generate_graph_for_wasn(wasn)
+    # Get node positions 
+    nodesPos = dict([(k, wasn[k].nodePosition) for k in range(len(wasn))])
+    
+    # Add edge weights based on inter-node distance # TODO: is that a correct approach? TODO:
+    for e in Gnx.edges():
+        weight = np.linalg.norm(nodesPos[e[0]] - nodesPos[e[1]])
+        Gnx[e[0]][e[1]]['weight'] = weight
+    
+    # Compute minimum spanning tree
+    prunedWasn = nx.minimum_spanning_tree(
+        Gnx,
+        weight='weight',
+        algorithm=algorithm
+    )
+
+    return prunedWasn
+
+
+def generate_graph_for_wasn(wasn: list[Node]) -> nx.Graph:
+    """
+    Generates a NetworkX `Graph` object from the `wasn` list of `Node` objects.
+    
+    Parameters
+    ----------
+    wasn : list of `Node` objects
+        WASN under consideration.
+
+    Returns
+    -------
+    Gnx : nx.Graph object
+        NetworkX Graph object.
+    """
+
+    nNodes = len(wasn)
+    adjMat = np.eye(nNodes)
+    for k in range(nNodes):
+        for q in range(nNodes):
+            if k > q:
+                if q in wasn[k].neighborsIdx:
+                    adjMat[k, q] = 1
+                    adjMat[q, k] = 1
+
+    Gnx = nx.from_numpy_array(adjMat)
+
+    return Gnx
