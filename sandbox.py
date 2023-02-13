@@ -31,7 +31,7 @@ p = TestParameters(
                 [0, 1, 1],  # Node 3
             ])
         ),
-        sigDur=15,
+        sigDur=5,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.2,
@@ -89,19 +89,14 @@ def main(p: TestParameters):
     room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasnParams)
 
     # Build WASN (asynchronicities, topology)
-    connecMatrix, wasn = sig_ut.build_wasn(
-        room,
-        vad,
-        wetSpeechAtRefSensor,
-        p.wasnParams
-    )
+    wasnObj = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasnParams)
 
-    # pp.plot_asc(room, p.wasnParams, p.exportFolder, connecMatrix)
+    pp.plot_asc(room, p.wasnParams, p.exportFolder, wasnObj.adjacencyMatrix)
     # DANSE
-    out, wasnUpdated = danse_it_up(wasn, p)
+    out, wasnObjUpdated = danse_it_up(wasnObj, p)
 
     # Visualize results
-    out = postprocess(out, wasnUpdated, room, p, connecMatrix)
+    out = postprocess(out, wasnObjUpdated, room, p)
 # 
     # Save `DANSEoutputs` object after metrics computation in `postprocess()`
     out.save(foldername=p.exportFolder, light=True)
@@ -109,34 +104,34 @@ def main(p: TestParameters):
 
 
 def danse_it_up(
-    wasn: list[Node],
+    wasnObj: WASN,
     p: TestParameters
-    ) -> tuple[pp.DANSEoutputs, list[Node]]:
+    ) -> tuple[pp.DANSEoutputs, WASN]:
     """
     Container function for prepping signals and launching the DANSE algorithm.
     """
 
     for k in range(p.wasnParams.nNodes):  # for each node
         # Derive exponential averaging factor for `Ryy` and `Rnn` updates
-        wasn[k].beta = np.exp(np.log(0.5) / \
-            (p.danseParams.t_expAvg50p * wasn[k].fs / p.danseParams.Ns))
+        wasnObj.wasn[k].beta = np.exp(np.log(0.5) / \
+            (p.danseParams.t_expAvg50p * wasnObj.wasn[k].fs / p.danseParams.Ns))
 
     # Launch DANSE
     if p.is_fully_connected_wasn():
         # Fully connected WASN case
-        out, wasnUpdated = core.danse(wasn, p.danseParams)
+        out, wasnUpdated = core.danse(wasnObj, p.danseParams)
     else:
         # Ad-hoc WASN topology case
-        out, wasnUpdated = core.tidanse(wasn, p.danseParams)
+        out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
 
     return out, wasnUpdated
 
 
-def postprocess(out: pp.DANSEoutputs,
-        wasn: list[Node],
-        room: pra.room.ShoeBox,
-        p: TestParameters,
-        connecMatrix
+def postprocess(
+    out: pp.DANSEoutputs,
+    wasnObj: WASN,
+    room: pra.room.ShoeBox,
+    p: TestParameters
     ) -> pp.DANSEoutputs:
     """
     Defines the post-processing steps to be undertaken after a DANSE run.
@@ -146,14 +141,12 @@ def postprocess(out: pp.DANSEoutputs,
     ----------
     out : `danse.danse_toolbox.d_post.DANSEoutputs` object
         DANSE outputs (signals, etc.)
-    wasn : list of `Node` objects
+    wasnObj : `WASN` object
         WASN under consideration, after DANSE processing.
     room : `pyroomacoustics.room.ShoeBox` object
         Acoustic scenario under consideration.
     p : `TestParameters` object
         Test parameters.
-    connecMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
-        Connectivity matrix.
     """
 
     # Default booleans
@@ -176,10 +169,16 @@ def postprocess(out: pp.DANSEoutputs,
         out.plot_convergence(p.exportFolder)
 
         # Export .wav files
-        out.export_sounds(wasn, p.exportFolder)
+        out.export_sounds(wasnObj.wasn, p.exportFolder)
 
         # Plot (+ export) acoustic scenario (WASN)
-        pp.plot_asc(room, p.wasnParams, p.exportFolder, connecMatrix)
+        pp.plot_asc(
+            asc=room,
+            p=p.wasnParams,
+            folder=p.exportFolder,
+            adjacencyMatrix=wasnObj.adjacencyMatrix,
+            nodeTypes=[node.nodeType for node in wasnObj.wasn]
+        )
 
         # Plot SRO estimation performance
         fig = out.plot_sro_perf(
@@ -191,10 +190,10 @@ def postprocess(out: pp.DANSEoutputs,
         fig.savefig(f'{p.exportFolder}/sroEvolution.pdf')
 
         # Plot performance metrics (+ export)
-        out.plot_perf(wasn, p.exportFolder)
+        out.plot_perf(wasnObj.wasn, p.exportFolder)
 
         # Plot signals at specific nodes (+ export)
-        out.plot_sigs(wasn, p.exportFolder)
+        out.plot_sigs(wasnObj.wasn, p.exportFolder)
 
     return out
 

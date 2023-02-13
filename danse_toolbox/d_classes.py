@@ -31,6 +31,11 @@ class TestParameters:
         if self.danseParams.nodeUpdating == 'sym' and\
             any(self.wasnParams.SROperNode != 0):
             raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
+        if not self.is_fully_connected_wasn() and\
+            self.danseParams.nodeUpdating != 'topo-indep':
+            # Switch to topology-independent node-update system
+            print(f'/!\ The WASN is not fully connected -- switching `danseParams.nodeUpdating` from "{self.danseParams.nodeUpdating}" to "topo-indep".')
+            self.danseParams.nodeUpdating = 'topo-indep'
 
     def save(self, exportType='pkl'):
         """Saves dataclass to Pickle archive."""

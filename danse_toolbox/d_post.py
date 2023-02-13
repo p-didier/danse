@@ -708,10 +708,11 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
 
 
 def plot_asc(
-        asc: pra.room.ShoeBox,
-        p: WASNparameters,
-        folder='',
-        topology=np.array([])
+    asc: pra.room.ShoeBox,
+    p: WASNparameters,
+    folder='',
+    adjacencyMatrix=np.array([]),
+    nodeTypes=[]
     ):
     """
     Plots an acoustic scenario nicely.
@@ -724,8 +725,10 @@ def plot_asc(
         WASN parameters.
     folder : str
         Folder where to export figure (if not `None`).
-    topology : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
-        Connectivity matrix.
+    adjacencyMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Adjacency matrix.
+    nodeTypes : list[str]
+        List of node types, in order.
     """
 
     def _plot_connections(sensorCoords):
@@ -738,11 +741,11 @@ def plot_asc(
                 axis=1
             )
         # Add topology connectivity lines
-        for k in range(topology.shape[0]):
-            for q in range(topology.shape[1]):
+        for k in range(adjacencyMatrix.shape[0]):
+            for q in range(adjacencyMatrix.shape[1]):
                 # Only consider upper triangular matrix without diagonal
                 # (redundant, otherwise)
-                if k > q and topology[k, q] == 1:
+                if k > q and adjacencyMatrix[k, q] == 1:
                     ax.plot(
                         [nodeCoords[0, k], nodeCoords[0, q]],
                         [nodeCoords[1, k], nodeCoords[1, q]],
@@ -777,9 +780,10 @@ def plot_asc(
         p.sensorToNodeIndices,
         dotted=p.t60==0,
         showLegend=False,
-        nodeRadius=nodeRadius
+        nodeRadius=nodeRadius,
+        nodeTypes=nodeTypes
     )
-    if topology != np.array([]):
+    if adjacencyMatrix != np.array([]):
         # Add topology lines
         _plot_connections(sensorCoords=asc.mic_array.R[:2, :])
     ax.set(xlabel='$x$ [m]', ylabel='$y$ [m]', title='Top view')
@@ -794,9 +798,10 @@ def plot_asc(
         p.sensorToNodeIndices,
         dotted=p.t60==0,
         showLegend=False,
-        nodeRadius=nodeRadius
+        nodeRadius=nodeRadius,
+        nodeTypes=nodeTypes
     )
-    if topology != np.array([]):
+    if adjacencyMatrix != np.array([]):
         # Add topology lines
         _plot_connections(sensorCoords=asc.mic_array.R[-2:, :])
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
@@ -817,7 +822,8 @@ def plot_side_room(
         scatsize=20,
         dotted=False,
         showLegend=True,
-        nodeRadius=None
+        nodeRadius=None,
+        nodeTypes=[]
     ):
     """Plots a 2-D room side, showing the positions of
     sources and nodes inside of it.
@@ -843,6 +849,8 @@ def plot_side_room(
         If True, show legend.
     nodeRadius : float
         Pre-defined node radius. 
+    nodeTypes : list[str]
+        List of node types, in order.
     """
 
     numNodes = len(np.unique(micToNodeTags))
@@ -870,6 +878,7 @@ def plot_side_room(
             edgecolor='k'
         )
     # Nodes and sensors
+    flagIncludeNodeTypes = 'root' in nodeTypes
     circHandles = []
     leg = []
     for k in range(numNodes):
@@ -898,9 +907,15 @@ def plot_side_room(
         circHandles.append(circ)
         leg.append(f'Node {k + 1}')
         # Add label
-        ax.text(np.mean(r[micsIdx,0]) + 1.5*radius,
-                np.mean(r[micsIdx,1]) + 1.5*radius,
-                f'$\\mathbf{{{k+1}}}$', c=f'C{k}')
+        myText = f'$\\mathbf{{{k+1}}}$'  # node number
+        if flagIncludeNodeTypes:
+            myText += f' ({nodeTypes[k][0].upper()}.)'  # show node type too
+        ax.text(
+            np.mean(r[micsIdx, 0]) + 1.5 * radius,
+            np.mean(r[micsIdx, 1]) + 1.5 * radius,
+            myText,
+            c=f'C{k}'
+        )
         ax.add_patch(circ)
     ax.grid()
     ax.set_axisbelow(True)

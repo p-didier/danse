@@ -122,6 +122,8 @@ class WASNparameters(AcousticScenarioParameters):
         if self.nNodes != len(self.nSensorPerNode):
             raise ValueError(f'The length of the list containing the numbers of sensor per node ({len(self.nSensorPerNode)}) does not match the number of nodes ({self.nNodes}).')
 
+
+
 @dataclass
 class Node:
     nSensors: int = 1
@@ -140,6 +142,10 @@ class Node:
     # Geometrical parameters
     sensorPositions: np.ndarray = np.array([])  # coordinates of each sensor
     nodePosition: np.ndarray = np.array([])     # global node coordinates
+    nodeType: str = 'default'   # type of node:
+        # -'default': no particular type. Used, e.g., in fully connected WASNs;
+        # -'leaf': leaf node, with only one neighbor.
+        # -'root': root node, root of a tree-topology WASN.\
 
     def __post_init__(self):
         # Combined VAD
@@ -149,6 +155,47 @@ class Node:
         )
         # Combined wet clean speeches
         self.cleanspeechCombined = np.sum(self.cleanspeech, axis=1)
+
+
+@dataclass
+class WASN:
+    wasn: list[Node] = field(default_factory=list)  # list of `Node` objects
+    adjacencyMatrix: np.ndarray = np.array([])  # adjacency matrix of WASN
+    rootSelectionMeasure: str = 'snr'       # measure to select the tree root
+        # -'snr': signal-to-noise ratio estimate.
+        # -'user-defined': user-defined estimate.
+        # -anything else: invalid.
+    userDefinedRoot: int = 0    # index of user-defined root node
+        # Used iff `rootSelectionMeasure == 'user-defined'`.
+
+    def set_tree_root(self):
+        """Sets the root of a tree-topology WASN."""
+        # Base check
+        if (self.adjacencyMatrix == 1).all():
+            print('/!\ The WASN is fully connected: cannot select a root!')
+            return None
+
+        def _get_snr(data, vad, refSensor=0):
+            """Helper function: get SNR from microphone signals and VAD."""
+            snr = 10 * np.log10(np.mean(np.abs(data[:, refSensor])**2) /\
+                np.mean(np.abs(data[vad[:, refSensor] == 1, refSensor])**2))
+            return snr
+
+        if self.rootSelectionMeasure == 'snr':
+            # Estimate SNRs
+            snrs = np.array([
+                _get_snr(node.data, node.vad) for node in self.wasn
+            ])
+            rootIdx = np.argmax(snrs)
+            print(f'Node {rootIdx+1} was set as the root based on SNR estimates.')
+        elif self.rootSelectionMeasure == 'user-defined':
+            rootIdx = self.userDefinedRoot
+            print(f'Node {rootIdx+1} was set as the root (user-defined).')
+        else:
+            raise ValueError(f"The measure used to select the tree's root ('{self.rootSelectionMeasure}') is invalid.")
+
+        # Set root
+        self.wasn[rootIdx].nodeType = 'root'
 
 
 # @dataclass

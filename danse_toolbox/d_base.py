@@ -11,7 +11,7 @@ import scipy.linalg as sla
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
 from scipy.signal._arraytools import zero_ext
-from siggen.classes import WASNparameters, Node
+from siggen.classes import WASNparameters, Node, WASN
 from danse_toolbox.d_eval import DynamicMetricsParameters
 
 
@@ -128,6 +128,12 @@ class DANSEparameters(Hyperparameters):
     processing for blind sampling-rate and time-offset estimation. IEEE/ACM
     Transactions on Audio, Speech, and Language Processing, vol. 29,
     pp. 1881-1896.
+
+    - [5] J. Szurley, A. Bertrand and M. Moonen, "Topology-Independent
+    Distributed Adaptive Node-Specific Signal Estimation in Wireless
+    Sensor Networks," in IEEE Transactions on Signal and Information
+    Processing over Networks, vol. 3, no. 1, pp. 130-144, March 2017,
+    doi: 10.1109/TSIPN.2016.2623095.
     """
     DFTsize: int = 1024    # DFT size
     WOLAovlp: float = .5   # WOLA window overlap [*100%]
@@ -135,6 +141,7 @@ class DANSEparameters(Hyperparameters):
         # - "seq": round-robin updating [1]
         # - "sim": simultaneous updating [2]
         # - "asy": asynchronous updating [2]
+        # - "topo-indep": updating for TI-DANSE [5]
     broadcastType: str = 'wholeChunk'    # type of broadcast
         # -- 'wholeChunk': chunks of compressed signals in time-domain,
         # -- 'fewSamples': T(z)-approximation of WOLA compression process.
@@ -142,10 +149,10 @@ class DANSEparameters(Hyperparameters):
     winWOLAanalysis: np.ndarray = np.sqrt(np.hanning(DFTsize))      # window
     winWOLAsynthesis: np.ndarray = np.sqrt(np.hanning(DFTsize))     # window
     normFactWOLA: float = sum(winWOLAanalysis)  # (I)FFT normalization factor
-    # T(z)-approximation | Sample-wise broadcasts
+    # ---- T(z)-approximation | Sample-wise broadcasts
     upTDfilterEvery: float = 1. # [s] duration of pause between two 
                                     # consecutive time-domain filter updates.
-    # SROs
+    # ---- SROs
     compensateSROs: bool = False    # if True, compensate for SROs
     estimateSROs: str = 'Oracle'    # SRO estimation method.
         # If 'Oracle', no estimation: using oracle if `compensateSROs == True`.
@@ -153,7 +160,7 @@ class DANSEparameters(Hyperparameters):
         # If "DXCPPhaT", use DXCP-PhaT method from [4] (implemented based on
         #   https://github.com/fgnt/asnsig).
     cohDrift: CohDriftParameters = CohDriftParameters()
-    # General
+    # ---- General
     performGEVD: bool = True    # if True, perform GEVD
     GEVDrank: int = 1           # GEVD rank
     timeBtwExternalFiltUpdates: float = 1.  # [s] bw. external filter updates.
@@ -162,7 +169,7 @@ class DANSEparameters(Hyperparameters):
                                         # for external filter target update.
     t_expAvg50p: float = 2.     # [s] Time in the past at which the value is
                                 # weighted by 50% via exponential averaging.
-    # Desired signal estimation
+    # ---- Desired signal estimation
     desSigProcessingType: str = 'wola'  # processing scheme used to compute
         # the desired signal estimates: "wola": WOLA synthesis,
                                     # "conv": T(z)-approximation.
@@ -172,12 +179,17 @@ class DANSEparameters(Hyperparameters):
     computeNoiseFree: bool = False  # if True, compute estimate with the
         # DANSE filters, but using noise-free signals (y_k's and z_q's).
         # TODO: TODO: TODO: TODO: TODO: TODO: TODO: 
-    # Metrics
+    # ---- Metrics
     dynMetrics: DynamicMetricsParameters = DynamicMetricsParameters()
     gammafwSNRseg: float = 0.2  # gamma exponent for fwSNRseg
     frameLenfwSNRseg: float = 0.03  # [s] time window duration for fwSNRseg
     minFiltUpdatesForMetrics: int = 10   # minimum number of DANSE
-    # updates before start of speech enhancement metrics computation
+        # updates before start of speech enhancement metrics computation
+    # ---- TI-DANSE specific
+    treeFormationAlgorithm: str = 'prim'    # algorithm to prune ad-hoc WASN
+        # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
+        # >> According to Paul Didier's testings from December 2022: 
+        #     'kruskal' and 'prim' are faster and more scalable than 'boruvka'.
     
     def __post_init__(self):
         """Adapt some fields depending on the value of others, after 
@@ -313,52 +325,51 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
 
     # Total signal duration [s] per node (after truncation during sig. gen.).
     Ttot = timeInstants[-1, :]
-    
-    # Useful renaming (compact code)
-    Ndft = p.DFTsize
-    Ns = p.Ns 
-    Lbc = p.broadcastLength
-    bcType = p.broadcastType
-    efficient = p.efficientSpSBC
-    
-    # Expected number of DANSE update per node over total signal length
-    numUpInTtot = np.floor(Ttot * fs / Ns)
-    # Expected DANSE update instants
-    upInstants = [
-        np.arange(np.ceil(Ndft / Ns),
-        int(numUpInTtot[k])) * Ns/fs[k] for k in range(nNodes)
-    ]  
-    # ^ note that we only start updating when we have enough samples.
-    
-    # Expected number of broadcasts per node over total signal length
-    numBcInTtot = np.floor(Ttot * fs / Lbc)
-    # Get expected broadcast instants
-    if 'wholeChunk' in bcType:
-        bcInstants = [
-            np.arange(Ndft/Lbc, int(numBcInTtot[k])) * Lbc/fs[k]\
-                for k in range(nNodes)
-        ]
-        # ^ note that we only start broadcasting when we have enough
-        # samples to perform compression.
-    elif 'fewSamples' in bcType:
-        if efficient:
-            # Combine update instants
-            combinedUpInstants = list(upInstants[0])
-            for k in range(nNodes):
-                if k > 0:
-                    for ii in range(len(upInstants[k])):
-                        if upInstants[k][ii] not in combinedUpInstants:
-                            combinedUpInstants.append(upInstants[k][ii])
-            combinedUpInstants = np.sort(np.array(combinedUpInstants))
-            # Same BC instants for all nodes
-            bcInstants = [combinedUpInstants for _ in range(nNodes)]
-        else:
+
+    if p.nodeUpdating == 'topo-indep':
+        # Ad-hoc (non fully connected) WASN
+        stop = 1
+        pass  # TODO:
+
+    else:   # fully connected WASN
+        # Expected number of DANSE update per node over total signal length
+        numUpInTtot = np.floor(Ttot * fs / p.Ns)
+        # Expected DANSE update instants
+        upInstants = [
+            np.arange(np.ceil(p.DFTsize / p.Ns),
+            int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+        ]  
+        # ^ note that we only start updating when we have enough samples.
+        
+        # Expected number of broadcasts per node over total signal length
+        numBcInTtot = np.floor(Ttot * fs / p.broadcastLength)
+        # Get expected broadcast instants
+        if 'wholeChunk' in p.broadcastType:
             bcInstants = [
-                np.arange(1, int(numBcInTtot[k])) * Lbc/fs[k]\
-                    for k in range(nNodes)
+                np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
+                    p.broadcastLength/fs[k] for k in range(nNodes)
             ]
-            # ^ note that we start broadcasting sooner:
-            # when we have `L` samples, enough for linear convolution.
+            # ^ note that we only start broadcasting when we have enough
+            # samples to perform compression.
+        elif 'fewSamples' in p.broadcastType:
+            if p.efficientSpSBC:
+                # Combine update instants
+                combinedUpInstants = list(upInstants[0])
+                for k in range(nNodes):
+                    if k > 0:
+                        for ii in range(len(upInstants[k])):
+                            if upInstants[k][ii] not in combinedUpInstants:
+                                combinedUpInstants.append(upInstants[k][ii])
+                combinedUpInstants = np.sort(np.array(combinedUpInstants))
+                # Same BC instants for all nodes
+                bcInstants = [combinedUpInstants for _ in range(nNodes)]
+            else:
+                bcInstants = [
+                    np.arange(1, int(numBcInTtot[k])) *\
+                        p.broadcastLength/fs[k] for k in range(nNodes)
+                ]
+                # ^ note that we start broadcasting sooner:
+                # when we have `L` samples, enough for linear convolution.
     
     # Build event matrix
     outputEvents = build_events_matrix(
@@ -1154,16 +1165,16 @@ def get_desired_sig_chunk(
 
 
 def prune_wasn_to_tree(
-    wasn: list[Node],
+    wasnObj: WASN,
     algorithm='prim',
     plotit=False
-    ) -> nx.Graph:
+    ) -> list[Node]:
     """
     Prunes a WASN to a tree topology.
     
     Parameters
     ----------
-    wasn : list of `Node` objects
+    wasnObj : `WASN` object
         WASN under consideration.
     algorithm : str
         Minimum-Spanning-Tree algorithm to be used.
@@ -1175,13 +1186,16 @@ def prune_wasn_to_tree(
 
     Returns
     -------
-    prunedWasn : list of `Node` objects
+    prunedWasnObj : `WASN` object
         WASN pruned to a tree topology.
     """
     # Generate NetworkX graph
-    Gnx = generate_graph_for_wasn(wasn)
+    # Gnx = generate_graph_for_wasn(wasnObj.wasn)
+    Gnx = nx.from_numpy_array(wasnObj.adjacencyMatrix)
     # Get node positions 
-    nodesPos = dict([(k, wasn[k].nodePosition) for k in range(len(wasn))])
+    nodesPos = dict(
+        [(k, wasnObj.wasn[k].nodePosition) for k in range(len(wasnObj.wasn))]
+    )
     
     # Add edge weights based on inter-node distance # TODO: is that a correct approach? TODO:
     for e in Gnx.edges():
@@ -1195,38 +1209,53 @@ def prune_wasn_to_tree(
         algorithm=algorithm
     )
 
-    # Translate back to `list[Node]` object
-    prunedWasn = update_nodes_list_from_nxgraph(wasn, prunedWasnNX)
+    # Translate back to `WASN` object
+    prunedWasnObj = update_wasn_object_from_nxgraph(wasnObj, prunedWasnNX)
+
+    # Set node types
+    for k in range(len(prunedWasnObj.wasn)):
+        if len(prunedWasnObj.wasn[k].neighborsIdx) == 1:
+            prunedWasnObj.wasn[k].nodeType = 'leaf'
+    # Set root
+    prunedWasnObj.set_tree_root()
 
     if plotit:
         # Plot original and pruned WASN
         fig = visualise_3d_wasn(Gnx, nodesPos, prunedWasnNX)
         plt.show()
 
-    return prunedWasn
+    return prunedWasnObj
 
 
-def update_nodes_list_from_nxgraph(originalList: list[Node], Gnx: nx.Graph):
+def update_wasn_object_from_nxgraph(
+    originalWASN: WASN,
+    Gnx: nx.Graph
+    ) -> WASN:
     """
     Updates connectivity parameters in a list of `Node` object instances
     based on a Networkx `Graph` object.
 
     Parameters
     ----------
-    originalList list of `Node` objects
+    originalWASN : `WASN` object
         WASN under consideration.
     Gnx : nx.Graph object
-        NetworkX graph object.
+        NetworkX graph object of updated WASN.
+
+    Returns
+    -------
+    WASNout : `WASN` object
+        Updated WASN.
     """
     adjMat = nx.adjacency_matrix(Gnx).toarray()
     nNodes = adjMat.shape[0]
 
-    listOut = copy.deepcopy(originalList)
+    WASNout = copy.deepcopy(originalWASN)
     allNodeIndices = np.arange(nNodes)
     for k in range(nNodes):
-        listOut[k].neighborsIdx = allNodeIndices[adjMat[:, k] > 0]
+        WASNout.wasn[k].neighborsIdx = allNodeIndices[adjMat[:, k] > 0]
 
-    return listOut
+    return WASNout
 
 
 def visualise_3d_wasn(Gnx, nodesPos, prunedWasn=None):
@@ -1317,6 +1346,7 @@ def generate_graph_for_wasn(wasn: list[Node]) -> nx.Graph:
                 if q in wasn[k].neighborsIdx:
                     adjMat[k, q] = 1
                     adjMat[q, k] = 1
+                    
 
     Gnx = nx.from_numpy_array(adjMat)
 

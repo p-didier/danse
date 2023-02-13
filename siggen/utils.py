@@ -395,20 +395,18 @@ def build_wasn(room: pra.room.ShoeBox,
 
     Returns
     -------
-    connecMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
-        Connectivity matrix.
-    myWASN : list of `Node` objects
-        WASN.
+    myWASN : `WASN` object
+        WASN object, including all necessary values.
     """
 
     # Create network topological map (inter-node links)
-    connecMatrix, neighbors = get_topo(
+    adjacencyMatrix, neighbors = get_topo(
         p.topologyParams,
         sensorToNodeIndices=p.sensorToNodeIndices,
         sensorCoords=room.mic_array.R  # microphones positions
     )
 
-    myWASN = []
+    myWASN = classes.WASN()
     for k in range(p.nNodes):
         # Apply asynchronicities
         sigs, t, fsSRO = apply_asynchronicity_at_node(
@@ -452,9 +450,12 @@ def build_wasn(room: pra.room.ShoeBox,
         )
         
         # Add to WASN
-        myWASN.append(node)
+        myWASN.wasn.append(node)
 
-    return connecMatrix, myWASN
+    # Include adjacency matrix
+    myWASN.adjacencyMatrix = adjacencyMatrix
+
+    return myWASN
 
 
 def apply_self_noise(sig, snr):

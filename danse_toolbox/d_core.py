@@ -14,7 +14,7 @@ from danse_toolbox.d_post import DANSEoutputs
 
 
 def danse(
-    wasn: list[Node],
+    wasnObj: WASN,
     p: base.DANSEparameters
     ) -> tuple[DANSEoutputs, list[str]]:
     """
@@ -22,7 +22,7 @@ def danse(
 
     Parameters
     ----------
-    wasn : list of `Node` objects
+    wasnObj : `WASN` object
         WASN under consideration.
     p : DANSEparameters object
         Parameters.
@@ -31,7 +31,7 @@ def danse(
     -------
     out : DANSEoutputs object
         DANSE outputs.
-    wasn : list of `Node` objects
+    wasnObj : `WASN` object
         WASN under consideration, after DANSE.
 
     References
@@ -45,7 +45,7 @@ def danse(
     # Initialize variables
     dv = DANSEvariables()
     dv.import_params(p)
-    dv.init_from_wasn(wasn)
+    dv.init_from_wasn(wasnObj.wasn)
 
     # Compute events
     eventInstants, fs = base.initialize_events(dv.timeInstants, p)
@@ -101,18 +101,18 @@ def danse(
     out.import_params(p)
     out.from_variables(dv)
     # Update WASN object
-    for k in range(len(wasn)):
-        wasn[k].enhancedData = dv.d[:, k]
+    for k in range(len(wasnObj.wasn)):
+        wasnObj.wasn[k].enhancedData = dv.d[:, k]
         if dv.computeCentralised:
-            wasn[k].enhancedData_c = dv.dCentr[:, k]
+            wasnObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
         if dv.computeLocal:
-            wasn[k].enhancedData_l = dv.dLocal[:, k]
+            wasnObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
 
-    return out, wasn
+    return out, wasnObj
 
 
 def tidanse(
-    wasn: list[Node],
+    wasnObj: WASN,
     p: base.DANSEparameters
     ) -> tuple[DANSEoutputs, list[str]]:
     """
@@ -120,7 +120,7 @@ def tidanse(
 
     Parameters
     ----------
-    wasn : list of `Node` objects
+    wasnObj : `WASN` object
         WASN under consideration.
     p : DANSEparameters object
         Parameters.
@@ -129,7 +129,7 @@ def tidanse(
     -------
     out : DANSEoutputs object
         DANSE outputs.
-    wasn : list of `Node` objects
+    wasnObj : `WASN` object
         WASN under consideration, after DANSE.
 
     References
@@ -148,7 +148,11 @@ def tidanse(
     dv.init_for_adhoc_topology()
 
     # Prune WASN to tree
-    wasnTree = base.prune_wasn_to_tree(wasn)
+    wasnTree = base.prune_wasn_to_tree(
+        wasnObj,
+        algorithm=p.treeFormationAlgorithm,
+        plotit=False
+    )
 
     # Import variables from WASN object
     dv.init_from_wasn(wasnTree)
@@ -220,6 +224,6 @@ def tidanse(
     #         wasn[k].enhancedData_l = dv.dLocal[:, k]
 
     # TODO:
-    out, wasn = None, None
+    out, wasnObj = None, None
 
-    return out, wasn
+    return out, wasnObj
