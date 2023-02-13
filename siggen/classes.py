@@ -197,6 +197,32 @@ class WASN:
         # Set root
         self.wasn[rootIdx].nodeType = 'root'
 
+    def plot_me(self, ax):
+        """Plot function"""
+        # Convert to NetworkX `Graph` object
+        Gnx = nx.from_numpy_array(self.adjacencyMatrix)
+        nodesPos = dict(
+            [(k, self.wasn[k].nodePosition) for k in range(len(self.wasn))]
+        )
+        # Extract node and edge positions from the layout
+        node_xyz = np.array([nodesPos[v] for v in sorted(Gnx)])
+        edge_xyz = np.array(
+            [(nodesPos[u], nodesPos[v]) for u, v in Gnx.edges()]
+        )
+        # Plot the nodes - alpha is scaled by "depth" automatically
+        ax.scatter(*node_xyz.T, s=100, ec="w")
+        # Add node numbers
+        for ii in range(len(nodesPos)):
+            ax.text(
+                node_xyz[ii][0],
+                node_xyz[ii][1],
+                node_xyz[ii][2],
+                f'$\\mathbf{{{ii+1}}}$ ({self.wasn[ii].nodeType[0].upper()}.)'
+            )
+        # Plot the edges
+        for vizedge in edge_xyz:
+            ax.plot(*vizedge.T, color="tab:gray")
+
 
 # @dataclass
 # class PlottingOptions:

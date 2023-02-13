@@ -1168,7 +1168,7 @@ def prune_wasn_to_tree(
     wasnObj: WASN,
     algorithm='prim',
     plotit=False
-    ) -> list[Node]:
+    ) -> WASN:
     """
     Prunes a WASN to a tree topology.
     
@@ -1221,7 +1221,7 @@ def prune_wasn_to_tree(
 
     if plotit:
         # Plot original and pruned WASN
-        fig = visualise_3d_wasn(Gnx, nodesPos, prunedWasnNX)
+        fig = visualise_pruning(wasnObj, prunedWasnObj)
         plt.show()
 
     return prunedWasnObj
@@ -1255,70 +1255,39 @@ def update_wasn_object_from_nxgraph(
     for k in range(nNodes):
         WASNout.wasn[k].neighborsIdx = allNodeIndices[adjMat[:, k] > 0]
 
+    WASNout.adjacencyMatrix = adjMat
+
     return WASNout
 
 
-def visualise_3d_wasn(Gnx, nodesPos, prunedWasn=None):
+def visualise_pruning(wasnObj: WASN, prunedWasnObj: WASN):
     """
-    Plots a 3D graph of a WASN (and its pruned version, if provided.)
+    Plots a 3D graph of the WASNs before/after pruning to a tree topology.
 
     Parameters
     ----------
-    Gnx : nx.Graph object
-        WASN (ad-hoc topology) as NetworkX graph object.
-    nodesPos : dict({int: [3 x 1] np.ndarray})
-        Nodes positions, formatted for NetworkX package.
-    prunedWasn : nx.Graph object, or None
-        Pruned WASN (tree topology) as NetworkX graph object.
+    wasnObj : `WASN` object
+        WASN (ad-hoc topology).
+    prunedWasnObj : `WASN` object
+        WASN (tree topology).
 
     Returns
     -------
     fig : plt figure handle
         Figure handle for further post-processing.
     """
-    # Base checks
-    if len(nodesPos[0]) != 3:
-        print('/!\ The provided WASN graph is not 3D. Aborting plotting.')
-        return None
-
-    def _plot_3d_nxgraph(ax, graph):
-        """Helper function to plot a NetworkX graph in 3d.
-        Inspired by https://networkx.org/documentation/stable/auto_examples/3d_drawing/plot_basic.html
-        """
-        # Extract node and edge positions from the layout
-        node_xyz = np.array([nodesPos[v] for v in sorted(graph)])
-        edge_xyz = np.array(
-            [(nodesPos[u], nodesPos[v]) for u, v in graph.edges()]
-        )
-        # Plot the nodes - alpha is scaled by "depth" automatically
-        ax.scatter(*node_xyz.T, s=100, ec="w")
-        # Add node numbers
-        for ii in range(len(nodesPos)):
-            ax.text(
-                node_xyz[ii][0],
-                node_xyz[ii][1],
-                node_xyz[ii][2],
-                f'{ii+1}'
-            )
-        # Plot the edges
-        for vizedge in edge_xyz:
-            ax.plot(*vizedge.T, color="tab:gray")
     
     # Generate figure
     fig = plt.figure()
     fig.set_size_inches(8.5, 3.5)
     #
-    if prunedWasn is not None:
-        axes = fig.add_subplot(1, 2, 1, projection='3d')
-    else:
-        axes = fig.add_subplot(111)
-    _plot_3d_nxgraph(axes, Gnx)
+    axes = fig.add_subplot(1, 2, 1, projection='3d')
+    wasnObj.plot_me(axes)
     axes.set_title('Original topology')
     #
-    if prunedWasn is not None:
-        axes = fig.add_subplot(1, 2, 2, projection='3d')
-        _plot_3d_nxgraph(axes, prunedWasn)
-        axes.set_title('Pruned topology')
+    axes = fig.add_subplot(1, 2, 2, projection='3d')
+    prunedWasnObj.plot_me(axes)
+    axes.set_title('Pruned topology')
 
     return fig
 

@@ -12,6 +12,7 @@ from danse_toolbox.d_sros import *
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_post import DANSEoutputs
 
+import danse_toolbox.d_post as pp
 
 def danse(
     wasnObj: WASN,
@@ -148,14 +149,14 @@ def tidanse(
     dv.init_for_adhoc_topology()
 
     # Prune WASN to tree
-    wasnTree = base.prune_wasn_to_tree(
+    wasnTreeObj = base.prune_wasn_to_tree(
         wasnObj,
         algorithm=p.treeFormationAlgorithm,
         plotit=False
     )
 
     # Import variables from WASN object
-    dv.init_from_wasn(wasnTree)
+    dv.init_from_wasn(wasnTreeObj.wasn)
 
     # Compute events  # TODO:TODO:TODO:TODO:
     eventInstants, fs = base.initialize_events(dv.timeInstants, p)

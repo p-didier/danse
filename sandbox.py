@@ -17,7 +17,7 @@ p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
     seed=SEED,
     wasnParams=WASNparameters(
-        # generateRandomWASNwithSeed=420,
+        generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
             # topologyType='fully-connected',
@@ -91,7 +91,13 @@ def main(p: TestParameters):
     # Build WASN (asynchronicities, topology)
     wasnObj = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasnParams)
 
-    pp.plot_asc(room, p.wasnParams, p.exportFolder, wasnObj.adjacencyMatrix)
+    # pp.plot_asc(
+    #     room,
+    #     p.wasnParams,
+    #     p.exportFolder,
+    #     wasnObj.adjacencyMatrix,
+    #     [node.nodeType for node in wasnObj.wasn]
+    # )
     # DANSE
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
 
