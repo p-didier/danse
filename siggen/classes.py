@@ -167,6 +167,7 @@ class WASN:
         # -anything else: invalid.
     userDefinedRoot: int = 0    # index of user-defined root node
         # Used iff `rootSelectionMeasure == 'user-defined'`.
+    rootIdx: int = userDefinedRoot  # effective root node index
 
     def set_tree_root(self):
         """Sets the root of a tree-topology WASN."""
@@ -196,6 +197,24 @@ class WASN:
 
         # Set root
         self.wasn[rootIdx].nodeType = 'root'
+        self.rootIdx = rootIdx
+
+    def orientate(self):
+        """Orientate the tree-topology from leaves towards root."""
+        # Base check
+        if 'root' not in [node.nodeType for node in self.wasn]:
+            raise ValueError('The WASN cannot be orientated: missing root node.')
+        
+        def _orientate_recursive(roots, wasn: list[Node]):
+            """Helper recursive functions to span and orientate the tree."""
+            if len(roots) == 1:
+                root = roots[0]
+                # TODO: # how to signify orientation?
+            else:
+                for rIdx in range(len(roots)):
+                    nextRoots = None  # TODO: next upstream roots (towards leaves)
+        
+        self.wasn = _orientate_recursive([self.rootIdx], self.wasn)
 
     def plot_me(self, ax):
         """Plot function"""

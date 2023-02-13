@@ -143,7 +143,7 @@ def tidanse(
     """
 
     # Initialize variables
-    dv = DANSEvariables()
+    dv = TIDANSEvariables()
     dv.import_params(p)
     # For TI-DANSE
     dv.init_for_adhoc_topology()
@@ -158,73 +158,69 @@ def tidanse(
     # Import variables from WASN object
     dv.init_from_wasn(wasnTreeObj.wasn)
 
-    # Compute events  # TODO:TODO:TODO:TODO:
-    eventInstants, fs = base.initialize_events(dv.timeInstants, p)
+    # Compute events
+    eventInstants, fs = base.initialize_events(
+        timeInstants=dv.timeInstants,
+        p=p,
+        nodeTypes=[node.nodeType for node in wasnTreeObj.wasn]
+    )
 
-    stop = 1
+    # Profiling
+    def is_interactive():  # if file is run from notebook
+        import __main__ as main
+        return not hasattr(main, '__file__')
+    if not is_interactive():
+        profiler = Profiler()
+        profiler.start()
+    t0 = time.perf_counter()    # timing
 
-    # # Compute events
-    # eventInstants, fs = base.initialize_events(dv.timeInstants, p)
+    # Loop over event instants
+    for idx_t in range(len(eventInstants)):
 
-    # # Profiling
-    # def is_interactive():
-    #     import __main__ as main
-    #     return not hasattr(main, '__file__')
-    # if not is_interactive():
-    #     profiler = Profiler()
-    #     profiler.start()
-    # t0 = time.perf_counter()    # timing
+        # Parse event matrix and inform user (is asked)
+        base.events_parser(
+            eventInstants[idx_t],
+            dv.startUpdates,
+            dv.printout_eventsParser,
+            dv.printout_eventsParserNoBC
+        )
 
-    # # Loop over event instants
-    # for idx_t in range(len(eventInstants)):
+        # Process events at current instant
+        events = eventInstants[idx_t] 
+        for idx_e in range(events.nEvents):
+            k = events.nodes[idx_e]  # node index
+            # # Broadcast event  # TODO: not yet addressed, no need when no SROs are present
+            # if events.type[idx_e] == 'bc':
+            #     dv.broadcast(events.t, fs[k], k)
+            # Filter updates and desired signal estimates event
+            if events.type[idx_e] == 'up':
+                dv.broadcast(events.t, fs[k], k)
+                dv.update_and_estimate(events.t, fs[k], k)
+            else:
+                raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
+    
+    # Profiling
+    if not is_interactive():
+        profiler.stop()
+        if dv.printout_profiler:
+            profiler.print()
+    print('\nSimultaneous DANSE processing all done.')
+    dur = time.perf_counter() - t0
+    print(f'{np.amax(dv.timeInstants)}s of signal processed in \
+        {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: \
+        {np.round(np.amax(dv.timeInstants) / dur, 4)})')
 
-    #     # Parse event matrix and inform user (is asked)
-    #     base.events_parser(
-    #         eventInstants[idx_t],
-    #         dv.startUpdates,
-    #         dv.printout_eventsParser,
-    #         dv.printout_eventsParserNoBC
-    #     )
+    # Build output
+    out = DANSEoutputs()
+    out.import_params(p)
+    out.from_variables(dv)
+    # Update WASN object
+    for k in range(len(wasnTreeObj.wasn)):
+        wasnTreeObj.wasn[k].enhancedData = dv.d[:, k]
+        if dv.computeCentralised:
+            wasnTreeObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
+        if dv.computeLocal:
+            wasnTreeObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
 
-    #     # Process events at current instant
-    #     events = eventInstants[idx_t] 
-    #     for idx_e in range(events.nEvents):
-    #         k = events.nodes[idx_e]  # node index
-    #         # Broadcast event
-    #         if events.type[idx_e] == 'bc':
-    #             dv.broadcast(events.t, fs[k], k)
-    #         # Filter updates and desired signal estimates event
-    #         elif events.type[idx_e] == 'up':
-    #             dv.update_and_estimate(events.t, fs[k], k)
-    #         else:
-    #             raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
-
-    # # Profiling
-    # if not is_interactive():
-    #     profiler.stop()
-    #     if dv.printout_profiler:
-    #         profiler.print()
-
-    # print('\nSimultaneous DANSE processing all done.')
-    # dur = time.perf_counter() - t0
-    # print(f'{np.amax(dv.timeInstants)}s of signal processed in \
-    #     {str(datetime.timedelta(seconds=dur))}.')
-    # print(f'(Real-time processing factor: \
-    #     {np.round(np.amax(dv.timeInstants) / dur, 4)})')
-
-    # # Build output
-    # out = DANSEoutputs()
-    # out.import_params(p)
-    # out.from_variables(dv)
-    # # Update WASN object
-    # for k in range(len(wasn)):
-    #     wasn[k].enhancedData = dv.d[:, k]
-    #     if dv.computeCentralised:
-    #         wasn[k].enhancedData_c = dv.dCentr[:, k]
-    #     if dv.computeLocal:
-    #         wasn[k].enhancedData_l = dv.dLocal[:, k]
-
-    # TODO:
-    out, wasnObj = None, None
-
-    return out, wasnObj
+    return out, wasnTreeObj

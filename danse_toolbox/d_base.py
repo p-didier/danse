@@ -273,7 +273,11 @@ def prep_sigs_for_FFT(y, N, Ns, t):
     return yout, tout, nadd
 
 
-def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
+def initialize_events(
+    timeInstants: np.ndarray,
+    p: DANSEparameters,
+    nodeTypes=[]
+    ):
     """
     Returns the matrix the columns of which to loop over in SRO-affected
     simultaneous DANSE. For each event instant, the matrix contains the instant
@@ -286,6 +290,8 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
         Time instants corresponding to the samples of each of the `Nn` nodes.
     p : DANSEparameters object
         Parameters.
+    nodeTypes : list[str]
+        List of node types (used iff `p.nodeUpdating == 'topo-indep'`).
 
     Returns
     -------
@@ -312,9 +318,7 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
         # vvv Allowing computer precision errors down to 1e-4*mean delta.
         precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e6))))
         if len(np.unique(np.round(deltas, precision))) > 1:
-            raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: \
-                {len(np.unique(np.round(deltas, precision)))} different \
-                    sample intervals detected for node {k+1}.')
+            raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: {len(np.unique(np.round(deltas, precision)))} different sample intervals detected for node {k+1}.')
         # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.
         fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)
 
@@ -326,23 +330,32 @@ def initialize_events(timeInstants: np.ndarray, p: DANSEparameters):
     # Total signal duration [s] per node (after truncation during sig. gen.).
     Ttot = timeInstants[-1, :]
 
-    if p.nodeUpdating == 'topo-indep':
-        # Ad-hoc (non fully connected) WASN
-        stop = 1
-        pass  # TODO:
+    # Expected number of DANSE update per node over total signal length
+    numUpInTtot = np.floor(Ttot * fs / p.Ns)
+    # Expected DANSE update instants
+    upInstants = [
+        np.arange(np.ceil(p.DFTsize / p.Ns),
+        int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+    ]
+    # ^ note that we only start updating when we have enough samples.
+
+    # Expected number of broadcasts per node over total signal length
+    numBcInTtot = np.floor(Ttot * fs / p.broadcastLength)
+
+    if p.nodeUpdating == 'topo-indep':   # ad-hoc (non fully connected) WASN
+        # Get expected broadcast instants
+        if 'wholeChunk' in p.broadcastType:
+            bcInstants = [
+                np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
+                    p.broadcastLength/fs[k] for k in range(nNodes)
+            ]
+            # ^ note that we only start broadcasting when we have enough
+            # samples to perform compression.
+        else:
+            stop = 1
+            raise ValueError('Not yet implemented')
 
     else:   # fully connected WASN
-        # Expected number of DANSE update per node over total signal length
-        numUpInTtot = np.floor(Ttot * fs / p.Ns)
-        # Expected DANSE update instants
-        upInstants = [
-            np.arange(np.ceil(p.DFTsize / p.Ns),
-            int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-        ]  
-        # ^ note that we only start updating when we have enough samples.
-        
-        # Expected number of broadcasts per node over total signal length
-        numBcInTtot = np.floor(Ttot * fs / p.broadcastLength)
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             bcInstants = [
@@ -1218,6 +1231,8 @@ def prune_wasn_to_tree(
             prunedWasnObj.wasn[k].nodeType = 'leaf'
     # Set root
     prunedWasnObj.set_tree_root()
+    # Add graph orientation from leaves to root
+    prunedWasnObj.orientate()
 
     if plotit:
         # Plot original and pruned WASN

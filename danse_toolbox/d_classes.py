@@ -279,10 +279,6 @@ class DANSEvariables(base.DANSEparameters):
 
         return self
 
-    def init_for_adhoc_topology(self):
-        """Additional parameters required for TI-DANSE in ad-hoc WASNs."""
-        pass  # TODO:
-
     def broadcast(self, tCurr, fs, k):
         """
         Parameters
@@ -1235,3 +1231,45 @@ class DANSEvariables(base.DANSEparameters):
                 self.dLocal[self.idxEndChunk -\
                     self.Ns:self.idxEndChunk, k] = dChunk
 
+
+class TIDANSEvariables(DANSEvariables):
+    
+    def init_for_adhoc_topology(self):
+        """Parameters required for TI-DANSE in ad-hoc WASNs."""
+        pass
+
+    def ti_compress(self, k, tCurr, fs):
+        """Compress local sensor observations into a signal $z'_k$."""
+        
+        # Extract correct frame of local signals
+        ykFrame = base.local_chunk_for_broadcast(
+            self.yin[k],
+            tCurr,
+            fs,
+            self.DFTsize
+        )
+
+        if len(ykFrame) < self.DFTsize:
+            print('Cannot perform compression: not enough local signals samples.')
+
+        elif self.broadcastType == 'wholeChunk':
+
+            # Time-domain chunk-wise broadcasting
+            _, self.zLocal[k] = base.danse_compression_whole_chunk(
+                ykFrame,
+                self.wTildeExt[k],
+                self.winWOLAanalysis,
+                self.winWOLAsynthesis,
+                zqPrevious=self.zLocal[k]
+            )  # local compressed signals (time-domain)
+
+            # Fill buffers in
+            self.zBuffer = base.fill_buffers_whole_chunk(
+                k,
+                self.neighbors,
+                self.zBuffer,
+                self.zLocal[k][:(self.DFTsize // 2)]
+            ) 
+        
+        else:
+            raise ValueError('NYI')  # TODO:
