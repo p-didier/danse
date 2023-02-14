@@ -437,6 +437,7 @@ def build_wasn(room: pra.room.ShoeBox,
         
         # Create node
         node = classes.Node(
+            index=k,
             nSensors=p.nSensorPerNode[k],
             sro=p.SROperNode[k],
             fs=fsSRO,

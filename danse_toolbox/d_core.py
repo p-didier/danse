@@ -152,7 +152,7 @@ def tidanse(
     wasnTreeObj = base.prune_wasn_to_tree(
         wasnObj,
         algorithm=p.treeFormationAlgorithm,
-        plotit=False
+        plotit=True
     )
 
     # Import variables from WASN object

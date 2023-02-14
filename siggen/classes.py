@@ -126,6 +126,7 @@ class WASNparameters(AcousticScenarioParameters):
 
 @dataclass
 class Node:
+    index: int = 0
     nSensors: int = 1
     sro: float = 0.
     fs: float = 16000.
@@ -136,6 +137,8 @@ class Node:
     enhancedData_l: np.ndarray = np.array([]) # after LOCAL enhancement
     timeStamps: np.ndarray = np.array([])
     neighborsIdx: list[int] = field(default_factory=list)
+    downstreamNeighborsIdx: list[int] = field(default_factory=list)
+    upstreamNeighborsIdx: list[int] = field(default_factory=list)
     vad: np.ndarray = np.array([])
     beta: float = 1.    # exponential averaging (forgetting factor)
                         # for Ryy and Rnn updates at this node
@@ -205,16 +208,44 @@ class WASN:
         if 'root' not in [node.nodeType for node in self.wasn]:
             raise ValueError('The WASN cannot be orientated: missing root node.')
         
-        def _orientate_recursive(roots, wasn: list[Node]):
-            """Helper recursive functions to span and orientate the tree."""
-            if len(roots) == 1:
-                root = roots[0]
-                # TODO: # how to signify orientation?
-            else:
-                for rIdx in range(len(roots)):
-                    nextRoots = None  # TODO: next upstream roots (towards leaves)
-        
-        self.wasn = _orientate_recursive([self.rootIdx], self.wasn)
+        def identify_upstream_downstream(nodeIdx: int, wasn: list[Node], passedNodes):
+            """Recursive helper function to orientate WASN."""
+            nextNodesIndices = []
+            for n in wasn[nodeIdx].neighborsIdx:
+                # Identify downstream neighbors
+                if nodeIdx not in wasn[n].downstreamNeighborsIdx and\
+                    nodeIdx not in wasn[n].upstreamNeighborsIdx:
+                    wasn[n].downstreamNeighborsIdx.append(nodeIdx)
+                    if n not in passedNodes:
+                        nextNodesIndices.append(n)
+                        if n not in wasn[nodeIdx].upstreamNeighborsIdx:
+                            wasn[nodeIdx].upstreamNeighborsIdx.append(n)
+                # Identify upstream neighbors
+                for ii in wasn[n].neighborsIdx:
+                    if ii not in wasn[n].downstreamNeighborsIdx and\
+                        ii not in wasn[n].upstreamNeighborsIdx:
+                        wasn[n].upstreamNeighborsIdx.append(ii)
+            return nextNodesIndices, wasn
+
+        nextRootIndices = [self.rootIdx]
+        passedNodes = []
+        orientationIteration = 0
+        # Iteratively orientate the WASN
+        while nextRootIndices != []:
+            nextNextRootIndices = []
+            for k in nextRootIndices:
+                foo, self.wasn = identify_upstream_downstream(
+                    k, self.wasn, passedNodes
+                )
+                passedNodes.append(k)
+                nextNextRootIndices += foo
+            nextRootIndices = nextNextRootIndices
+            # Show progress
+            # print(f'Orientation iteration: {orientationIteration}')
+            # for k in range(len(self.wasn)):
+            #     print(f'Node {k+1}: DS {[ii+1 for ii in self.wasn[k].downstreamNeighborsIdx]}; US {[ii+1 for ii in self.wasn[k].upstreamNeighborsIdx]}')
+            orientationIteration += 1
+
 
     def plot_me(self, ax):
         """Plot function"""
