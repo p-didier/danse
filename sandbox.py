@@ -64,7 +64,7 @@ p = TestParameters(
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
-        WOLAovlp=.5,
+        WOLAovlp=.5,  # [*100 -> %]
         # nodeUpdating='seq',
         nodeUpdating='asy',
         # broadcastType='fewSamples',

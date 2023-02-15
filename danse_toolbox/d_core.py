@@ -143,24 +143,24 @@ def tidanse(
     """
 
     # Initialize variables
-    dv = TIDANSEvariables()
-    dv.import_params(p)
+    tidv = TIDANSEvariables()
+    tidv.import_params(p)
     # For TI-DANSE
-    dv.init_for_adhoc_topology()
+    tidv.init_for_adhoc_topology()
 
     # Prune WASN to tree
     wasnTreeObj = base.prune_wasn_to_tree(
         wasnObj,
         algorithm=p.treeFormationAlgorithm,
-        plotit=True
+        plotit=False
     )
 
     # Import variables from WASN object
-    dv.init_from_wasn(wasnTreeObj.wasn)
+    tidv.init_from_wasn(wasnTreeObj.wasn)
 
     # Compute events
     eventInstants, fs = base.initialize_events(
-        timeInstants=dv.timeInstants,
+        timeInstants=tidv.timeInstants,
         p=p,
         nodeTypes=[node.nodeType for node in wasnTreeObj.wasn]
     )
@@ -180,9 +180,9 @@ def tidanse(
         # Parse event matrix and inform user (is asked)
         base.events_parser(
             eventInstants[idx_t],
-            dv.startUpdates,
-            dv.printout_eventsParser,
-            dv.printout_eventsParserNoBC
+            tidv.startUpdates,
+            tidv.printout_eventsParser,
+            tidv.printout_eventsParserNoBC
         )
 
         # Process events at current instant
@@ -193,34 +193,40 @@ def tidanse(
             # if events.type[idx_e] == 'bc':
             #     dv.broadcast(events.t, fs[k], k)
             # Filter updates and desired signal estimates event
-            if events.type[idx_e] == 'up':
-                dv.broadcast(events.t, fs[k], k)
-                dv.update_and_estimate(events.t, fs[k], k)
+            if events.type[idx_e] in ['up', 'bc']:  # TODO: for now... [PD~15.02.2023]
+                tidv.ti_compress(
+                    k=k,
+                    tCurr=events.t,
+                    fs=fs[k]
+                )
+                tidv.ti_compute_partial_innetwork_sum(k)
+                # dv.broadcast(events.t, fs[k], k)
+                # dv.update_and_estimate(events.t, fs[k], k)
             else:
                 raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
     
     # Profiling
     if not is_interactive():
         profiler.stop()
-        if dv.printout_profiler:
+        if tidv.printout_profiler:
             profiler.print()
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0
-    print(f'{np.amax(dv.timeInstants)}s of signal processed in \
+    print(f'{np.amax(tidv.timeInstants)}s of signal processed in \
         {str(datetime.timedelta(seconds=dur))}.')
     print(f'(Real-time processing factor: \
-        {np.round(np.amax(dv.timeInstants) / dur, 4)})')
+        {np.round(np.amax(tidv.timeInstants) / dur, 4)})')
 
     # Build output
     out = DANSEoutputs()
     out.import_params(p)
-    out.from_variables(dv)
+    out.from_variables(tidv)
     # Update WASN object
     for k in range(len(wasnTreeObj.wasn)):
-        wasnTreeObj.wasn[k].enhancedData = dv.d[:, k]
-        if dv.computeCentralised:
-            wasnTreeObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
-        if dv.computeLocal:
-            wasnTreeObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
+        wasnTreeObj.wasn[k].enhancedData = tidv.d[:, k]
+        if tidv.computeCentralised:
+            wasnTreeObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
+        if tidv.computeLocal:
+            wasnTreeObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
 
     return out, wasnTreeObj

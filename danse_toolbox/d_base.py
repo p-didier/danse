@@ -4,6 +4,7 @@
 # ~created on 19.10.2022 by Paul Didier
 
 import copy
+import warnings
 import numpy as np
 import networkx as nx
 from numba import njit
@@ -345,12 +346,11 @@ def initialize_events(
     if p.nodeUpdating == 'topo-indep':   # ad-hoc (non fully connected) WASN
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
-            bcInstants = [
+            fusingInstants = [
                 np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
                     p.broadcastLength/fs[k] for k in range(nNodes)
             ]
-            # ^ note that we only start broadcasting when we have enough
-            # samples to perform compression.
+            # ^ note that we only start fusing when we have enough samples.
         else:
             stop = 1
             raise ValueError('Not yet implemented')
@@ -388,13 +388,19 @@ def initialize_events(
     outputEvents = build_events_matrix(
         upInstants,
         bcInstants,
-        p.nodeUpdating
+        p.nodeUpdating,
     )
 
     return outputEvents, fs
 
 
-def build_events_matrix(up_t, bc_t, nodeUpdating, visualizeUps=False):
+def build_events_matrix(
+    up_t,
+    bc_t,
+    nodeUpdating,
+    visualizeUps=False,
+    fuse_t=[]
+    ):
     """
     Sub-function of `get_events_matrix`, building the events matrix
     from the update and broadcast instants.
@@ -405,6 +411,14 @@ def build_events_matrix(up_t, bc_t, nodeUpdating, visualizeUps=False):
         Update instants per node [s].
     bc_t : [nNodes x 1] list of np.ndarrays (float)
         Broadcast instants per node [s].
+    nodeUpdating : str
+        Type of node updating ('seq', 'asy', 'sim', or 'topo-indep').
+    visualizeUps : bool
+        If True, plot a visualization of the expected update instants for 
+        each node in the WASN.
+    fuse_t : [nNodes x 1] list of np.ndarrays (float)
+        Fusion instants per node [s].
+        (only used if `nodeUpdating == 'topo-indep'`) # TODO: FUSION INSTANTS -- ALL LOCAL SIGNAL FUSIONS IN THE WASN SHOULD HAPPEN BEFORE THE IN-NETWORK SUMMATIONS
 
     Returns
     -------
@@ -1262,7 +1276,13 @@ def update_wasn_object_from_nxgraph(
     WASNout : `WASN` object
         Updated WASN.
     """
-    adjMat = nx.adjacency_matrix(Gnx).toarray()
+    with warnings.catch_warnings():
+        # Avoiding the NetworkX FutureWarning:
+        #   `adjacency_matrix will return a scipy.sparse array instead of a
+        #   matrix in Networkx 3.0.`
+        warnings.simplefilter(action='ignore', category=FutureWarning)
+        #
+        adjMat = nx.adjacency_matrix(Gnx).toarray()
     nNodes = adjMat.shape[0]
 
     WASNout = copy.deepcopy(originalWASN)

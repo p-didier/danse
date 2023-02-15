@@ -219,6 +219,8 @@ class DANSEvariables(base.DANSEparameters):
         self.dHatLocal = np.zeros(
             (self.nPosFreqs, self.nIter, nNodes), dtype=complex
         )
+        self.downstreamNeighbors = [node.downstreamNeighborsIdx\
+                                    for node in wasn]
         self.expAvgBeta = [node.beta for node in wasn]
         self.flagIterations = [[] for _ in range(nNodes)]
         self.flagInstants = [[] for _ in range(nNodes)]
@@ -254,6 +256,7 @@ class DANSEvariables(base.DANSEparameters):
         self.tStartForMetrics = np.full(shape=(nNodes,), fill_value=None)
         self.tStartForMetricsCentr = np.full(shape=(nNodes,), fill_value=None)
         self.tStartForMetricsLocal = np.full(shape=(nNodes,), fill_value=None)
+        self.upstreamNeighbors = [node.upstreamNeighborsIdx for node in wasn]
         self.yin = [node.data for node in wasn]
         self.yyH = yyH
         self.yyHuncomp = yyHuncomp
@@ -1233,13 +1236,34 @@ class DANSEvariables(base.DANSEparameters):
 
 
 class TIDANSEvariables(DANSEvariables):
+    """
+    References
+    ----------
+    [1] P. Didier, T. Van Waterschoot, S. Doclo and M. Moonem, "Sampling Rate
+    Offset Estimation and Compensation for Distributed Adaptive Node-Specific
+    Signal Estimation in Wireless Acoustic Sensor Networks," in IEEE Open
+    Journal of Signal Processing, doi: 10.1109/OJSP.2023.3243851.
+    """
     
     def init_for_adhoc_topology(self):
         """Parameters required for TI-DANSE in ad-hoc WASNs."""
-        pass
+        # `zLocalPrime`: fused local signals (!= partial in-network sum!).
+        #       == $z_k'[\nu,i]$, following notation from [1].
+        self.zLocalPrime = [np.array([]) for _ in range(self.nNodes)]
 
     def ti_compress(self, k, tCurr, fs):
-        """Compress local sensor observations into a signal $z'_k$."""
+        """
+        Compress local sensor observations into a signal $z'_k$.
+        
+        Parameters
+        ----------
+        k : int
+            Node index.
+        tCurr : float
+            Current time instant [s].
+        fs : float or int
+            Current node's sampling frequency [Hz].
+        """
         
         # Extract correct frame of local signals
         ykFrame = base.local_chunk_for_broadcast(
@@ -1250,26 +1274,29 @@ class TIDANSEvariables(DANSEvariables):
         )
 
         if len(ykFrame) < self.DFTsize:
-            print('Cannot perform compression: not enough local signals samples.')
+            print('Cannot perform compression: not enough local samples.')
 
         elif self.broadcastType == 'wholeChunk':
-
             # Time-domain chunk-wise broadcasting
-            _, self.zLocal[k] = base.danse_compression_whole_chunk(
+            _, self.zLocalPrime[k] = base.danse_compression_whole_chunk(
                 ykFrame,
                 self.wTildeExt[k],
                 self.winWOLAanalysis,
                 self.winWOLAsynthesis,
-                zqPrevious=self.zLocal[k]
-            )  # local compressed signals (time-domain)
+                zqPrevious=self.zLocalPrime[k]
+            )  # local fused signals (time-domain)
 
-            # Fill buffers in
-            self.zBuffer = base.fill_buffers_whole_chunk(
-                k,
-                self.neighbors,
-                self.zBuffer,
-                self.zLocal[k][:(self.DFTsize // 2)]
-            ) 
-        
         else:
-            raise ValueError('NYI')  # TODO:
+            raise ValueError('[NYI]')  # TODO:
+    
+    def ti_compute_partial_innetwork_sum(self, k):
+        """
+        Computes the partial in-network sum at the current node.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        """
+        self.zLocal[k] = self.zLocalPrime[k] +\
+            self.zLocalPrime[self.upstreamNeighbors[k]]
