@@ -1244,16 +1244,28 @@ class TIDANSEvariables(DANSEvariables):
     Signal Estimation in Wireless Acoustic Sensor Networks," in IEEE Open
     Journal of Signal Processing, doi: 10.1109/OJSP.2023.3243851.
     """
+
+    def __init__(self, p: base.DANSEparameters, wasn: list[Node]):
+        self.import_params(p)           # import base DANSE parameters
+        self.init_from_wasn(wasn)       # import WASN parameters
+        self.init_for_adhoc_topology()  # TI-DANSE-specific variables
     
     def init_for_adhoc_topology(self):
         """Parameters required for TI-DANSE in ad-hoc WASNs."""
         # `zLocalPrime`: fused local signals (!= partial in-network sum!).
-        #       == $z_k'[\nu,i]$, following notation from [1].
+        #       == $\dot{z}_kl[n]'$, following notation from [1].
         self.zLocalPrime = [np.array([]) for _ in range(self.nNodes)]
+        # `zBufferTI`: partial in-network sums given from upstream neighbors.
+        #       == $\{\dot{z}_l[n]\}_{l\in\mathcal{T}_k\backslash\{q\}}}$,
+        #           following notation from [1].
+        self.zBufferTI = [
+            [np.array([]) for _ in range(len(self.upstreamNeighbors[k]))]\
+                for k in range(self.nNodes)
+        ]  
 
-    def ti_compress(self, k, tCurr, fs):
+    def ti_fusion(self, k, tCurr, fs):
         """
-        Compress local sensor observations into a signal $z'_k$.
+        Fuses local sensor observations into a signal $z'_k$.
         
         Parameters
         ----------
@@ -1289,7 +1301,7 @@ class TIDANSEvariables(DANSEvariables):
         else:
             raise ValueError('[NYI]')  # TODO:
     
-    def ti_compute_partial_innetwork_sum(self, k):
+    def ti_compute_partial_sum(self, k):
         """
         Computes the partial in-network sum at the current node.
 
@@ -1298,5 +1310,22 @@ class TIDANSEvariables(DANSEvariables):
         k : int
             Node index.
         """
-        self.zLocal[k] = self.zLocalPrime[k] +\
-            self.zLocalPrime[self.upstreamNeighbors[k]]
+        self.zLocal[k] = self.zLocalPrime[k]
+        for l in self.upstreamNeighbors[k]:
+            self.zLocal[k] += self.zLocal[l]
+        
+    def ti_broadcast_partial_sum_downstream(self, k):
+        """
+        Broadcast local partial in-network sum data to downstream neighbors.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        """
+        for q in range(len(self.downstreamNeighbors[k])):
+            # Find index of node `k` from the perspective of node `q`
+            allIdx = np.arange(len(self.upstreamNeighbors[q]))
+            idx = allIdx[self.upstreamNeighbors[q] == k][0]  
+
+            self.zBufferTI[q][idx] = self.zLocal[k]  # Partial In-Network Sum

@@ -346,16 +346,24 @@ def initialize_events(
     if p.nodeUpdating == 'topo-indep':   # ad-hoc (non fully connected) WASN
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
-            fusingInstants = [
+            fuInstants = [
                 np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
                     p.broadcastLength/fs[k] for k in range(nNodes)
             ]
             # ^ note that we only start fusing when we have enough samples.
+
+            bcInstants = copy.deepcopy(fuInstants)  # same broadcast instants
+            # ^ we differentiate fusion instants from broadcast instants to 
+            # ensure fusion occurs in all nodes before broadcasting (necessary
+            # to compute partial in-network sums).
+
+            upInstants = [np.array([]) for _ in range(nNodes)]  # TODO:
         else:
             stop = 1
             raise ValueError('Not yet implemented')
 
     else:   # fully connected WASN
+        fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             bcInstants = [
@@ -389,6 +397,7 @@ def initialize_events(
         upInstants,
         bcInstants,
         p.nodeUpdating,
+        fuse_t=fuInstants
     )
 
     return outputEvents, fs
@@ -425,39 +434,75 @@ def build_events_matrix(
     outputEvents : [Ne x 1] list of DANSEeventInstant objects
         Event instants matrix.
     """
-    # Useful variables
-    nNodes = len(up_t)
+    # Events dictionary (in chronological order of events)
+    # -- 'fu': fuse local signals (only if `nodeUpdating == 'topo-indep'`)
+    # -- 'bc': 
+    #    -- if `nodeUpdating != 'topo-indep'`: 
+    #    Fuse and broadcast local data to neighbors.
+    #    -- elif `nodeUpdating == 'topo-indep'`: 
+    #    Compute partial in-network sum and broadcast downstream (towards root).
+    # -- 'up': perform DANSE filter update.
+    eventsCodingDict = dict([('fu', 0), ('bc', 1), ('up', 2)])
 
-    numUniqueUpInstants = sum(
-        [len(np.unique(up_t[k])) for k in range(nNodes)]
+    # Useful variables
+    nNodes = len(up_t)  # number of nodes in WASN
+    reversedEventsCodingDict = dict(
+        [(eventsCodingDict[a], a) for a in eventsCodingDict]
     )
-    # Number of unique broadcast instants across the WASN
-    numUniqueBcInstants = sum(
-        [len(np.unique(bc_t[k])) for k in range(nNodes)]
-    )
-    # Number of unique update _or_ broadcast instants across the WASN
-    numEventInstants = numUniqueBcInstants + numUniqueUpInstants
+    fusionInstantsFlag = fuse_t != [] and len(fuse_t) == nNodes
 
     # Arrange into matrix
-    flattenedUpInstants = np.zeros((numUniqueUpInstants, 3))
-    flattenedBcInstants = np.zeros((numUniqueBcInstants, 3))
-    for k in range(nNodes):
-        idxStart_u = sum([len(up_t[q]) for q in range(k)])
-        idxEnd_u = idxStart_u + len(up_t[k])
-        flattenedUpInstants[idxStart_u:idxEnd_u, 0] = up_t[k]
-        flattenedUpInstants[idxStart_u:idxEnd_u, 1] = k
-        flattenedUpInstants[:, 2] = 1    # event reference "1" for updates
+    def _flatten_instants(K, t, eventRef):
+        """
+        Helper function -- flatten instants array.
+        
+        Parameters
+        ----------
+        K : int
+            Number of nodes.
+        t : [K x 1] list[np.ndarray] (float)
+            Time instants to consider [s].
+        eventRef : int
+            Event reference (integer code, see variable `eventsCodingDict`).
 
-        idxStart_b = sum([len(bc_t[q]) for q in range(k)])
-        idxEnd_b = idxStart_b + len(bc_t[k])
-        flattenedBcInstants[idxStart_b:idxEnd_b, 0] = bc_t[k]
-        flattenedBcInstants[idxStart_b:idxEnd_b, 1] = k
-        flattenedBcInstants[:, 2] = 0    # event reference "0" for broadcasts
+        Returns
+        -------
+        eventInstants : [N x 3] np.ndarray (float)
+            Flattened event array.
+            [:, 0] == instant;
+            [:, 1] == node index;
+            [:, 2] == event reference;
+        """
+        nInstants = sum(
+            [len(np.unique(t[k])) for k in range(K)]
+        )
+        eventInstants = np.zeros((nInstants, 3))
+        for k in range(K):
+            idxStart = sum([len(t[q]) for q in range(k)])
+            idxEnd = idxStart + len(t[k])
+            eventInstants[idxStart:idxEnd, 0] = t[k]
+            eventInstants[idxStart:idxEnd, 1] = k
+            eventInstants[:, 2] = eventRef    # event reference
+        return eventInstants
+
+    # Create event lists
+    upInstants = _flatten_instants(nNodes, up_t, eventsCodingDict['up'])
+    bcInstants = _flatten_instants(nNodes, bc_t, eventsCodingDict['bc'])
+    # Total number of unique events
+    numEventInstants = upInstants.shape[0] + bcInstants.shape[0]
+    if fusionInstantsFlag:
+        # Consider fusion instants (TI-DANSE)
+        fuInstants = _flatten_instants(nNodes, fuse_t, eventsCodingDict['fu'])
+        numEventInstants += fuInstants.shape[0]
+    else:
+        fuInstants = np.zeros((0, 3))  # default: no fusion instants (DANSE)
+    
     # Combine
     eventInstants = np.concatenate(
-        (flattenedUpInstants, flattenedBcInstants),
+        (upInstants, bcInstants, fuInstants),
         axis=0
     )
+
     # Sort
     idxSort = np.argsort(eventInstants[:, 0], axis=0)
     eventInstants = eventInstants[idxSort, :]
@@ -465,62 +510,64 @@ def build_events_matrix(
     outputInstants: list[DANSEeventInstant] = []
     eventIdx = 0    # init while-loop
     nodesConcerned = []             # init
-    eventTypesConcerned = []        # init
+    evTypesConcerned = []        # init
     lastUpNode = -1     # index of latest updating node
-    # ^^^ (init. at -1 so that `lastUpNode + 1 == 0`)
+    # ^^^ init. at -1 so that `lastUpNode + 1 == 0`
     while eventIdx < numEventInstants:
 
         currInstant = eventInstants[eventIdx, 0]
         nodesConcerned.append(int(eventInstants[eventIdx, 1]))
-        eventTypesConcerned.append(int(eventInstants[eventIdx, 2]))
+        evTypesConcerned.append(int(eventInstants[eventIdx, 2]))
 
-        # Check whether the next instant is the same and
-        # should be grouped with the current instant.
-        if eventIdx < numEventInstants - 1:
-            nextInstant = eventInstants[eventIdx + 1, 0]
-            while currInstant == nextInstant:
-                eventIdx += 1
-                currInstant = eventInstants[eventIdx, 0]
-                nodesConcerned.append(int(eventInstants[eventIdx, 1]))
-                eventTypesConcerned.append(int(eventInstants[eventIdx, 2]))
-                # Check whether the next instant is the same and
-                # should be grouped with the current instant.
-                if eventIdx < numEventInstants - 1:
-                    nextInstant = eventInstants[eventIdx + 1, 0]
-                else:
-                    eventIdx += 1
-                    break
-            else:
-                eventIdx += 1
-        else:
-            eventIdx += 1
-
-        # Sort events at current instant
+        # Group same-time-instant events
+        eventIdx, nodesConcerned, evTypesConcerned = events_groupping_check(
+            evIdx=eventIdx,
+            numEv=numEventInstants,
+            ev_t=eventInstants,
+            nodes=nodesConcerned,
+            evTypes=evTypesConcerned
+        )
+        # Transform to np.ndarray
         nodesConcerned = np.array(nodesConcerned, dtype=int)
-        eventTypesConcerned = np.array(eventTypesConcerned, dtype=int)
-        # 1) First broadcasts, then updates
-        originalIndices = np.arange(len(nodesConcerned))
-        idxUpEvent = originalIndices[eventTypesConcerned == 1]
-        idxBcEvent = originalIndices[eventTypesConcerned == 0]
-        # 2) Order by node index
-        if len(idxUpEvent) > 0:
-            idxUpEvent = idxUpEvent[np.argsort(nodesConcerned[idxUpEvent])]
-        if len(idxBcEvent) > 0:
-            idxBcEvent = idxBcEvent[np.argsort(nodesConcerned[idxBcEvent])]
-        # 3) Re-combine
-        indices = np.concatenate((idxBcEvent, idxUpEvent))
+        evTypesConcerned = np.array(evTypesConcerned, dtype=int)
+
+        baseIndices = np.arange(len(nodesConcerned))
+        indices = np.empty(0, dtype=int)  # init
+        for key in eventsCodingDict.keys():
+            idxEvent = baseIndices[evTypesConcerned == eventsCodingDict[key]]
+            # Order by node index
+            if len(idxEvent) > 0:
+                idxEvent = idxEvent[np.argsort(nodesConcerned[idxEvent])]
+            indices = np.concatenate((indices, idxEvent))
+
+        # idxUpEvent = baseIndices[evTypesConcerned == eventsCodingDict['up']]
+        # idxBcEvent = baseIndices[evTypesConcerned == eventsCodingDict['bc']]
+        # idxFuEvent = baseIndices[evTypesConcerned == eventsCodingDict['fu']]
+        # # 2) Order by node index
+        # if len(idxUpEvent) > 0:
+        #     idxUpEvent = idxUpEvent[np.argsort(nodesConcerned[idxUpEvent])]
+        # if len(idxBcEvent) > 0:
+        #     idxBcEvent = idxBcEvent[np.argsort(nodesConcerned[idxBcEvent])]
+        # if len(idxFuEvent) > 0:
+        #     idxFuEvent = idxFuEvent[np.argsort(nodesConcerned[idxFuEvent])]
+        # # 3) Re-combine
+        # if fusionInstantsFlag:
+        #     indices = np.concatenate((idxBcEvent, idxFuEvent, idxUpEvent))
+        # else:
+        #     indices = np.concatenate((idxBcEvent, idxUpEvent))
         # 4) Sort
         nodesConcerned = nodesConcerned[indices]
-        eventTypesConcerned = eventTypesConcerned[indices]
+        evTypesConcerned = evTypesConcerned[indices]
 
         # Event types (broadcast or update)
-        types = ['bc' if ii == 0 else 'up' for ii in eventTypesConcerned]
+        # types = ['bc' if ii == 0 else 'up' for ii in eventTypesConcerned]
+        types = [reversedEventsCodingDict[ii] for ii in evTypesConcerned]
 
         # Address node-updating strategy
-        bypass = [False for _ in eventTypesConcerned]  # default: no bypass
+        bypass = [False for _ in evTypesConcerned]  # default: no bypass
         if 'up' in types and nodeUpdating == 'seq':
             lastUpNodeUpdated = lastUpNode
-            for ii in range(len(eventTypesConcerned)):
+            for ii in range(len(evTypesConcerned)):
                 if types[ii] == 'up':
                     if nodesConcerned[ii] == np.mod(lastUpNode + 1, nNodes):
                         # Increment last updating node index
@@ -540,7 +587,7 @@ def build_events_matrix(
         ))
 
         nodesConcerned = []         # reset list
-        eventTypesConcerned = []    # reset list
+        evTypesConcerned = []    # reset list
 
     # Visualize update instants
     if visualizeUps:
@@ -568,6 +615,60 @@ def build_events_matrix(
         plt.show()
 
     return outputInstants
+
+
+def events_groupping_check(evIdx, numEv, ev_t, nodes: list, evTypes: list):
+    """
+    Checks whether events are occurring at the same time instant and should,
+    therefore, be groupped together.
+
+    Parameters
+    ----------
+    evIdx : int
+        Event index (used to keep track of events outside the function).
+    numEv : int
+        Total number of events looped over outside the function.
+    ev_t : [N x 3] np.ndarray (float)
+        Flattened event array.
+        [:, 0] == instant;
+        [:, 1] == node index;
+        [:, 2] == event reference.
+    nodes : list[int]
+        Nodes concerned during current loop (outside the function).
+    evTypes : list[int]
+        Event types concerned during current loop (outside the function).
+
+    Returns
+    -------
+    evIdx : int
+        Updated event index.
+    nodes : list[int]
+        Updated nodes concerned during current loop.
+    evTypes : list[int]
+        Updated event types concerned during current loop.
+    """
+    
+    curr_t = ev_t[evIdx, 0]  # current instant
+    if evIdx < numEv - 1:
+        next_t = ev_t[evIdx + 1, 0]
+        while curr_t == next_t:
+            evIdx += 1
+            curr_t = ev_t[evIdx, 0]
+            nodes.append(int(ev_t[evIdx, 1]))
+            evTypes.append(int(ev_t[evIdx, 2]))
+            # Check whether the next instant is the same and
+            # should be grouped with the current instant.
+            if evIdx < numEv - 1:
+                next_t = ev_t[evIdx + 1, 0]
+            else:
+                evIdx += 1
+                break
+        else:
+            evIdx += 1
+    else:
+        evIdx += 1
+
+    return evIdx, nodes, evTypes
 
 
 def local_chunk_for_broadcast(y, t, fs, N):

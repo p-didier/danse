@@ -142,12 +142,6 @@ def tidanse(
     doi: 10.1109/TSIPN.2016.2623095.
     """
 
-    # Initialize variables
-    tidv = TIDANSEvariables()
-    tidv.import_params(p)
-    # For TI-DANSE
-    tidv.init_for_adhoc_topology()
-
     # Prune WASN to tree
     wasnTreeObj = base.prune_wasn_to_tree(
         wasnObj,
@@ -155,8 +149,8 @@ def tidanse(
         plotit=False
     )
 
-    # Import variables from WASN object
-    tidv.init_from_wasn(wasnTreeObj.wasn)
+    # Initialize TI-DANSE variables
+    tidv = TIDANSEvariables(p, wasnTreeObj.wasn)
 
     # Compute events
     eventInstants, fs = base.initialize_events(
@@ -186,24 +180,21 @@ def tidanse(
         )
 
         # Process events at current instant
-        events = eventInstants[idx_t] 
-        for idx_e in range(events.nEvents):
-            k = events.nodes[idx_e]  # node index
-            # # Broadcast event  # TODO: not yet addressed, no need when no SROs are present
-            # if events.type[idx_e] == 'bc':
-            #     dv.broadcast(events.t, fs[k], k)
-            # Filter updates and desired signal estimates event
-            if events.type[idx_e] in ['up', 'bc']:  # TODO: for now... [PD~15.02.2023]
-                tidv.ti_compress(
-                    k=k,
-                    tCurr=events.t,
-                    fs=fs[k]
-                )
-                tidv.ti_compute_partial_innetwork_sum(k)
-                # dv.broadcast(events.t, fs[k], k)
-                # dv.update_and_estimate(events.t, fs[k], k)
+        currEvents = eventInstants[idx_t] 
+        for idx_e in range(currEvents.nEvents):
+            k = currEvents.nodes[idx_e]  # node index
+            if not currEvents.bypass[idx_e]:
+                if currEvents.type[idx_e] == 'fu':
+                    tidv.ti_fusion(k, currEvents.t, fs[k])
+                elif currEvents.type[idx_e] == 'bc':
+                    tidv.ti_compute_partial_sum(k)
+                    tidv.ti_broadcast_partial_sum_downstream(k)
+                else:
+                    raise ValueError(
+                        f'Unknown event type: "{currEvents.type[idx_e]}".'
+                    )
             else:
-                raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
+                print(f'Event at node {currEvents.nodes[idx_e]} at t={np.round(currEvents.t[idx_e], 3)}s (type: "{currEvents.type[idx_e]}") is bypassed.')
     
     # Profiling
     if not is_interactive():
