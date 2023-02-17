@@ -169,13 +169,17 @@ class Node:
 class WASN:
     wasn: list[Node] = field(default_factory=list)  # list of `Node` objects
     adjacencyMatrix: np.ndarray = np.array([])  # adjacency matrix of WASN
-    rootSelectionMeasure: str = 'snr'       # measure to select the tree root
+    rootSelectionMeasure: str = 'snr'       
+        # ^ measure to select the tree root
         # -'snr': signal-to-noise ratio estimate.
         # -'user-defined': user-defined estimate.
         # -anything else: invalid.
     userDefinedRoot: int = 0    # index of user-defined root node
-        # Used iff `rootSelectionMeasure == 'user-defined'`.
+        # ^ used iff `rootSelectionMeasure == 'user-defined'`.
     rootIdx: int = userDefinedRoot  # effective root node index
+    leafToRootOrdering: list = field(default_factory=list)
+        # ^ node ordering from leaf to root (elements can be `int`
+        #   or `list[int]`).
 
     def set_tree_root(self):
         """Sets the root of a tree-topology WASN."""
@@ -234,8 +238,8 @@ class WASN:
 
         nextRootIndices = [self.rootIdx]
         passedNodes = []
-        orientationIteration = 0
         # Iteratively orientate the WASN
+        self.leafToRootOrdering.append(self.rootIdx)
         while nextRootIndices != []:
             nextNextRootIndices = []
             for k in nextRootIndices:
@@ -245,13 +249,12 @@ class WASN:
                 passedNodes.append(k)
                 nextNextRootIndices += foo
             nextRootIndices = nextNextRootIndices
-            # Show progress
-            # print(f'Orientation iteration: {orientationIteration}')
-            # for k in range(len(self.wasn)):
-            #     print(f'Node {k+1}: DS {[ii+1 for ii in self.wasn[k].downstreamNeighborsIdx]}; US {[ii+1 for ii in self.wasn[k].upstreamNeighborsIdx]}')
-            orientationIteration += 1
+            # Save branch ordering (from leaves to root)
+            if nextRootIndices != []:
+                self.leafToRootOrdering.append(nextRootIndices)
+            
 
-    def plot_me(self, ax):
+    def plot_me(self, ax=None):
         """Plot function"""
         # Convert to NetworkX `Graph` object
         Gnx = nx.from_numpy_array(self.adjacencyMatrix)
@@ -267,6 +270,10 @@ class WASN:
             [(u, v) for u, v in Gnx.edges()]
         )
         # Plot the nodes - alpha is scaled by "depth" automatically
+        if ax is None:
+            fig = plt.figure()
+            fig.set_size_inches(8.5, 3.5)
+            ax = fig.add_subplot(projection='3d')
         ax.scatter(*node_xyz.T, s=100, ec="w")
         # Add node numbers
         for ii in range(len(nodesPos)):

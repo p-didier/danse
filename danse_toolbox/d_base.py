@@ -411,8 +411,7 @@ def build_events_matrix(
     fuse_t=[]
     ):
     """
-    Sub-function of `get_events_matrix`, building the events matrix
-    from the update and broadcast instants.
+    Builds the DANSE events matrix from the update and broadcast instants.
     
     Parameters
     ----------
@@ -434,24 +433,6 @@ def build_events_matrix(
     outputEvents : [Ne x 1] list of DANSEeventInstant objects
         Event instants matrix.
     """
-    # Events dictionary (in chronological order of events)
-    # -- 'fu': fuse local signals (only if `nodeUpdating == 'topo-indep'`)
-    # -- 'bc': 
-    #    -- if `nodeUpdating != 'topo-indep'`: 
-    #    Fuse and broadcast local data to neighbors.
-    #    -- elif `nodeUpdating == 'topo-indep'`: 
-    #    Compute partial in-network sum and broadcast downstream (towards root).
-    # -- 'up': perform DANSE filter update.
-    eventsCodingDict = dict([('fu', 0), ('bc', 1), ('up', 2)])
-
-    # Useful variables
-    nNodes = len(up_t)  # number of nodes in WASN
-    reversedEventsCodingDict = dict(
-        [(eventsCodingDict[a], a) for a in eventsCodingDict]
-    )
-    fusionInstantsFlag = fuse_t != [] and len(fuse_t) == nNodes
-
-    # Arrange into matrix
     def _flatten_instants(K, t, eventRef):
         """
         Helper function -- flatten instants array.
@@ -484,6 +465,23 @@ def build_events_matrix(
             eventInstants[idxStart:idxEnd, 1] = k
             eventInstants[:, 2] = eventRef    # event reference
         return eventInstants
+    
+    # Events dictionary (in chronological order of events)
+    # -- 'fu': fuse local signals (only if `nodeUpdating == 'topo-indep'`)
+    # -- 'bc': 
+    #    -- if `nodeUpdating != 'topo-indep'`: 
+    #    Fuse and broadcast local data to neighbors.
+    #    -- elif `nodeUpdating == 'topo-indep'`: 
+    #    Compute partial in-network sum and broadcast downstream (towards root).
+    # -- 'up': perform DANSE filter update.
+    eventsCodingDict = dict([('fu', 0), ('bc', 1), ('up', 2)])
+
+    # Useful variables
+    nNodes = len(up_t)  # number of nodes in WASN
+    reversedEventsCodingDict = dict(
+        [(eventsCodingDict[a], a) for a in eventsCodingDict]
+    )
+    fusionInstantsFlag = fuse_t != [] and len(fuse_t) == nNodes
 
     # Create event lists
     upInstants = _flatten_instants(nNodes, up_t, eventsCodingDict['up'])
@@ -531,31 +529,13 @@ def build_events_matrix(
         nodesConcerned = np.array(nodesConcerned, dtype=int)
         evTypesConcerned = np.array(evTypesConcerned, dtype=int)
 
-        baseIndices = np.arange(len(nodesConcerned))
-        indices = np.empty(0, dtype=int)  # init
-        for key in eventsCodingDict.keys():
-            idxEvent = baseIndices[evTypesConcerned == eventsCodingDict[key]]
-            # Order by node index
-            if len(idxEvent) > 0:
-                idxEvent = idxEvent[np.argsort(nodesConcerned[idxEvent])]
-            indices = np.concatenate((indices, idxEvent))
-
-        # idxUpEvent = baseIndices[evTypesConcerned == eventsCodingDict['up']]
-        # idxBcEvent = baseIndices[evTypesConcerned == eventsCodingDict['bc']]
-        # idxFuEvent = baseIndices[evTypesConcerned == eventsCodingDict['fu']]
-        # # 2) Order by node index
-        # if len(idxUpEvent) > 0:
-        #     idxUpEvent = idxUpEvent[np.argsort(nodesConcerned[idxUpEvent])]
-        # if len(idxBcEvent) > 0:
-        #     idxBcEvent = idxBcEvent[np.argsort(nodesConcerned[idxBcEvent])]
-        # if len(idxFuEvent) > 0:
-        #     idxFuEvent = idxFuEvent[np.argsort(nodesConcerned[idxFuEvent])]
-        # # 3) Re-combine
-        # if fusionInstantsFlag:
-        #     indices = np.concatenate((idxBcEvent, idxFuEvent, idxUpEvent))
-        # else:
-        #     indices = np.concatenate((idxBcEvent, idxUpEvent))
-        # 4) Sort
+        # Sort same-time-instant events
+        indices = sort_simultaneous_events(
+            evTypes=evTypesConcerned,
+            nodes=nodesConcerned,
+            eventsCodingDict=eventsCodingDict,
+            tidanseFlag=nodeUpdating == 'topo-indep'
+        )
         nodesConcerned = nodesConcerned[indices]
         evTypesConcerned = evTypesConcerned[indices]
 
@@ -615,6 +595,52 @@ def build_events_matrix(
         plt.show()
 
     return outputInstants
+
+
+def sort_simultaneous_events(
+        evTypes,
+        nodes,
+        eventsCodingDict: dict,
+        tidanseFlag=False
+    ):
+    """
+    Sorts DANSE events occurring at the same time instants.
+    -- Some specific DANSE events should occur (from a pure programming /
+        computations point of view) before/after others.
+
+    Parameters
+    ----------
+    evTypes : list[int]
+        Event types concerned during current loop (outside the function).
+    nodes : list[int]
+        Nodes concerned during current loop (outside the function).
+    eventsCodingDict : dict{str : int}
+        Dictionary for correpondence between event codes in integer format and
+        event codes in string format.
+    tidanseFlag : bool
+        If True, configure for TI-DANSE. Else, for fully connected DANSE.
+
+    Returns
+    -------
+    indices : [len(evTypes) x 1] np.ndarray (int)
+        Ordering indices (to be applied subsequently to, e.g.,
+        `evTypes` and `nodes`).
+    """
+    if tidanseFlag:  # ad-hoc WASN topology case
+        # Consider fusion-type ("fu") and broadcast-type ("bc") events
+        pass  # TODO: somehow make that function aware of the WASN orientation
+    
+    else:  # fully connected WASN topology case
+        baseIndices = np.arange(len(evTypes))
+        indices = np.empty(0, dtype=int)  # init
+        for key in eventsCodingDict.keys():
+            idxEvent = baseIndices[evTypes == eventsCodingDict[key]]
+            # Order by node index
+            if len(idxEvent) > 0:
+                idxEvent = idxEvent[np.argsort(nodes[idxEvent])]
+            indices = np.concatenate((indices, idxEvent))
+
+    return indices
 
 
 def events_groupping_check(evIdx, numEv, ev_t, nodes: list, evTypes: list):
