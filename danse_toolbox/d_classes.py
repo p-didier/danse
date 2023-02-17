@@ -1326,6 +1326,11 @@ class TIDANSEvariables(DANSEvariables):
         for q in range(len(self.downstreamNeighbors[k])):
             # Find index of node `k` from the perspective of node `q`
             allIdx = np.arange(len(self.upstreamNeighbors[q]))
-            idx = allIdx[self.upstreamNeighbors[q] == k][0]  
-
-            self.zBufferTI[q][idx] = self.zLocal[k]  # Partial In-Network Sum
+            idx = allIdx[self.upstreamNeighbors[q] == k]
+            if len(idx) == 0:
+                pass  # no downstream neighbor to broadcast to
+            elif len(idx) == 1:
+                # Broadcast partial in-network sum
+                self.zBufferTI[q][int(idx[0])] = self.zLocal[k]
+            else:
+                raise ValueError()
