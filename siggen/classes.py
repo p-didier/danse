@@ -239,7 +239,7 @@ class WASN:
         nextRootIndices = [self.rootIdx]
         passedNodes = []
         # Iteratively orientate the WASN
-        self.leafToRootOrdering.append(self.rootIdx)
+        self.leafToRootOrdering.append([self.rootIdx])
         while nextRootIndices != []:
             nextNextRootIndices = []
             for k in nextRootIndices:
@@ -249,9 +249,10 @@ class WASN:
                 passedNodes.append(k)
                 nextNextRootIndices += foo
             nextRootIndices = nextNextRootIndices
-            # Save branch ordering (from leaves to root)
+            # Save branch ordering (from root to leaves, for now)
             if nextRootIndices != []:
                 self.leafToRootOrdering.append(nextRootIndices)
+        self.leafToRootOrdering.reverse()  # reverse to go from leaves to root
             
 
     def plot_me(self, ax=None):

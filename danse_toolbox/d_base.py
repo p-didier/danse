@@ -277,7 +277,8 @@ def prep_sigs_for_FFT(y, N, Ns, t):
 def initialize_events(
     timeInstants: np.ndarray,
     p: DANSEparameters,
-    nodeTypes=[]
+    nodeTypes=[],
+    leafToRootOrdering=[]
     ):
     """
     Returns the matrix the columns of which to loop over in SRO-affected
@@ -293,6 +294,9 @@ def initialize_events(
         Parameters.
     nodeTypes : list[str]
         List of node types (used iff `p.nodeUpdating == 'topo-indep'`).
+    leafToRootOrdering : list[int or list[int]]
+        Leaves to root ordering of node indices. Nodes that live on the same
+        tree depth are groupped in lists.
 
     Returns
     -------
@@ -356,7 +360,10 @@ def initialize_events(
             # ^ we differentiate fusion instants from broadcast instants to 
             # ensure fusion occurs in all nodes before broadcasting (necessary
             # to compute partial in-network sums).
+            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
 
+            reInstants = copy.deepcopy(fuInstants)  # same relay instants
+            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
             upInstants = [np.array([]) for _ in range(nNodes)]  # TODO:
         else:
             stop = 1
@@ -364,6 +371,7 @@ def initialize_events(
 
     else:   # fully connected WASN
         fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
+        reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             bcInstants = [
@@ -397,7 +405,9 @@ def initialize_events(
         upInstants,
         bcInstants,
         p.nodeUpdating,
-        fuse_t=fuInstants
+        fuse_t=fuInstants,
+        re_t=reInstants,
+        leafToRootOrdering=leafToRootOrdering
     )
 
     return outputEvents, fs
@@ -408,7 +418,9 @@ def build_events_matrix(
     bc_t,
     nodeUpdating,
     visualizeUps=False,
-    fuse_t=[]
+    fuse_t=[],
+    re_t=[],
+    leafToRootOrdering=[]
     ):
     """
     Builds the DANSE events matrix from the update and broadcast instants.
@@ -425,8 +437,12 @@ def build_events_matrix(
         If True, plot a visualization of the expected update instants for 
         each node in the WASN.
     fuse_t : [nNodes x 1] list of np.ndarrays (float)
-        Fusion instants per node [s].
-        (only used if `nodeUpdating == 'topo-indep'`) # TODO: FUSION INSTANTS -- ALL LOCAL SIGNAL FUSIONS IN THE WASN SHOULD HAPPEN BEFORE THE IN-NETWORK SUMMATIONS
+        Fusion instants per node [s] (used iff `nodeUpdating == 'topo-indep'`).
+    re_t : [nNodes x 1] list of np.ndarrays (float)
+        Relay instants per node [s] (used iff `nodeUpdating == 'topo-indep'`).
+    leafToRootOrdering : list[int or list[int]]
+        Leaves to root ordering of node indices. Nodes that live on the same
+        tree depth are groupped in lists.
 
     Returns
     -------
@@ -467,37 +483,56 @@ def build_events_matrix(
         return eventInstants
     
     # Events dictionary (in chronological order of events)
-    # -- 'fu': fuse local signals (only if `nodeUpdating == 'topo-indep'`)
-    # -- 'bc': 
+    # -- 'fu_ds': fuse local signals (only if `nodeUpdating == 'topo-indep'`)
+    # -- 'bc_ds': 
     #    -- if `nodeUpdating != 'topo-indep'`: 
     #    Fuse and broadcast local data to neighbors.
     #    -- elif `nodeUpdating == 'topo-indep'`: 
     #    Compute partial in-network sum and broadcast downstream (towards root).
-    # -- 'up': perform DANSE filter update.
-    eventsCodingDict = dict([('fu', 0), ('bc', 1), ('up', 2)])
+    # -- 'up_us': perform DANSE filter update.
+    # >> General code: `ds` means "downstream", `us` means "upstream".
+    #       The `ds` events should occur through the whole tree before the
+    #       `us` events can occur.
+    # >> Coding format: '<ref string>': [priority level, up/downstream]
+    #
+    eventsCodesDict = dict([
+        ('fu', [0, 'ds']),  # 1) fuse local signals;
+        ('bc', [1, 'ds']),  # 2) compute partial in-network sum and broadcast;
+        ('re', [2, 'us']),  # 3) relay in-network sum from root upstream;
+        ('up', [3, 'us']),  # 4) update node-specific filter estimates.
+    ])
+    # Make sure the event codes dictionary is correctly ordered
+    if not [eventsCodesDict[list(eventsCodesDict.keys())[ii]] <\
+        eventsCodesDict[list(eventsCodesDict.keys())[ii + 1]]\
+        for ii in range(len(list(eventsCodesDict.keys())) - 1)]:
+        raise ValueError(
+            'The events code dictionary is not correclty ordered.'
+        )
 
     # Useful variables
     nNodes = len(up_t)  # number of nodes in WASN
     reversedEventsCodingDict = dict(
-        [(eventsCodingDict[a], a) for a in eventsCodingDict]
+        [(eventsCodesDict[a][0], a) for a in eventsCodesDict]
     )
     fusionInstantsFlag = fuse_t != [] and len(fuse_t) == nNodes
 
     # Create event lists
-    upInstants = _flatten_instants(nNodes, up_t, eventsCodingDict['up'])
-    bcInstants = _flatten_instants(nNodes, bc_t, eventsCodingDict['bc'])
+    upInstants = _flatten_instants(nNodes, up_t, eventsCodesDict['up'][0])
+    bcInstants = _flatten_instants(nNodes, bc_t, eventsCodesDict['bc'][0])
     # Total number of unique events
     numEventInstants = upInstants.shape[0] + bcInstants.shape[0]
     if fusionInstantsFlag:
-        # Consider fusion instants (TI-DANSE)
-        fuInstants = _flatten_instants(nNodes, fuse_t, eventsCodingDict['fu'])
-        numEventInstants += fuInstants.shape[0]
+        # Consider fusion and relay instants (TI-DANSE)
+        fuInstants = _flatten_instants(nNodes, fuse_t, eventsCodesDict['fu'][0])
+        reInstants = _flatten_instants(nNodes, re_t, eventsCodesDict['re'][0])
+        numEventInstants += fuInstants.shape[0] + reInstants.shape[0]
     else:
         fuInstants = np.zeros((0, 3))  # default: no fusion instants (DANSE)
+        reInstants = np.zeros((0, 3))  # default: no relay instants (DANSE)
     
     # Combine
     eventInstants = np.concatenate(
-        (upInstants, bcInstants, fuInstants),
+        (upInstants, bcInstants, fuInstants, reInstants),
         axis=0
     )
 
@@ -533,8 +568,9 @@ def build_events_matrix(
         indices = sort_simultaneous_events(
             evTypes=evTypesConcerned,
             nodes=nodesConcerned,
-            eventsCodingDict=eventsCodingDict,
-            tidanseFlag=nodeUpdating == 'topo-indep'
+            eventsCodesDict=eventsCodesDict,
+            tidanseFlag=nodeUpdating == 'topo-indep',
+            leafToRootOrder=leafToRootOrdering
         )
         nodesConcerned = nodesConcerned[indices]
         evTypesConcerned = evTypesConcerned[indices]
@@ -600,8 +636,9 @@ def build_events_matrix(
 def sort_simultaneous_events(
         evTypes,
         nodes,
-        eventsCodingDict: dict,
-        tidanseFlag=False
+        eventsCodesDict: dict,
+        tidanseFlag=False,
+        leafToRootOrder: list=[]
     ):
     """
     Sorts DANSE events occurring at the same time instants.
@@ -614,11 +651,15 @@ def sort_simultaneous_events(
         Event types concerned during current loop (outside the function).
     nodes : list[int]
         Nodes concerned during current loop (outside the function).
-    eventsCodingDict : dict{str : int}
-        Dictionary for correpondence between event codes in integer format and
+    eventsCodesDict : dict{str : int}
+        Dictionary for correspondence between event codes in integer format and
         event codes in string format.
     tidanseFlag : bool
         If True, configure for TI-DANSE. Else, for fully connected DANSE.
+    leafToRootOrder : list[int or list[int]]
+        Leaves to root ordering of node indices. Nodes that live on the same
+        tree depth are groupped in lists.
+
 
     Returns
     -------
@@ -626,15 +667,72 @@ def sort_simultaneous_events(
         Ordering indices (to be applied subsequently to, e.g.,
         `evTypes` and `nodes`).
     """
-    if tidanseFlag:  # ad-hoc WASN topology case
-        # Consider fusion-type ("fu") and broadcast-type ("bc") events
-        pass  # TODO: somehow make that function aware of the WASN orientation
+    def _compile_indices(idxEv, nodeTreeOrder, indices, nodes):
+        """
+        Helper function: orders the provided `idxEvent` indices of TI-DANSE
+        events (of a specific type) based on the provided tree-topology WASN
+        node ordering (leave-to-root (downstream) or root-to-leaves
+        (upstream)).
+
+        Parameters:
+        -----------
+        idxEv : np.ndarray (int)
+            Event indices corresponding to the currently considered type of
+            TI-DANSE event.
+        nodeTreeOrder : list[int or list[int]]
+            Leaves-to-root or root-to-leaves ordering of node indices.
+            Nodes that live on the same tree depth are groupped in lists.
+        indices : np.ndarray (int)
+            Previously computed TI-DANSE event ordering indices.
+        
+        Returns
+        -------
+        indices : np.ndarray (int)
+            Updated/completed TI-DANSE event ordering indices.
+        """
+        for treeLevel in nodeTreeOrder:
+            # Loop over branch-depth levels in the tree topology
+            if not isinstance(treeLevel, list):
+                idxCurrLevel = idxEv[nodes[idxEv] == treeLevel]
+                indices = np.concatenate((indices, idxCurrLevel))
+            else:
+                for k in treeLevel: # consider each node in the level
+                    idxCurrLevel = idxEv[nodes[idxEv] == k]
+                    indices = np.concatenate((indices, idxCurrLevel))
+        return indices
     
+    indices = np.empty(0, dtype=int)  # init
+    baseIndices = np.arange(len(evTypes))
+
+    if tidanseFlag:  # ad-hoc WASN topology case
+        # Order downstream (`ds`) events first.
+        for key in eventsCodesDict.keys():
+            if eventsCodesDict[key][1] == 'ds':  # select downstream events only
+                idxEvent = baseIndices[evTypes == eventsCodesDict[key][0]]
+                # Order depending on leaves-to-root structure
+                indices = _compile_indices(
+                    idxEvent,
+                    leafToRootOrder,
+                    indices,
+                    nodes
+                )
+        # Then, order upstream (`ds`) events.
+        for key in eventsCodesDict.keys():
+            if eventsCodesDict[key][1] == 'us':  # select upstream events only
+                idxEvent = baseIndices[evTypes == eventsCodesDict[key][0]]
+                # Order depending on root-to-leaves structure
+                reversedOrder = copy.deepcopy(leafToRootOrder)
+                reversedOrder.reverse()  # /!\ REVERSE: root to leaves
+                indices = _compile_indices(
+                    idxEvent,
+                    reversedOrder,
+                    indices,
+                    nodes
+                )
+
     else:  # fully connected WASN topology case
-        baseIndices = np.arange(len(evTypes))
-        indices = np.empty(0, dtype=int)  # init
-        for key in eventsCodingDict.keys():
-            idxEvent = baseIndices[evTypes == eventsCodingDict[key]]
+        for key in eventsCodesDict.keys():
+            idxEvent = baseIndices[evTypes == eventsCodesDict[key][0]]
             # Order by node index
             if len(idxEvent) > 0:
                 idxEvent = idxEvent[np.argsort(nodes[idxEvent])]

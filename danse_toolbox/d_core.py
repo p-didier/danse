@@ -156,7 +156,8 @@ def tidanse(
     eventInstants, fs = base.initialize_events(
         timeInstants=tidv.timeInstants,
         p=p,
-        nodeTypes=[node.nodeType for node in wasnTreeObj.wasn]
+        nodeTypes=[node.nodeType for node in wasnTreeObj.wasn],
+        leafToRootOrdering=wasnTreeObj.leafToRootOrdering
     )
 
     # Profiling
@@ -182,19 +183,25 @@ def tidanse(
         # Process events at current instant
         currEvents = eventInstants[idx_t] 
         for idx_e in range(currEvents.nEvents):
-            k = currEvents.nodes[idx_e]  # node index
+            evType = currEvents.type[idx_e]     # event type
+            k = currEvents.nodes[idx_e]         # node index
             if not currEvents.bypass[idx_e]:
-                if currEvents.type[idx_e] == 'fu':
+                if evType == 'fu':
+                    # Fuse local signals
                     tidv.ti_fusion(k, currEvents.t, fs[k])
-                elif currEvents.type[idx_e] == 'bc':
+                elif evType == 'bc':
+                    # Build partial in-network sum and broadcast downstream
                     tidv.ti_compute_partial_sum(k)
                     tidv.ti_broadcast_partial_sum_downstream(k)
+                elif evType == 're':
+                    # Relay in-network sum upstream
+                    tidv.ti_relay_innetwork_sum_upstream(k)
                 else:
                     raise ValueError(
-                        f'Unknown event type: "{currEvents.type[idx_e]}".'
+                        f'Unknown event type: "{evType}".'
                     )
             else:
-                print(f'Event at node {currEvents.nodes[idx_e]} at t={np.round(currEvents.t[idx_e], 3)}s (type: "{currEvents.type[idx_e]}") is bypassed.')
+                print(f'Event at node {currEvents.nodes[idx_e]} at t={np.round(currEvents.t[idx_e], 3)}s (type: "{evType}") is bypassed.')
     
     # Profiling
     if not is_interactive():

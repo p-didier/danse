@@ -1243,6 +1243,12 @@ class TIDANSEvariables(DANSEvariables):
     Offset Estimation and Compensation for Distributed Adaptive Node-Specific
     Signal Estimation in Wireless Acoustic Sensor Networks," in IEEE Open
     Journal of Signal Processing, doi: 10.1109/OJSP.2023.3243851.
+
+    [2] J. Szurley, A. Bertrand and M. Moonen, "Topology-Independent
+    Distributed Adaptive Node-Specific Signal Estimation in Wireless
+    Sensor Networks," in IEEE Transactions on Signal and Information
+    Processing over Networks, vol. 3, no. 1, pp. 130-144, March 2017,
+    doi: 10.1109/TSIPN.2016.2623095.
     """
 
     def __init__(self, p: base.DANSEparameters, wasn: list[Node]):
@@ -1261,7 +1267,13 @@ class TIDANSEvariables(DANSEvariables):
         self.zBufferTI = [
             [np.array([]) for _ in range(len(self.upstreamNeighbors[k]))]\
                 for k in range(self.nNodes)
-        ]  
+        ]
+        # `eta`: in-network sum.
+        #       == $\dot{\eta}[n]$ extrapolating notation from [1] & [2].
+        self.eta = [np.array([]) for _ in range(self.nNodes)]
+        # `etaMk`: in-network sum minus local fused signal.
+        #       == $\dot{\eta}_{-k}[n]$ extrapolating notation from [1] & [2].
+        self.etaMk = [np.array([]) for _ in range(self.nNodes)]
 
     def ti_fusion(self, k, tCurr, fs):
         """
@@ -1323,7 +1335,7 @@ class TIDANSEvariables(DANSEvariables):
         k : int
             Node index.
         """
-        for q in range(len(self.downstreamNeighbors[k])):
+        for q in self.downstreamNeighbors[k]:
             # Find index of node `k` from the perspective of node `q`
             allIdx = np.arange(len(self.upstreamNeighbors[q]))
             idx = allIdx[self.upstreamNeighbors[q] == k]
@@ -1334,3 +1346,16 @@ class TIDANSEvariables(DANSEvariables):
                 self.zBufferTI[q][int(idx[0])] = self.zLocal[k]
             else:
                 raise ValueError()
+
+    def ti_relay_innetwork_sum_upstream(self, k):
+        """
+        Relay in-network sum coming from root to upstream neighbors.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        """
+        for l in self.upstreamNeighbors[k]:
+            self.eta[l] = copy.deepcopy(self.eta[k])  # relay
+            self.etaMk[l] = self.eta[k] - self.zLocalPrime[l]  # $\eta_{-k}$
