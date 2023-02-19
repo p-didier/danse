@@ -41,7 +41,7 @@ p = TestParameters(
         nNodes=3,
         # nNodes=4,
         # nSensorPerNode=[1, 1],
-        nSensorPerNode=[1, 3, 2],
+        nSensorPerNode=[1, 1, 1],
         # nSensorPerNode=[1, 3, 2, 5],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
@@ -169,9 +169,9 @@ def postprocess(
             inp = input(f'The folder\n"{p.exportFolder}"\ncontains data. Overwrite? [y/[n]]:  ')
             if inp not in ['y', 'Y']:
                 runit = False   # don't run
-                print('Aborting export.')
+                print('Aborting figures and sounds export.')
             else:
-                print('Wiping folder before new exports.')
+                print('Wiping folder before new figures and sounds exports.')
                 wipe_folder(p.exportFolder)
     else:
         print(f'Create export folder "{p.exportFolder}".')

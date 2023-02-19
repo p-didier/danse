@@ -748,7 +748,7 @@ def plot_asc(
             for q in range(adjacencyMatrix.shape[1]):
                 # Only consider upper triangular matrix without diagonal
                 # (redundant, otherwise)
-                if k > q and adjacencyMatrix[k, q] == 1:
+                if k > q and adjacencyMatrix[k, q] != 0:
                     ax.plot(
                         [nodeCoords[0, k], nodeCoords[0, q]],
                         [nodeCoords[1, k], nodeCoords[1, q]],
