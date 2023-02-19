@@ -1431,14 +1431,12 @@ class TIDANSEvariables(DANSEvariables):
         # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
-            raise ValueError('[Centralises TI-DANSE computations NYI]')
-        #     self.build_ycentr(tCurr, fs, k)
+            self.build_ycentr(tCurr, fs, k)
         if self.computeLocal:  # extract local info from `\tilde{y}_k`
-            raise ValueError('[Local TI-DANSE computations NYI]')
-        #     self.yLocal[k][:, self.i[k], :] =\
-        #         self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
-        #     self.yHatLocal[k][:, self.i[k], :] =\
-        #         self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
+            self.yLocal[k][:, self.i[k], :] =\
+                self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
+            self.yHatLocal[k][:, self.i[k], :] =\
+                self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         # vvvvvvvvvvvv TODO: vvvvvvvvvvvv

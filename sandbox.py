@@ -79,8 +79,8 @@ p = TestParameters(
             alpha=0.95
         ),
         # vvvvvvvv FOR BASIC TI-DANSE TESTING ONLY vvvvvvvv
-        computeCentralised=False,
-        computeLocal=False,
+        computeCentralised=True,
+        computeLocal=True,
         noExternalFilterRelaxation=True,
         performGEVD=False
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

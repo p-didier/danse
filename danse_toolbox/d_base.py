@@ -1161,7 +1161,11 @@ def events_parser_ti_danse(
             if ii >= len(events.type):
                 flagEnd = True
                 break
-        fullTxt = f'TI-DANSE: Node(s) {currNodes} -> {strCodes[prevType]}'
+        # Prepare printout
+        nodesStr = ''
+        for k in currNodes:
+            nodesStr += f'{k} -> '
+        fullTxt = f'TI-DANSE -- Node(s) [{nodesStr[:-4]}]: {strCodes[prevType]}'
         if is_interactive():  # if we are running from a notebook
             # Print on the same line
             print(f"\r{fullTxt}", end="")
