@@ -63,7 +63,7 @@ def danse(
     # Loop over event instants
     for idx_t in range(len(eventInstants)):
 
-        # Parse event matrix and inform user (is asked)
+        # Parse event matrix and inform user (if asked)
         base.events_parser(
             eventInstants[idx_t],
             dv.startUpdates,
@@ -172,13 +172,13 @@ def tidanse(
     # Loop over event instants
     for idx_t in range(len(eventInstants)):
 
-        # Parse event matrix and inform user (is asked)
-        base.events_parser(
-            eventInstants[idx_t],
-            tidv.startUpdates,
-            tidv.printout_eventsParser,
-            tidv.printout_eventsParserNoBC
-        )
+        # Parse event matrix and inform user (if asked)
+        if tidv.printout_eventsParser:
+            base.events_parser_ti_danse(
+                eventInstants[idx_t],
+                tidv.startUpdates,
+                tidv.printout_eventsParserNoBC
+            )
 
         # Process events at current instant
         currEvents = eventInstants[idx_t] 
@@ -196,6 +196,9 @@ def tidanse(
                 elif evType == 're':
                     # Relay in-network sum upstream
                     tidv.ti_relay_innetwork_sum_upstream(k)
+                elif evType == 'up':
+                    # Update DANSE filter coefficients and estimate target
+                    tidv.ti_update_and_estimate(k, currEvents.t, fs[k])
                 else:
                     raise ValueError(
                         f'Unknown event type: "{evType}".'

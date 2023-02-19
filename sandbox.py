@@ -8,6 +8,7 @@ import pyroomacoustics as pra
 import danse_toolbox.d_post as pp
 import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
+from danse_toolbox.d_utils import wipe_folder
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
@@ -17,7 +18,7 @@ p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
     seed=SEED,
     wasnParams=WASNparameters(
-        generateRandomWASNwithSeed=420,
+        # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
             # topologyType='fully-connected',
@@ -31,7 +32,7 @@ p = TestParameters(
                 [0, 1, 1],  # Node 3
             ])
         ),
-        sigDur=5,
+        sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.2,
@@ -77,8 +78,12 @@ p = TestParameters(
             loop='open',
             alpha=0.95
         ),
-        computeCentralised=True,
-        computeLocal=True,
+        # vvvvvvvv FOR BASIC TI-DANSE TESTING ONLY vvvvvvvv
+        computeCentralised=False,
+        computeLocal=False,
+        noExternalFilterRelaxation=True,
+        performGEVD=False
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     )
 )
 p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
@@ -165,6 +170,9 @@ def postprocess(
             if inp not in ['y', 'Y']:
                 runit = False   # don't run
                 print('Aborting export.')
+            else:
+                print('Wiping folder before new exports.')
+                wipe_folder(p.exportFolder)
     else:
         print(f'Create export folder "{p.exportFolder}".')
         Path(p.exportFolder).mkdir()
@@ -172,7 +180,7 @@ def postprocess(
     if runit:
         # Export convergence plot
         # out.plot_convergence(wasn)
-        out.plot_convergence(p.exportFolder)
+        # out.plot_convergence(p.exportFolder)
 
         # Export .wav files
         out.export_sounds(wasnObj.wasn, p.exportFolder)

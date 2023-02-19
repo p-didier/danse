@@ -68,6 +68,11 @@ class DANSEvariables(base.DANSEparameters):
         self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
+        # Check for TI-DANSE case
+        tidanseFlag = False
+        if len(wasn[0].upstreamNeighborsIdx) > 0 or\
+            len(wasn[0].downstreamNeighborsIdx) > 0:
+            tidanseFlag = True
 
         avgProdResiduals = []   # average residuals product coming out of
                                 # filter-shift processing (SRO estimation).
@@ -121,7 +126,10 @@ class DANSEvariables(base.DANSEparameters):
             # init all buffer flags at 0 (assuming no over- or under-flow)
             bufferFlags.append(np.zeros((self.nIter, nNeighbors)))    
             #
-            dimYTilde[k] = wasn[k].nSensors + nNeighbors
+            if tidanseFlag:
+                dimYTilde[k] = wasn[k].nSensors + 1
+            else:
+                dimYTilde[k] = wasn[k].nSensors + nNeighbors
             # initiate phase shift factors as 0's (no phase shift)
             phaseShiftFactors.append(np.zeros(dimYTilde[k]))   
             #
@@ -363,7 +371,6 @@ class DANSEvariables(base.DANSEparameters):
                 self.zLocal[k],
                 currL
             )
-
         
     def update_and_estimate(self, tCurr, fs, k):
         """
@@ -433,6 +440,28 @@ class DANSEvariables(base.DANSEparameters):
         # Update iteration index
         self.i[k] += 1
 
+    def compute_vad(self, k):
+        """
+        Computes the local VAD for the current frame at node `k`.
+        
+        Parameters
+        ----------
+        k : int
+            Node index.
+        """
+        # Compute VAD
+        VADinFrame = self.fullVAD[k][
+            np.amax([self.idxBegChunk, 0]):self.idxEndChunk
+        ]
+        # If there is a majority of "VAD = 1" in the frame,
+        # set the frame-wise VAD to 1.
+        self.oVADframes[self.i[k]] =\
+            sum(VADinFrame == 0) <= len(VADinFrame) // 2
+        # Count number of spatial covariance matrices updates
+        if self.oVADframes[self.i[k]]:
+            self.numUpdatesRyy[k] += 1
+        else:
+            self.numUpdatesRnn[k] += 1
 
     def evaluate_tstart_for_metrics_computation(self, k, t):
         """
@@ -582,28 +611,30 @@ class DANSEvariables(base.DANSEparameters):
             Current time instant [s].
         """
 
-        # Simultaneous or asynchronous node-updating
-        if self.nodeUpdating in ['sim', 'asy']:
-
-            self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
-                (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
-            # Update targets
-            if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
-                self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
-                    self.wTildeExtTarget[k] + self.alphaExternalFilters *\
-                    self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
-                # Update last external filter update instant [s]
-                self.lastExtFiltUp[k] = t
-                if self.printout_externalFilterUpdate:    # inform user
-                    print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-
-        # Sequential node-updating
-        elif self.nodeUpdating == 'seq':
-
+        if self.noExternalFilterRelaxation:
+            # No relaxation (i.e., no "external" filters)
             self.wTildeExt[k] =\
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+        else:
+            # Simultaneous or asynchronous node-updating
+            if self.nodeUpdating in ['sim', 'asy']:
+                # Relaxed external filter update
+                self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
+                    (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
+                # Update targets
+                if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
+                    self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
+                        self.wTildeExtTarget[k] + self.alphaExternalFilters *\
+                        self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+                    # Update last external filter update instant [s]
+                    self.lastExtFiltUp[k] = t
+                    if self.printout_externalFilterUpdate:    # inform user
+                        print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
 
-
+            # Sequential node-updating
+            elif self.nodeUpdating == 'seq':
+                self.wTildeExt[k] =\
+                    self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
 
     def process_incoming_signals_buffers(self, k, t):
         """
@@ -751,7 +782,8 @@ class DANSEvariables(base.DANSEparameters):
     
     def build_ytilde(self, tCurr, fs, k):
         """
-        
+        Builds the full observation vector used in the DANSE filter update.
+
         Parameters
         ----------
         tCurr : float
@@ -779,18 +811,7 @@ class DANSEvariables(base.DANSEparameters):
             )
 
         # Compute VAD
-        VADinFrame = self.fullVAD[k][
-            np.amax([self.idxBegChunk, 0]):self.idxEndChunk
-        ]
-        # If there is a majority of "VAD = 1" in the frame,
-        # set the frame-wise VAD to 1.
-        self.oVADframes[self.i[k]] =\
-            sum(VADinFrame == 0) <= len(VADinFrame) // 2
-        # Count number of spatial covariance matrices updates
-        if self.oVADframes[self.i[k]]:
-            self.numUpdatesRyy[k] += 1
-        else:
-            self.numUpdatesRnn[k] += 1
+        self.compute_vad(k)
 
         # Build full available observation vector
         yTildeCurr = np.concatenate((yLocalCurr, self.z[k]), axis=1)
@@ -870,7 +891,6 @@ class DANSEvariables(base.DANSEparameters):
 
         return skipUpdate
 
-
     def spatial_covariance_matrix_update(self, k):
         """
         Performs the spatial covariance matrices updates.
@@ -881,10 +901,12 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
 
-        def _upd(Ryy, Rnn, yyH,
-            vad=self.oVADframes[self.i[k]], beta=self.expAvgBeta[k]
-        ):
-            """Quick helper function to perform exponential averaging."""
+        def _update_covmats(
+                Ryy, Rnn, yyH,
+                vad=self.oVADframes[self.i[k]],
+                beta=self.expAvgBeta[k]
+            ):
+            """Helper function to perform exponential averaging."""
             if vad:
                 Ryy = beta * Ryy + (1 - beta) * yyH
             else:
@@ -894,27 +916,24 @@ class DANSEvariables(base.DANSEparameters):
         # Useful renaming
         y = self.yTildeHat[k][:, self.i[k], :]
         yyH = np.einsum('ij,ik->ijk', y, y.conj())  # outer product
-        self.Ryytilde[k], self.Rnntilde[k] = _upd(
+        self.Ryytilde[k], self.Rnntilde[k] = _update_covmats(
             self.Ryytilde[k], self.Rnntilde[k], yyH
         )  # update
         self.yyH[k][self.i[k], :, :, :] = yyH
-
         
         # Consider centralised / local estimation(s)
         if self.computeLocal:
             y = self.yHatLocal[k][:, self.i[k], :]
             yyH = np.einsum('ij,ik->ijk', y, y.conj())
-            self.Ryylocal[k], self.Rnnlocal[k] = _upd(
+            self.Ryylocal[k], self.Rnnlocal[k] = _update_covmats(
                 self.Ryylocal[k], self.Rnnlocal[k], yyH
             )  # update local
         if self.computeCentralised:
             y = self.yHatCentr[k][:, self.i[k], :]
             yyH = np.einsum('ij,ik->ijk', y, y.conj())
-            self.Ryycentr[k], self.Rnncentr[k] = _upd(
+            self.Ryycentr[k], self.Rnncentr[k] = _update_covmats(
                 self.Ryycentr[k], self.Rnncentr[k], yyH
             )  # update centralised
-
-
 
     def perform_update(self, k):
         """
@@ -1274,6 +1293,18 @@ class TIDANSEvariables(DANSEvariables):
         # `etaMk`: in-network sum minus local fused signal.
         #       == $\dot{\eta}_{-k}[n]$ extrapolating notation from [1] & [2].
         self.etaMk = [np.array([]) for _ in range(self.nNodes)]
+        # # `yTildeTIDANSE`: TI-DANSE full observation vector (time-domain)
+        # self.yTildeTIDANSE = [np.zeros((
+        #     self.DFTsize,
+        #     self.nIter,
+        #     self.nSensorPerNode[k] + 1
+        # )) for k in range(self.nNodes)]
+        # # `yTildeHatTIDANSE`: TI-DANSE full observation vector (STFT-domain)
+        # self.yTildeHatTIDANSE = [np.zeros((
+        #     self.nPosFreqs,
+        #     self.nIter,
+        #     self.nSensorPerNode[k] + 1
+        # ), dtype=complex) for k in range(self.nNodes)]
 
     def ti_fusion(self, k, tCurr, fs):
         """
@@ -1322,9 +1353,14 @@ class TIDANSEvariables(DANSEvariables):
         k : int
             Node index.
         """
-        self.zLocal[k] = self.zLocalPrime[k]
+        self.zLocal[k] = copy.deepcopy(self.zLocalPrime[k])
         for l in self.upstreamNeighbors[k]:
             self.zLocal[k] += self.zLocal[l]
+
+        # At the root, the sum is not partial, but complete
+        if len(self.downstreamNeighbors[k]) == 0:
+            self.eta[k] = copy.deepcopy(self.zLocal[k])
+            self.etaMk[k] = self.eta[k] - self.zLocalPrime[k]
         
     def ti_broadcast_partial_sum_downstream(self, k):
         """
@@ -1359,3 +1395,135 @@ class TIDANSEvariables(DANSEvariables):
         for l in self.upstreamNeighbors[k]:
             self.eta[l] = copy.deepcopy(self.eta[k])  # relay
             self.etaMk[l] = self.eta[k] - self.zLocalPrime[l]  # $\eta_{-k}$
+
+    def ti_update_and_estimate(self, k, tCurr, fs):
+        """
+        Performs an update of the DANSE filter coefficients at node `k` and
+        estimates the desired signal(s).
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        tCurr : float
+            Current time instant [s].
+        fs : float or int
+            Current node's sampling frequency [Hz].
+        """
+        
+        if k == self.referenceSensor and self.nInternalFilterUps[k] == 0:
+            # Save first update instant (for, e.g., SRO plot)
+            self.firstDANSEupdateRefSensor = tCurr
+
+        # vvvvvvvvvvvv TODO? vvvvvvvvvvvv
+        # # Process buffers
+        # self.process_incoming_signals_buffers(k, tCurr)
+        # # Wipe local buffers
+        # self.zBuffer[k] = [np.array([])\
+        #     for _ in range(len(self.neighbors[k]))]
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+        # Construct `\tilde{y}_k` in frequency domain
+        self.ti_build_ytilde(k, tCurr, fs)
+        # Compute current VAD
+        self.compute_vad(k)
+        
+        # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
+        # Consider local / centralised estimation(s)
+        if self.computeCentralised:
+            raise ValueError('[Centralises TI-DANSE computations NYI]')
+        #     self.build_ycentr(tCurr, fs, k)
+        if self.computeLocal:  # extract local info from `\tilde{y}_k`
+            raise ValueError('[Local TI-DANSE computations NYI]')
+        #     self.yLocal[k][:, self.i[k], :] =\
+        #         self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
+        #     self.yHatLocal[k][:, self.i[k], :] =\
+        #         self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+        # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
+        # # Account for buffer flags
+        # skipUpdate = self.compensate_sros(k, tCurr)
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+        # Ryy and Rnn updates (including centralised / local, if needed)
+        self.spatial_covariance_matrix_update(k)
+        # Check quality of covariance matrix estimates 
+        self.check_covariance_matrices(k)
+
+        # if not skipUpdate:
+        # If covariance matrices estimates are full-rank, update filters
+        self.perform_update(k)
+        # ^^^ depends on outcome of `check_covariance_matrices()`.
+        # if self.tStartForMetrics[k] is None:
+        self.evaluate_tstart_for_metrics_computation(k, tCurr)
+        # else:
+        #     # Do not update the filter coefficients
+        #     self.wTilde[k][:, self.i[k] + 1, :] =\
+        #         self.wTilde[k][:, self.i[k], :]
+        #     if skipUpdate:
+        #         print(f'Node {k+1}: {self.i[k]+1}^th update skipped.')
+        if self.bypassUpdates:
+            print('!! User-forced bypass of filter coefficients updates !!')
+
+        # Update external filters (for broadcasting)
+        self.update_external_filters(k, tCurr)
+
+        # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
+        # # Update SRO estimates
+        # self.update_sro_estimates(k, fs)
+        # # Update phase shifts for SRO compensation
+        # if self.compensateSROs:
+        #     self.build_phase_shifts_for_srocomp(k)
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+        # Compute desired signal chunk estimate
+        self.get_desired_signal(k)
+        # Update iteration index
+        self.i[k] += 1
+
+    def ti_build_ytilde(self, k, tCurr, fs):        
+        """
+        Builds the observation vector used for the TI-DANSE filter update.
+        
+        Parameters
+        ----------
+        tCurr : float
+            Current time instant [s].
+        fs : float
+            Node `k`'s sampling frequency [Hz].
+        k : int
+            Receiving node index.
+        dv : DANSEvariables object
+            DANSE variables to be updated.
+        """
+
+        # Get data
+        yk = self.yin[k]
+
+        # Extract current local data chunk
+        yLocalCurr, self.idxBegChunk, self.idxEndChunk =\
+            base.local_chunk_for_update(
+                yk,
+                tCurr,
+                fs,
+                bd=self.broadcastType,
+                Ndft=self.DFTsize,
+                Ns=self.Ns
+            )
+
+        # Build full available observation vector
+        yTildeCurr = np.concatenate(
+            (yLocalCurr, self.etaMk[k][:, np.newaxis]),
+            axis=1
+        )
+        self.yTilde[k][:, self.i[k], :] = yTildeCurr
+        # Go to frequency domain
+        yTildeHatCurr = 1 / self.normFactWOLA * np.fft.fft(
+            self.yTilde[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        )
+        # Keep only positive frequencies
+        self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]

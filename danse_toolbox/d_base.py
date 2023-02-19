@@ -164,6 +164,8 @@ class DANSEparameters(Hyperparameters):
     # ---- General
     performGEVD: bool = True    # if True, perform GEVD
     GEVDrank: int = 1           # GEVD rank
+    noExternalFilterRelaxation: bool = False  # if True, bypass external
+        # filter updates.
     timeBtwExternalFiltUpdates: float = 1.  # [s] bw. external filter updates.
     # ^ TODO: make that used only if the node-updating is sim/asy.
     alphaExternalFilters: float = .5    # exponential averaging constant
@@ -361,10 +363,10 @@ def initialize_events(
             # ensure fusion occurs in all nodes before broadcasting (necessary
             # to compute partial in-network sums).
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-
             reInstants = copy.deepcopy(fuInstants)  # same relay instants
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            upInstants = [np.array([]) for _ in range(nNodes)]  # TODO:
+            upInstants = copy.deepcopy(fuInstants)  # same udpate instants
+            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
         else:
             stop = 1
             raise ValueError('Not yet implemented')
@@ -1069,9 +1071,9 @@ def events_parser(
     
     Parameters
     ----------
-    events : [Ne x 1] list of [3 x 1] np.ndarrays containing lists of floats
-        Event instants matrix. One column per event instant.
-        Output of `get_events_matrix` function.
+    events : `DANSEeventInstant` object
+        Event instants. One element of the output of the
+        `get_events_matrix` function.
     startUpdates : list of bools
         Node-specific flags to indicate whether DANSE updates have started. 
     printouts : bool
@@ -1115,6 +1117,61 @@ def events_parser(
             else:
                 # Print on the next line
                 print(fullTxt)
+
+
+def events_parser_ti_danse(
+    events: DANSEeventInstant,
+    startUpdates,
+    doNotPrintBCs=False):
+    """
+    Printouts to inform user of TI-DANSE events.
+    
+    Parameters
+    ----------
+    events : `DANSEeventInstant` object
+        Event instants. One element of the output of the
+        `get_events_matrix` function.
+    startUpdates : list of bools
+        Node-specific flags to indicate whether DANSE updates have started.
+    doNotPrintBCs : bool
+        If True, do not print the broadcast events
+        (only used if `printouts == True`).
+    """
+    # Hard-coded
+    strCodes = dict([
+        ('fu', 'Local signals fusion'),
+        ('bc', 'PiNS and downstream broadcast'),
+        ('re', 'Upstream relay'),
+        ('up', 'Filter update'),
+    ])
+
+    print(f'TI-DANSE: ---- t = {np.round(events.t, 3)} s ----')
+    # Init while-loop
+    flagEnd = False
+    prevType = events.type[0]
+    currNodes = [events.nodes[0]]
+    ii = 1
+    while not flagEnd:
+        while events.type[ii] == prevType:
+            if not events.bypass[ii] and\
+                not ((not startUpdates[events.nodes[ii]])\
+                    and events.type[ii] == 'up'):
+                currNodes.append(events.nodes[ii])
+            ii += 1
+            if ii >= len(events.type):
+                flagEnd = True
+                break
+        fullTxt = f'TI-DANSE: Node(s) {currNodes} -> {strCodes[prevType]}'
+        if is_interactive():  # if we are running from a notebook
+            # Print on the same line
+            print(f"\r{fullTxt}", end="")
+        else:
+            # Print on the next line
+            print(fullTxt)
+        # Prepare next while-loop pass
+        if not flagEnd:
+            prevType = events.type[ii + 1]
+            currNodes = []
 
 
 def is_interactive():  # https://stackoverflow.com/a/22424821

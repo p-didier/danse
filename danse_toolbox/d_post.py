@@ -395,12 +395,15 @@ def compute_metrics(
         print(f'Computing signal enhancement evaluation metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
         # Compute starting indices for centralised and local estimates
+        TDdesiredSignals_est_c, TDdesiredSignals_est_l = None, None
         if out.computeCentralised:
+            TDdesiredSignals_est_c = out.TDdesiredSignals_est_c[:, k]
             startIdxCentr[k] = int(np.floor(
                 out.tStartForMetricsCentr[k] * wasn[k].fs
             ))
             print(f"Node {k+1}: computing speech enhancement metrics for CENTRALISED PROCESSING from the {startIdxCentr[k] + 1}'th sample on (t_start = {out.tStartForMetricsCentr[k]} s).")
         if out.computeLocal:
+            TDdesiredSignals_est_l = out.TDdesiredSignals_est_l[:, k]
             startIdxLocal[k] = int(np.floor(
                 out.tStartForMetricsLocal[k] * wasn[k].fs
             ))
@@ -413,8 +416,8 @@ def compute_metrics(
             noisy=wasn[k].data[:, out.referenceSensor],
             # DANSE outputs (desired signal estimates)
             enhan=out.TDdesiredSignals_est[:, k],
-            enhan_c=out.TDdesiredSignals_est_c[:, k],
-            enhan_l=out.TDdesiredSignals_est_l[:, k],
+            enhan_c=TDdesiredSignals_est_c,
+            enhan_l=TDdesiredSignals_est_l,
             # Start indices
             startIdx=startIdx[k],
             startIdxCentr=startIdxCentr[k],
