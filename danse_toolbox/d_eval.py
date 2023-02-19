@@ -139,8 +139,10 @@ def get_metrics(
     clean_c = clean[startIdxCentr:]
     clean_l = clean[startIdxLocal:]
     clean = clean[startIdx:]
-    enhan_c = enhan_c[startIdxCentr:]
-    enhan_l = enhan_l[startIdxLocal:]
+    if enhan_c is not None:
+        enhan_c = enhan_c[startIdxCentr:]
+    if enhan_l is not None:
+        enhan_l = enhan_l[startIdxLocal:]
     enhan = enhan[startIdx:]
     # noisy_c = noisy[startIdxCentr:]
     # noisy_l = noisy[startIdxLocal:]
