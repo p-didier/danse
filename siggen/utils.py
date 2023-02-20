@@ -577,8 +577,8 @@ def get_topo(
         if topoParams.userDefinedTopo.shape != (numNodes, numNodes):
             raise ValueError(f'The user-defined WASN topology is wrongly dimensioned ([{topoParams.userDefinedTopo.shape[0]} x {topoParams.userDefinedTopo.shape[1]}], should be [{numNodes} x {numNodes}]). Aborting...')
         validConnMatValues = np.array([0, 1])
-        if not all([val in topoParams.userDefinedTopo\
-            for val in validConnMatValues]):
+        if not all([val in validConnMatValues\
+            for val in topoParams.userDefinedTopo.flatten()]):
             raise ValueError(f'The user-defined WASN connectivity matrix contains invalid values (valid values: {validConnMatValues}).')
         if not np.allclose(
             topoParams.userDefinedTopo,

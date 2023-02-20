@@ -70,8 +70,12 @@ class TopologyParameters:
                 raise ValueError('The provided "user-defined" adjacency matrix corresponds to an unconnected graph.')
             # If fully connected, adapt fields
             if (self.userDefinedTopo == 1).all():
-                print('User-defined topology is fully connected. Changing field "topologyType" to "fully-connected".')
-                self.topologyType = 'fully-connected'
+                inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
+                if inp in ['y', 'Y']:
+                    print('Setting field "topologyType" to "fully-connected" -> will compute DANSE (not TI-DANSE)')
+                    self.topologyType = 'fully-connected'
+                else:
+                    print(f'Keeping field "topologyType" as is ("{self.topologyType}").')
 
 @dataclass
 class WASNparameters(AcousticScenarioParameters):

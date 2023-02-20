@@ -365,7 +365,7 @@ def initialize_events(
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
             reInstants = copy.deepcopy(fuInstants)  # same relay instants
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            upInstants = copy.deepcopy(fuInstants)  # same udpate instants
+            # upInstants = copy.deepcopy(fuInstants)  # same udpate instants
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
         else:
             stop = 1
@@ -839,7 +839,7 @@ def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
     
     Parameters
     ----------
-    y : [Ntot x Mk] np.ndarray (float)
+    y : [Ntot x Mk] np.ndaray (float)
         Time-domain locally recorded signal (at `Mk` sensors).
     t : float
         Current time instant [s].
@@ -870,6 +870,11 @@ def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
     elif bd == 'wholeChunk':
         # `N - Ns` samples delay due to time-domain WOLA
         idxEnd = int(np.floor(np.round(t * fs, 5))) - (Ndft - Ns)
+    
+    # # FIXME: DEBUGGING ON 19.02.2023
+    # # FIXME: DEBUGGING ON 19.02.2023
+    # # FIXME: DEBUGGING ON 19.02.2023
+    # idxEnd = int(np.floor(np.round(t * fs, 5)))
 
     # vvv -- don't go into negative sample indices!
     idxBeg = np.amax([idxEnd - Ndft, 0])
@@ -1041,7 +1046,7 @@ def fill_buffers_td_few_samples(k, neighs, zBuffer, zLocalK, L):
     if isinstance(zLocalK, float):
         zLocalK = [zLocalK]
         if L != 1:
-            raise ValueError(f'Incoherence: float `zLocalK` but L = {L}')
+            raise ValueError(f'Incoherence: float `zLocalK` but L = {L}.')
 
     # Loop over neighbors of node `k`
     for idxq in range(len(neighs[k])):
@@ -1055,8 +1060,6 @@ def fill_buffers_td_few_samples(k, neighs, zBuffer, zLocalK, L):
             (zBuffer[q][idxKforNeighborQ], zLocalK[-L:]),
             axis=0
         )
-
-        stop = 1
         
     return zBuffer
 

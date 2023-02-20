@@ -325,7 +325,7 @@ class DANSEvariables(base.DANSEparameters):
                 k,
                 self.neighbors,
                 self.zBuffer,
-                self.zLocal[k][:(self.DFTsize // 2)]
+                self.zLocal[k][:self.Ns]
             ) 
         
         elif self.broadcastType == 'fewSamples':
@@ -795,14 +795,10 @@ class DANSEvariables(base.DANSEparameters):
         dv : DANSEvariables object
             DANSE variables to be updated.
         """
-
-        # Get data
-        yk = self.yin[k]
-
         # Extract current local data chunk
         yLocalCurr, self.idxBegChunk, self.idxEndChunk =\
             base.local_chunk_for_update(
-                yk,
+                self.yin[k],
                 tCurr,
                 fs,
                 bd=self.broadcastType,
@@ -1280,6 +1276,9 @@ class TIDANSEvariables(DANSEvariables):
         # `zLocalPrime`: fused local signals (!= partial in-network sum!).
         #       == $\dot{z}_kl[n]'$, following notation from [1].
         self.zLocalPrime = [np.array([]) for _ in range(self.nNodes)]
+        # `zLocalPrimeBuffer`: fused local signals after WOLA overlap
+        # (last Ns samples are influence by the window).
+        self.zLocalPrimeBuffer = [np.array([]) for _ in range(self.nNodes)]
         # `zBufferTI`: partial in-network sums given from upstream neighbors.
         #       == $\{\dot{z}_l[n]\}_{l\in\mathcal{T}_k\backslash\{q\}}}$,
         #           following notation from [1].
@@ -1333,14 +1332,15 @@ class TIDANSEvariables(DANSEvariables):
 
         elif self.broadcastType == 'wholeChunk':
             # Time-domain chunk-wise broadcasting
-            _, self.zLocalPrime[k] = base.danse_compression_whole_chunk(
+            _, self.zLocalPrimeBuffer[k] = base.danse_compression_whole_chunk(
                 ykFrame,
                 self.wTildeExt[k],
                 self.winWOLAanalysis,
                 self.winWOLAsynthesis,
-                zqPrevious=self.zLocalPrime[k]
+                zqPrevious=self.zLocalPrimeBuffer[k]
             )  # local fused signals (time-domain)
 
+            stop = 1
         else:
             raise ValueError('[NYI]')  # TODO:
     
@@ -1353,6 +1353,17 @@ class TIDANSEvariables(DANSEvariables):
         k : int
             Node index.
         """
+        # Process WOLA buffer: use the valid part of the overlap-added signal
+        # # TODO: this is for whole-chunk broadcasting only
+        if self.i[k] == 0:
+            self.zLocalPrime[k] = copy.deepcopy(self.zLocalPrimeBuffer[k])
+        else:
+            self.zLocalPrime[k] = np.concatenate((
+                self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
+                self.zLocalPrimeBuffer[k][:self.Ns]
+            ))
+
+        # Compute partial sum
         self.zLocal[k] = copy.deepcopy(self.zLocalPrime[k])
         for l in self.upstreamNeighbors[k]:
             self.zLocal[k] += self.zLocal[l]
@@ -1478,6 +1489,10 @@ class TIDANSEvariables(DANSEvariables):
         # Compute desired signal chunk estimate
         self.get_desired_signal(k)
         # Update iteration index
+        if k == 0 and self.oVADframes[self.i[k]]:
+            plt.close()
+            plt.plot(self.yTilde[k][:, self.i[k], :])
+            sop = 11
         self.i[k] += 1
 
     def ti_build_ytilde(self, k, tCurr, fs):        
@@ -1495,14 +1510,10 @@ class TIDANSEvariables(DANSEvariables):
         dv : DANSEvariables object
             DANSE variables to be updated.
         """
-
-        # Get data
-        yk = self.yin[k]
-
         # Extract current local data chunk
         yLocalCurr, self.idxBegChunk, self.idxEndChunk =\
             base.local_chunk_for_update(
-                yk,
+                self.yin[k],
                 tCurr,
                 fs,
                 bd=self.broadcastType,
