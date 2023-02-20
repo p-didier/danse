@@ -64,7 +64,7 @@ class DANSEvariables(base.DANSEparameters):
         list of `Node` objects.
         """
         nNodes = len(wasn)  # number of nodes in WASN
-        nSensorsTotal = sum([wasn[k].nSensors for k in range(nNodes)])
+        nSensorsTotal = sum([node.nSensors for node in wasn])
         self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
@@ -244,6 +244,7 @@ class DANSEvariables(base.DANSEparameters):
         self.numUpdatesRyy = np.zeros(nNodes, dtype=int)
         self.numUpdatesRnn = np.zeros(nNodes, dtype=int)
         self.oVADframes = np.zeros(self.nIter)
+        self.centrVADframes = np.full(self.nIter, fill_value=None)
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
         self.lastBroadcastInstant = np.zeros(nNodes)
@@ -286,7 +287,10 @@ class DANSEvariables(base.DANSEparameters):
         self.zLocal = zLocal
 
         # For centralised and local estimates
-        self.yinStacked = np.concatenate(tuple([x for x in self.yin]), axis=-1)
+        self.yinStacked = np.concatenate(
+            tuple([x for x in self.yin]),
+            axis=-1
+        )
 
         return self
 
@@ -449,20 +453,29 @@ class DANSEvariables(base.DANSEparameters):
         k : int
             Node index.
         """
-        # Compute VAD
-        VADinFrame = self.fullVAD[k][
-            np.amax([self.idxBegChunk, 0]):self.idxEndChunk
-        ]
-        # If there is a majority of "VAD = 1" in the frame,
-        # set the frame-wise VAD to 1.
-        self.oVADframes[self.i[k]] =\
-            sum(VADinFrame == 0) <= len(VADinFrame) // 2
+        def _compute_vad_curr_nodes(k):
+            """Helper function -- compute current-frame VAD at node `k`."""
+            # Compute VAD
+            VADinFrame = self.fullVAD[k][
+                np.amax([self.idxBegChunk, 0]):self.idxEndChunk
+            ]
+            # If there is a majority of "VAD = 1" in the frame,
+            # set the frame-wise VAD to 1.
+            return sum(VADinFrame == 0) <= len(VADinFrame) // 2
+            
+        self.oVADframes[self.i[k]] = _compute_vad_curr_nodes(k)
         # Count number of spatial covariance matrices updates
         if self.oVADframes[self.i[k]]:
             self.numUpdatesRyy[k] += 1
         else:
             self.numUpdatesRnn[k] += 1
 
+        # If needed, compute centralised VAD
+        if self.computeCentralised and self.centrVADframes[self.i[k]] is None:
+            self.centrVADframes[self.i[k]] = np.array([
+                _compute_vad_curr_nodes(k) for k in range(self.nNodes)
+            ]).all()
+            
     def evaluate_tstart_for_metrics_computation(self, k, t):
         """
         Evaluates the start instants for metrics computations.
@@ -530,15 +543,23 @@ class DANSEvariables(base.DANSEparameters):
                     b2 = False
                     break
             return b1 and b2
+        
+        def _check_validity(RnnMat, RyyMat):
+            """Helper function for conciseness: combine validity checks."""
+            def __full_rank_check(mat):
+                """Helper subfunction: check full-rank property."""
+                return (np.linalg.matrix_rank(mat) == mat.shape[-1]).all()
+            check1 = _is_hermitian_and_posdef(RnnMat) 
+            check2 = _is_hermitian_and_posdef(RyyMat) 
+            check3 = __full_rank_check(RnnMat)
+            check4 = __full_rank_check(RyyMat)
+            return check1 and check2 and check3 and check4
 
         if not self.startUpdates[k]:
             if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
                 if self.performGEVD:
-                    # if _is_pos_def(self.Rnntilde[k]) and _is_pos_def(self.Ryytilde[k])\
-                    if _is_hermitian_and_posdef(self.Rnntilde[k]) and _is_hermitian_and_posdef(self.Ryytilde[k])\
-                        and (np.linalg.matrix_rank(self.Rnntilde[k]) == self.Rnntilde[k].shape[-1]).all()\
-                        and (np.linalg.matrix_rank(self.Ryytilde[k]) == self.Ryytilde[k].shape[-1]).all():
+                    if _check_validity(self.Rnntilde[k], self.Ryytilde[k]):
                         self.startUpdates[k] = True
                 else:
                     self.startUpdates[k] = True
@@ -548,10 +569,7 @@ class DANSEvariables(base.DANSEparameters):
             if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
                 if self.performGEVD:
-                    # if _is_pos_def(self.Rnncentr[k]) and _is_pos_def(self.Ryycentr[k])\
-                    if _is_hermitian_and_posdef(self.Rnncentr[k]) and _is_hermitian_and_posdef(self.Ryycentr[k])\
-                        and (np.linalg.matrix_rank(self.Rnncentr[k]) == self.Rnncentr[k].shape[-1]).all()\
-                        and (np.linalg.matrix_rank(self.Ryycentr[k]) == self.Ryycentr[k].shape[-1]).all():
+                    if _check_validity(self.Rnncentr[k], self.Ryycentr[k]):
                         self.startUpdatesCentr[k] = True
                 else:
                     self.startUpdatesCentr[k] = True
@@ -561,10 +579,7 @@ class DANSEvariables(base.DANSEparameters):
             if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
                 if self.performGEVD:
-                    # if _is_pos_def(self.Rnnlocal[k]) and _is_pos_def(self.Ryylocal[k])\
-                    if _is_hermitian_and_posdef(self.Rnnlocal[k]) and _is_hermitian_and_posdef(self.Ryylocal[k])\
-                        and (np.linalg.matrix_rank(self.Rnnlocal[k]) == self.Rnnlocal[k].shape[-1]).all()\
-                        and (np.linalg.matrix_rank(self.Ryylocal[k]) == self.Ryylocal[k].shape[-1]).all():
+                    if _check_validity(self.Rnnlocal[k], self.Ryylocal[k]):
                         self.startUpdatesLocal[k] = True
                 else:
                     self.startUpdatesLocal[k] = True
@@ -584,6 +599,7 @@ class DANSEvariables(base.DANSEparameters):
             Ns=self.Ns
         )
         self.yCentr[k][:, self.i[k], :] = yCentrCurr
+
         # Go to frequency domain
         yHatCentrCurr = 1 / self.normFactWOLA * np.fft.fft(
             self.yCentr[k][:, self.i[k], :] *\
@@ -592,8 +608,7 @@ class DANSEvariables(base.DANSEparameters):
             axis=0
         )
         # Keep only positive frequencies
-        self.yHatCentr[k][:, self.i[k], :] =\
-            yHatCentrCurr[:self.nPosFreqs, :]
+        self.yHatCentr[k][:, self.i[k], :] = yHatCentrCurr[:self.nPosFreqs, :]
 
 
     def update_external_filters(self, k, t):
@@ -897,11 +912,7 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
 
-        def _update_covmats(
-                Ryy, Rnn, yyH,
-                vad=self.oVADframes[self.i[k]],
-                beta=self.expAvgBeta[k]
-            ):
+        def _update_covmats(Ryy, Rnn, yyH, vad, beta=self.expAvgBeta[k]):
             """Helper function to perform exponential averaging."""
             if vad:
                 Ryy = beta * Ryy + (1 - beta) * yyH
@@ -909,26 +920,35 @@ class DANSEvariables(base.DANSEparameters):
                 Rnn = beta * Rnn + (1 - beta) * yyH
             return Ryy, Rnn
 
-        # Useful renaming
-        y = self.yTildeHat[k][:, self.i[k], :]
+        # Perform DANSE covariance matrices udpates
+        y = self.yTildeHat[k][:, self.i[k], :]  # concise renaming
         yyH = np.einsum('ij,ik->ijk', y, y.conj())  # outer product
         self.Ryytilde[k], self.Rnntilde[k] = _update_covmats(
-            self.Ryytilde[k], self.Rnntilde[k], yyH
+            self.Ryytilde[k],
+            self.Rnntilde[k],
+            yyH,
+            vad=self.oVADframes[self.i[k]]
         )  # update
-        self.yyH[k][self.i[k], :, :, :] = yyH
+        self.yyH[k][self.i[k], :, :, :] = yyH  # saving for SRO estimation...
         
         # Consider centralised / local estimation(s)
         if self.computeLocal:
-            y = self.yHatLocal[k][:, self.i[k], :]
+            y = self.yHatLocal[k][:, self.i[k], :]  # concise renaming
             yyH = np.einsum('ij,ik->ijk', y, y.conj())
             self.Ryylocal[k], self.Rnnlocal[k] = _update_covmats(
-                self.Ryylocal[k], self.Rnnlocal[k], yyH
+                self.Ryylocal[k],
+                self.Rnnlocal[k],
+                yyH,
+                vad=self.oVADframes[self.i[k]]
             )  # update local
         if self.computeCentralised:
-            y = self.yHatCentr[k][:, self.i[k], :]
+            y = self.yHatCentr[k][:, self.i[k], :]  # concise renaming
             yyH = np.einsum('ij,ik->ijk', y, y.conj())
             self.Ryycentr[k], self.Rnncentr[k] = _update_covmats(
-                self.Ryycentr[k], self.Rnncentr[k], yyH
+                self.Ryycentr[k],
+                self.Rnncentr[k],
+                yyH,
+                vad=self.centrVADframes[self.i[k]]
             )  # update centralised
 
     def perform_update(self, k):
@@ -946,7 +966,7 @@ class DANSEvariables(base.DANSEparameters):
             """Helper function for regular MWF-like
             DANSE filter update."""
             # Reference sensor selection vector
-            Evect = np.zeros((Ryy.shape[-1],))
+            Evect = np.zeros(Ryy.shape[-1])
             Evect[refSensor] = 1
 
             # Cross-correlation matrix update 
@@ -996,14 +1016,14 @@ class DANSEvariables(base.DANSEparameters):
 
         # Select appropriate update function
         if self.performGEVD:
-            update_fcn = _update_w_gevd
+            filter_update_fcn = _update_w_gevd
         else:
-            update_fcn = _update_w
+            filter_update_fcn = _update_w
 
         if not self.bypassUpdates:
+            # Update DANSE filter
             if self.startUpdates[k]:
-                # Update DANSE filter
-                self.wTilde[k][:, self.i[k] + 1, :] = update_fcn(
+                self.wTilde[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryytilde[k],
                     self.Rnntilde[k],
                     self.referenceSensor
@@ -1011,21 +1031,20 @@ class DANSEvariables(base.DANSEparameters):
                 self.nInternalFilterUps[k] += 1  
             # Update centralised filter
             if self.computeCentralised and self.startUpdatesCentr[k]:
-                self.wCentr[k][:, self.i[k] + 1, :] = update_fcn(
+                self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryycentr[k],
                     self.Rnncentr[k],
-                    self.referenceSensor
+                    int(np.sum(self.nSensorPerNode[:k]) + self.referenceSensor)
                 )
                 self.nCentrFilterUps[k] += 1  
             # Update local filter
             if self.computeLocal and self.startUpdatesLocal[k]:
-                self.wLocal[k][:, self.i[k] + 1, :] = update_fcn(
+                self.wLocal[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryylocal[k],
                     self.Rnnlocal[k],
                     self.referenceSensor
                 )
                 self.nLocalFilterUps[k] += 1
-
 
     def update_sro_estimates(self, k, fs):
         """
@@ -1496,15 +1515,18 @@ class TIDANSEvariables(DANSEvariables):
                 plt.plot(self.yTilde[k][:, self.i[k], :])
                 sop = 11
         if 0:
+            plt.close()
             fig, axes = plt.subplots(2,1)
             fig.set_size_inches(8.5, 3.5)
-            axes[0].plot(self.yTilde[0][:, self.i[k], :])
+            # axes[0].plot(self.yTilde[0][:, self.i[k], :])
+            axes[0].plot(self.yCentr[0][:, self.i[k], :])
             axes[0].grid()
-            axes[1].plot(self.yTilde[1][:, self.i[k], :])
+            # axes[1].plot(self.yTilde[1][:, self.i[k], :])
+            axes[1].plot(self.yCentr[1][:, self.i[k], :])
             axes[1].grid()
             plt.tight_layout()	
             plt.show()
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         # Update iteration index
         self.i[k] += 1

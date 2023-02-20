@@ -1147,10 +1147,10 @@ def events_parser_ti_danse(
     """
     # Hard-coded
     strCodes = dict([
-        ('fu', 'Local signals fusion'),
-        ('bc', 'PiNS and downstream broadcast'),
-        ('re', 'Upstream relay'),
-        ('up', 'Filter update'),
+        ('fu', "Local signals fusion -> z'_k"),
+        ('bc', 'PiNS and downstream broadcast of z_k'),
+        ('re', 'Upstream relay of η'),
+        ('up', 'Filter update w_k[i+1]'),
     ])
 
     print(f'TI-DANSE: ---- t = {np.round(events.t, 3)} s ----')
