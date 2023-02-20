@@ -412,10 +412,36 @@ class DANSEvariables(base.DANSEparameters):
                 self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
         # Account for buffer flags
         skipUpdate = self.compensate_sros(k, tCurr)
+        
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k)
+
+        if k == 0 and self.startUpdates[k] and tCurr > 3.3:
+            plt.close()
+            # fig, axes = plt.subplots(1,1)
+            # fig.set_size_inches(8.5, 3.5)
+            # for q in range(self.yTilde[k].shape[-1]):
+            #     if q < self.nSensorPerNode[k]:
+            #         axes.plot(self.yTilde[k][:, self.i[k], q], 'k')
+            #     else:
+            #         axes.plot(self.yTilde[k][:, self.i[k], q])
+            # axes.grid()
+            # plt.tight_layout()	
+            # plt.show()
+            fig, axes = plt.subplots(1,1)
+            fig.set_size_inches(8.5, 3.5)
+            for q in range(self.wTilde[k].shape[-1]):
+                axes.plot(np.abs(self.wTilde[k][:, self.i[k], q]), label=f'$\\tilde{{w}}_{{k, {q+1}}}$')
+            axes.grid()
+            axes.legend()
+            axes.set_title(f'i = {self.i[k]} (t = {np.round(tCurr, 3)} s)')
+            plt.tight_layout()	
+            plt.show()
+
+            stop = 1
+
 
         if not skipUpdate:
             # If covariance matrices estimates are full-rank, update filters
@@ -632,7 +658,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
         else:
             # Simultaneous or asynchronous node-updating
-            if self.nodeUpdating in ['sim', 'asy']:
+            if self.nodeUpdating in ['sim', 'asy', 'topo-indep']:
                 # Relaxed external filter update
                 self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
                     (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
@@ -645,11 +671,11 @@ class DANSEvariables(base.DANSEparameters):
                     self.lastExtFiltUp[k] = t
                     if self.printout_externalFilterUpdate:    # inform user
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-
             # Sequential node-updating
             elif self.nodeUpdating == 'seq':
                 self.wTildeExt[k] =\
                     self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+                    
 
     def process_incoming_signals_buffers(self, k, t):
         """
@@ -929,6 +955,8 @@ class DANSEvariables(base.DANSEparameters):
             yyH,
             vad=self.oVADframes[self.i[k]]
         )  # update
+        if k == 0:
+            stop = 1
         self.yyH[k][self.i[k], :, :, :] = yyH  # saving for SRO estimation...
         
         # Consider centralised / local estimation(s)
@@ -961,7 +989,6 @@ class DANSEvariables(base.DANSEparameters):
         k : int
             Node index.
         """
-
         def _update_w(Ryy, Rnn, refSensor):
             """Helper function for regular MWF-like
             DANSE filter update."""
@@ -1311,18 +1338,6 @@ class TIDANSEvariables(DANSEvariables):
         # `etaMk`: in-network sum minus local fused signal.
         #       == $\dot{\eta}_{-k}[n]$ extrapolating notation from [1] & [2].
         self.etaMk = [np.array([]) for _ in range(self.nNodes)]
-        # # `yTildeTIDANSE`: TI-DANSE full observation vector (time-domain)
-        # self.yTildeTIDANSE = [np.zeros((
-        #     self.DFTsize,
-        #     self.nIter,
-        #     self.nSensorPerNode[k] + 1
-        # )) for k in range(self.nNodes)]
-        # # `yTildeHatTIDANSE`: TI-DANSE full observation vector (STFT-domain)
-        # self.yTildeHatTIDANSE = [np.zeros((
-        #     self.nPosFreqs,
-        #     self.nIter,
-        #     self.nSensorPerNode[k] + 1
-        # ), dtype=complex) for k in range(self.nNodes)]
 
     def ti_fusion(self, k, tCurr, fs):
         """
@@ -1392,26 +1407,26 @@ class TIDANSEvariables(DANSEvariables):
             self.eta[k] = copy.deepcopy(self.zLocal[k])
             self.etaMk[k] = self.eta[k] - self.zLocalPrime[k]
         
-    def ti_broadcast_partial_sum_downstream(self, k):
-        """
-        Broadcast local partial in-network sum data to downstream neighbors.
+    # def ti_broadcast_partial_sum_downstream(self, k):
+    #     """
+    #     Broadcast local partial in-network sum data to downstream neighbors.
 
-        Parameters
-        ----------
-        k : int
-            Node index.
-        """
-        for q in self.downstreamNeighbors[k]:
-            # Find index of node `k` from the perspective of node `q`
-            allIdx = np.arange(len(self.upstreamNeighbors[q]))
-            idx = allIdx[self.upstreamNeighbors[q] == k]
-            if len(idx) == 0:
-                pass  # no downstream neighbor to broadcast to
-            elif len(idx) == 1:
-                # Broadcast partial in-network sum
-                self.zBufferTI[q][int(idx[0])] = self.zLocal[k]
-            else:
-                raise ValueError()
+    #     Parameters
+    #     ----------
+    #     k : int
+    #         Node index.
+    #     """
+    #     for q in self.downstreamNeighbors[k]:
+    #         # Find index of node `k` from the perspective of node `q`
+    #         allIdx = np.arange(len(self.upstreamNeighbors[q]))
+    #         idx = allIdx[self.upstreamNeighbors[q] == k]
+    #         if len(idx) == 0:
+    #             pass  # no downstream neighbor to broadcast to
+    #         elif len(idx) == 1:
+    #             # Broadcast partial in-network sum
+    #             self.zBufferTI[q][int(idx[0])] = self.zLocal[k]
+    #         else:
+    #             raise ValueError()
 
     def ti_relay_innetwork_sum_upstream(self, k):
         """
@@ -1478,6 +1493,9 @@ class TIDANSEvariables(DANSEvariables):
         self.spatial_covariance_matrix_update(k)
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k)
+
+        if k == 0:
+            stop = 1
 
         # if not skipUpdate:
         # If covariance matrices estimates are full-rank, update filters
