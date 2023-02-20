@@ -66,11 +66,11 @@ def build_room(p: classes.WASNparameters):
         r = np.random.uniform(size=(3,)) * (p.rd - 2 * p.minDistToWalls)\
             + p.minDistToWalls # node centre coordinates
         sensorsCoords = generate_array_pos(
-                    r,
-                    p.nSensorPerNode[k],
-                    p.arrayGeometry,
-                    p.interSensorDist
-                    )
+            r,
+            p.nSensorPerNode[k],
+            p.arrayGeometry,
+            p.interSensorDist
+        )
         room.add_microphone_array(sensorsCoords.T)
 
     # Add desired sources
@@ -102,7 +102,7 @@ def build_room(p: classes.WASNparameters):
         y = y[:int(p.sigDur * p.fs)]
         # Whiten and apply gain
         y = (y - np.mean(y)) / np.std(y)    # whiten
-        y *= 10 ** (-p.baseSNR / 20)        # gain
+        y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
         ssrc = pra.soundsource.SoundSource(
             position=np.random.uniform(size=(3,)) *\
                 (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
@@ -418,7 +418,9 @@ def build_wasn(room: pra.room.ShoeBox,
         # Apply microphone self-noise
         sn = np.zeros_like(sigs)
         for m in range(sigs.shape[-1]):
-            sigs[:, m], sn[:, m] = apply_self_noise(sigs[:, m], p.selfnoiseSNR)
+            sigs[:, m], sn[:, m] = apply_self_noise(
+                sigs[:, m], p.selfnoiseSNR
+            )
         sn0 = sn[:, 0]
 
         # also to speech-only signal

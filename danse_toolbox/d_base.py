@@ -375,7 +375,7 @@ def initialize_events(
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
         # Expected DANSE update instants
         upInstants = [
-            np.arange(np.ceil(p.DFTsize / p.Ns),
+            np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
             int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
         ]
         # ^ note that we only start updating when we have enough samples.

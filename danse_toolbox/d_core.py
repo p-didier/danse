@@ -192,7 +192,7 @@ def tidanse(
                 elif evType == 'bc':
                     # Build partial in-network sum and broadcast downstream
                     tidv.ti_compute_partial_sum(k)
-                    tidv.ti_broadcast_partial_sum_downstream(k)
+                    # tidv.ti_broadcast_partial_sum_downstream(k)
                 elif evType == 're':
                     # Relay in-network sum upstream
                     tidv.ti_relay_innetwork_sum_upstream(k)

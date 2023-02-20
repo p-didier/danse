@@ -418,29 +418,29 @@ class DANSEvariables(base.DANSEparameters):
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k)
 
-        if k == 0 and self.startUpdates[k] and tCurr > 3.3:
-            plt.close()
-            # fig, axes = plt.subplots(1,1)
-            # fig.set_size_inches(8.5, 3.5)
-            # for q in range(self.yTilde[k].shape[-1]):
-            #     if q < self.nSensorPerNode[k]:
-            #         axes.plot(self.yTilde[k][:, self.i[k], q], 'k')
-            #     else:
-            #         axes.plot(self.yTilde[k][:, self.i[k], q])
-            # axes.grid()
-            # plt.tight_layout()	
-            # plt.show()
-            fig, axes = plt.subplots(1,1)
-            fig.set_size_inches(8.5, 3.5)
-            for q in range(self.wTilde[k].shape[-1]):
-                axes.plot(np.abs(self.wTilde[k][:, self.i[k], q]), label=f'$\\tilde{{w}}_{{k, {q+1}}}$')
-            axes.grid()
-            axes.legend()
-            axes.set_title(f'i = {self.i[k]} (t = {np.round(tCurr, 3)} s)')
-            plt.tight_layout()	
-            plt.show()
+        # if k == 0 and self.startUpdates[k] and tCurr > 3.3:
+        #     plt.close()
+        #     # fig, axes = plt.subplots(1,1)
+        #     # fig.set_size_inches(8.5, 3.5)
+        #     # for q in range(self.yTilde[k].shape[-1]):
+        #     #     if q < self.nSensorPerNode[k]:
+        #     #         axes.plot(self.yTilde[k][:, self.i[k], q], 'k')
+        #     #     else:
+        #     #         axes.plot(self.yTilde[k][:, self.i[k], q])
+        #     # axes.grid()
+        #     # plt.tight_layout()	
+        #     # plt.show()
+        #     fig, axes = plt.subplots(1,1)
+        #     fig.set_size_inches(8.5, 3.5)
+        #     for q in range(self.wTilde[k].shape[-1]):
+        #         axes.plot(np.abs(self.wTilde[k][:, self.i[k], q]), label=f'$\\tilde{{w}}_{{k, {q+1}}}$')
+        #     axes.grid()
+        #     axes.legend()
+        #     axes.set_title(f'i = {self.i[k]} (t = {np.round(tCurr, 3)} s)')
+        #     plt.tight_layout()	
+        #     plt.show()
 
-            stop = 1
+        #     stop = 1
 
 
         if not skipUpdate:

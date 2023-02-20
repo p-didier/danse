@@ -12,7 +12,7 @@ from danse_toolbox.d_utils import wipe_folder
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
-SEED = 12345
+SEED = 12346
 
 p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
@@ -26,27 +26,29 @@ p = TestParameters(
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
-            userDefinedTopo=np.array([
-                [1, 1, 0],  # Node 1
-                [1, 1, 1],  # Node 2
-                [0, 1, 1],  # Node 3
-            ]),
+            # userDefinedTopo=np.array([
+            #     [1, 1, 0],  # Node 1
+            #     [1, 1, 1],  # Node 2
+            #     [0, 1, 1],  # Node 3
+            # ]),
+            userDefinedTopo=np.ones((4, 4)),  # 20.02.2023: replicating ICASSP paper's WASN structure
             # userDefinedTopo=np.array([
             #     [1, 1],  # Node 1
             #     [1, 1],  # Node 2
             # ])
         ),
-        sigDur=15,
+        sigDur=10,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.2,
         interSensorDist=0.2,
         # nNodes=2,
-        nNodes=3,
-        # nNodes=4,
+        # nNodes=3,
+        nNodes=4,
         # nSensorPerNode=[1, 1],
-        nSensorPerNode=[1, 1, 1],
-        # nSensorPerNode=[1, 3, 2, 5],
+        # nSensorPerNode=[1, 1, 1],
+        nSensorPerNode=[1, 3, 2, 5],
+        # nSensorPerNode=[1, 1, 1, 1],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
         desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
@@ -87,9 +89,10 @@ p = TestParameters(
         computeLocal=True,
         # noExternalFilterRelaxation=True,
         noExternalFilterRelaxation=False,
-        performGEVD=False,
+        # performGEVD=False,
+        performGEVD=True,
         # bypassUpdates=True  # /!\
-        bypassUpdates=False  # /!\
+        t_expAvg50p=50,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     )
 )
@@ -197,8 +200,9 @@ def postprocess(
             asc=room,
             p=p.wasnParams,
             folder=p.exportFolder,
-            adjacencyMatrix=wasnObj.adjacencyMatrix,
-            nodeTypes=[node.nodeType for node in wasnObj.wasn]
+            usedAdjacencyMatrix=wasnObj.adjacencyMatrix,
+            nodeTypes=[node.nodeType for node in wasnObj.wasn],
+            originalAdjacencyMatrix=p.wasnParams.topologyParams.userDefinedTopo
         )
 
         # Plot SRO estimation performance

@@ -74,6 +74,7 @@ class DANSEoutputs(DANSEparameters):
         self.tStartForMetrics = dv.tStartForMetrics
         self.tStartForMetricsCentr = dv.tStartForMetricsCentr
         self.tStartForMetricsLocal = dv.tStartForMetricsLocal
+        self.beta = dv.expAvgBeta
 
         # Show initialised status
         self.initialised = True
@@ -356,7 +357,8 @@ class DANSEoutputs(DANSEparameters):
 
 def compute_metrics(
         out: DANSEoutputs,
-        wasn: list[Node]) -> EnhancementMeasures:
+        wasn: list[Node]
+    ) -> EnhancementMeasures:
     """
     Compute and store evaluation metrics after signal enhancement.
 
@@ -714,8 +716,9 @@ def plot_asc(
     asc: pra.room.ShoeBox,
     p: WASNparameters,
     folder='',
-    adjacencyMatrix=np.array([]),
-    nodeTypes=[]
+    usedAdjacencyMatrix=np.array([]),
+    nodeTypes=[],
+    originalAdjacencyMatrix=np.array([]),
     ):
     """
     Plots an acoustic scenario nicely.
@@ -728,14 +731,31 @@ def plot_asc(
         WASN parameters.
     folder : str
         Folder where to export figure (if not `None`).
-    adjacencyMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
-        Adjacency matrix.
+    usedAdjacencyMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Adjacency matrix used in the (TI-)DANSE algorithm.
     nodeTypes : list[str]
         List of node types, in order.
+    originalAdjacencyMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
+        Adjacency matrix set in the original test parameters
+        (e.g., before pruning to a tree topology).
     """
 
     def _plot_connections(sensorCoords):
         """Helper function to plot connections based on WASN topology."""
+        def __plot_from_mat(mat, coords, ax, color, linestyle):
+            """Helper sub-function."""
+            # Add topology connectivity lines for the original adjacency matrix
+            for k in range(mat.shape[0]):
+                for q in range(mat.shape[1]):
+                    # Only consider upper triangular matrix without diagonal
+                    # (redundant, otherwise)
+                    if k > q and mat[k, q] != 0:
+                        ax.plot(
+                            [coords[0, k], coords[0, q]],
+                            [coords[1, k], coords[1, q]],
+                            color=color,
+                            linestyle=linestyle
+                        )
         # Get geometrical central coordinates of each node in current 2D plane
         nodeCoords = np.zeros((2, p.nNodes))
         for k in range(p.nNodes):
@@ -743,18 +763,10 @@ def plot_asc(
                 sensorCoords[:, p.sensorToNodeIndices == k],
                 axis=1
             )
-        # Add topology connectivity lines
-        for k in range(adjacencyMatrix.shape[0]):
-            for q in range(adjacencyMatrix.shape[1]):
-                # Only consider upper triangular matrix without diagonal
-                # (redundant, otherwise)
-                if k > q and adjacencyMatrix[k, q] != 0:
-                    ax.plot(
-                        [nodeCoords[0, k], nodeCoords[0, q]],
-                        [nodeCoords[1, k], nodeCoords[1, q]],
-                        color='0.75',
-                        linestyle='--'
-                    )
+        # Add topology connectivity lines for the original adjacency matrix
+        __plot_from_mat(originalAdjacencyMatrix, nodeCoords, ax, '0.75', ':')
+        # Add topology connectivity lines for the effective adjacency matrix
+        __plot_from_mat(usedAdjacencyMatrix, nodeCoords, ax, '0.25', '--')
 
     # Determine appropriate node radius for ASC subplots
     nodeRadius = 0
@@ -786,7 +798,7 @@ def plot_asc(
         nodeRadius=nodeRadius,
         nodeTypes=nodeTypes
     )
-    if adjacencyMatrix != np.array([]):
+    if usedAdjacencyMatrix != np.array([]):
         # Add topology lines
         _plot_connections(sensorCoords=asc.mic_array.R[:2, :])
     ax.set(xlabel='$x$ [m]', ylabel='$y$ [m]', title='Top view')
@@ -804,7 +816,7 @@ def plot_asc(
         nodeRadius=nodeRadius,
         nodeTypes=nodeTypes
     )
-    if adjacencyMatrix != np.array([]):
+    if usedAdjacencyMatrix != np.array([]):
         # Add topology lines
         _plot_connections(sensorCoords=asc.mic_array.R[-2:, :])
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
@@ -974,7 +986,9 @@ def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
             win=out.winWOLAanalysis,
             ovlp=out.WOLAovlp
         )
-        axForTitle.set_title(f'Node {k + 1}, ref. sensor (#{out.referenceSensor + 1})')
+        axForTitle.set_title(
+            f'Node {k + 1}, {out.nSensorPerNode[k]} sensor(s) ($\\beta$={np.round(out.beta[k], 4)})'
+        )
         plt.tight_layout()
         figs.append(fig)
 
@@ -1007,17 +1021,18 @@ def plot_signals(node: Node, win, ovlp):
     ax.plot(
         node.timeStamps,
         node.cleanspeechCombined,
-        label='Desired'
+        label='Desired (ref. sensor)'
     )
     ax.plot(
         node.timeStamps,
         node.vad * np.amax(node.cleanspeechCombined) * 1.1,
-        'k-', label='VAD'
+        'k-',
+        label='VAD (ref. sensor)'
     )
     ax.plot(
         node.timeStamps,
         node.data[:, 0] - 2*delta,
-        label='Noisy'
+        label='Noisy (ref. sensor)'
     )
     # Desired signal estimate waveform 
     ax.plot(
@@ -1073,11 +1088,11 @@ def plot_signals(node: Node, win, ovlp):
     ax = fig.add_subplot(nRows,2,2)  # Wet desired signal
     axForTitle = copy.copy(ax)
     data = 20 * np.log10(np.abs(np.squeeze(cleanSTFT)))
-    stft_subplot(ax, t, f, data, [limLow, limHigh], 'Desired')
+    stft_subplot(ax, t, f, data, [limLow, limHigh], 'Desired (ref. sensor)')
     plt.xticks([])
     ax = fig.add_subplot(nRows,2,4)  # Sensor signals
     data = 20 * np.log10(np.abs(np.squeeze(noisySTFT)))
-    stft_subplot(ax, t, f, data, [limLow, limHigh], 'Noisy')
+    stft_subplot(ax, t, f, data, [limLow, limHigh], 'Noisy (ref. sensor)')
     plt.xticks([])
     ax = fig.add_subplot(nRows,2,6)   # Enhanced signals (global)
     # Avoid divide-by-zero error
