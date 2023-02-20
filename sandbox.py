@@ -26,15 +26,15 @@ p = TestParameters(
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
-            # userDefinedTopo=np.array([
-            #     [1, 1, 0],  # Node 1
-            #     [1, 1, 1],  # Node 2
-            #     [0, 1, 1],  # Node 3
-            # ]),
             userDefinedTopo=np.array([
-                [1, 1],  # Node 1
-                [1, 1],  # Node 2
-            ])
+                [1, 1, 0],  # Node 1
+                [1, 1, 1],  # Node 2
+                [0, 1, 1],  # Node 3
+            ]),
+            # userDefinedTopo=np.array([
+            #     [1, 1],  # Node 1
+            #     [1, 1],  # Node 2
+            # ])
         ),
         sigDur=15,
         rd=np.array([5, 5, 5]),
@@ -42,10 +42,10 @@ p = TestParameters(
         t60=0.2,
         interSensorDist=0.2,
         # nNodes=2,
-        nNodes=2,
+        nNodes=3,
         # nNodes=4,
-        nSensorPerNode=[1, 1],
-        # nSensorPerNode=[1, 1, 1],
+        # nSensorPerNode=[1, 1],
+        nSensorPerNode=[1, 1, 1],
         # nSensorPerNode=[1, 3, 2, 5],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,

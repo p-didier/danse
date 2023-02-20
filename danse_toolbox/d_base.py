@@ -339,19 +339,18 @@ def initialize_events(
 
     # Expected number of DANSE update per node over total signal length
     numUpInTtot = np.floor(Ttot * fs / p.Ns)
-    # Expected DANSE update instants
-    upInstants = [
-        np.arange(np.ceil(p.DFTsize / p.Ns),
-        int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-    ]
-    # ^ note that we only start updating when we have enough samples.
-
     # Expected number of broadcasts per node over total signal length
     numBcInTtot = np.floor(Ttot * fs / p.broadcastLength)
 
     if p.nodeUpdating == 'topo-indep':   # ad-hoc (non fully connected) WASN
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
+            # Expected DANSE update instants
+            upInstants = [
+                np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
+                int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            ]
+            # ^ note that we only start updating when we have enough samples.
             fuInstants = [
                 np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
                     p.broadcastLength/fs[k] for k in range(nNodes)
@@ -374,6 +373,12 @@ def initialize_events(
     else:   # fully connected WASN
         fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
+        # Expected DANSE update instants
+        upInstants = [
+            np.arange(np.ceil(p.DFTsize / p.Ns),
+            int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+        ]
+        # ^ note that we only start updating when we have enough samples.
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             bcInstants = [

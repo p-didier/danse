@@ -1275,7 +1275,7 @@ class TIDANSEvariables(DANSEvariables):
         """Parameters required for TI-DANSE in ad-hoc WASNs."""
         # `zLocalPrime`: fused local signals (!= partial in-network sum!).
         #       == $\dot{z}_kl[n]'$, following notation from [1].
-        self.zLocalPrime = [np.array([]) for _ in range(self.nNodes)]
+        self.zLocalPrime = [np.zeros(self.DFTsize) for _ in range(self.nNodes)]
         # `zLocalPrimeBuffer`: fused local signals after WOLA overlap
         # (last Ns samples are influence by the window).
         self.zLocalPrimeBuffer = [np.array([]) for _ in range(self.nNodes)]
@@ -1355,13 +1355,13 @@ class TIDANSEvariables(DANSEvariables):
         """
         # Process WOLA buffer: use the valid part of the overlap-added signal
         # # TODO: this is for whole-chunk broadcasting only
-        if self.i[k] == 0:
-            self.zLocalPrime[k] = copy.deepcopy(self.zLocalPrimeBuffer[k])
-        else:
-            self.zLocalPrime[k] = np.concatenate((
-                self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
-                self.zLocalPrimeBuffer[k][:self.Ns]
-            ))
+        # if self.i[k] == 0:
+        #     self.zLocalPrime[k] = copy.deepcopy(self.zLocalPrimeBuffer[k])
+        # else:
+        self.zLocalPrime[k] = np.concatenate((
+            self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
+            self.zLocalPrimeBuffer[k][:self.Ns]
+        ))
 
         # Compute partial sum
         self.zLocal[k] = copy.deepcopy(self.zLocalPrime[k])
@@ -1488,11 +1488,25 @@ class TIDANSEvariables(DANSEvariables):
 
         # Compute desired signal chunk estimate
         self.get_desired_signal(k)
+
+        # vvvvvvv DEBUGGING STUFF vvvvvvv
+        if 0:
+            if k == 0 and self.oVADframes[self.i[k]]:
+                plt.close()
+                plt.plot(self.yTilde[k][:, self.i[k], :])
+                sop = 11
+        if 0:
+            fig, axes = plt.subplots(2,1)
+            fig.set_size_inches(8.5, 3.5)
+            axes[0].plot(self.yTilde[0][:, self.i[k], :])
+            axes[0].grid()
+            axes[1].plot(self.yTilde[1][:, self.i[k], :])
+            axes[1].grid()
+            plt.tight_layout()	
+            plt.show()
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+
         # Update iteration index
-        if k == 0 and self.oVADframes[self.i[k]]:
-            plt.close()
-            plt.plot(self.yTilde[k][:, self.i[k], :])
-            sop = 11
         self.i[k] += 1
 
     def ti_build_ytilde(self, k, tCurr, fs):        
