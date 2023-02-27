@@ -165,14 +165,24 @@ class DANSEvariables(base.DANSEparameters):
                 (self.nPosFreqs, self.nIter + 1, dimYTilde[k]),
                 self.referenceSensor
             ))
-            wTildeExt.append(_init_complex_filter(
-                (self.nPosFreqs, wasn[k].nSensors),
-                self.referenceSensor
-            ))
-            wTildeExtTarget.append(_init_complex_filter(
-                (self.nPosFreqs, wasn[k].nSensors),
-                self.referenceSensor
-            ))
+            if tidanseFlag:
+                wTildeExt.append(_init_complex_filter(
+                    (self.nPosFreqs, dimYTilde[k]),
+                    self.referenceSensor
+                ))
+                wTildeExtTarget.append(_init_complex_filter(
+                    (self.nPosFreqs, dimYTilde[k]),
+                    self.referenceSensor
+                ))
+            else:
+                wTildeExt.append(_init_complex_filter(
+                    (self.nPosFreqs, wasn[k].nSensors),
+                    self.referenceSensor
+                ))
+                wTildeExtTarget.append(_init_complex_filter(
+                    (self.nPosFreqs, wasn[k].nSensors),
+                    self.referenceSensor
+                ))
             wCentr.append(_init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, nSensorsTotal),
                 self.referenceSensor
@@ -230,6 +240,7 @@ class DANSEvariables(base.DANSEparameters):
         self.downstreamNeighbors = [node.downstreamNeighborsIdx\
                                     for node in wasn]
         self.expAvgBeta = [node.beta for node in wasn]
+        self.firstDANSEupdateRefSensor = None  # init
         self.flagIterations = [[] for _ in range(nNodes)]
         self.flagInstants = [[] for _ in range(nNodes)]
         self.fullVAD = [node.vadCombined for node in wasn]
@@ -1365,16 +1376,16 @@ class TIDANSEvariables(DANSEvariables):
             print('Cannot perform compression: not enough local samples.')
 
         elif self.broadcastType == 'wholeChunk':
-            # Time-domain chunk-wise broadcasting
-            _, self.zLocalPrimeBuffer[k] = base.danse_compression_whole_chunk(
-                ykFrame,
-                self.wTildeExt[k],
-                self.winWOLAanalysis,
-                self.winWOLAsynthesis,
-                zqPrevious=self.zLocalPrimeBuffer[k]
-            )  # local fused signals (time-domain)
-
-            stop = 1
+            # Time-domain chunk-wise compression
+            _, self.zLocalPrimeBuffer[k] =\
+                self.ti_compression_whole_chunk(k, ykFrame)
+            # _, self.zLocalPrimeBuffer[k] = base.danse_compression_whole_chunk(
+            #     ykFrame,
+            #     self.wTildeExt[k][:, :ykFrame.shape[-1]],
+            #     h=self.winWOLAanalysis,
+            #     f=self.winWOLAsynthesis,
+            #     zqPrevious=self.zLocalPrimeBuffer[k]
+            # )
         else:
             raise ValueError('[NYI]')  # TODO:
     
@@ -1456,7 +1467,8 @@ class TIDANSEvariables(DANSEvariables):
             Current node's sampling frequency [Hz].
         """
         
-        if k == self.referenceSensor and self.nInternalFilterUps[k] == 0:
+        if self.firstDANSEupdateRefSensor is None and\
+            self.nInternalFilterUps[k] == 0:
             # Save first update instant (for, e.g., SRO plot)
             self.firstDANSEupdateRefSensor = tCurr
 
@@ -1494,9 +1506,6 @@ class TIDANSEvariables(DANSEvariables):
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k)
 
-        if k == 0:
-            stop = 1
-
         # if not skipUpdate:
         # If covariance matrices estimates are full-rank, update filters
         self.perform_update(k)
@@ -1513,7 +1522,8 @@ class TIDANSEvariables(DANSEvariables):
             print('!! User-forced bypass of filter coefficients updates !!')
 
         # Update external filters (for broadcasting)
-        self.update_external_filters(k, tCurr)
+        self.ti_update_external_filters(k, tCurr)
+        # self.update_external_filters(k, tCurr)
 
         # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
         # # Update SRO estimates
@@ -1590,3 +1600,111 @@ class TIDANSEvariables(DANSEvariables):
         )
         # Keep only positive frequencies
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
+
+    def ti_compression_whole_chunk(self, k, yq: np.ndarray):
+        """
+        Performs local signals compression in the frequency domain
+        for TI-DANSE.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        yq : [N x nSensors] np.ndarray (float)
+            Local sensor signals.
+
+        Returns
+        -------
+        zqHat : [N/2 x 1] np.ndarray (complex)
+            Frequency-domain compressed signal for current frame.
+        zq : [N x 1] np.ndarray (float)
+            Time-domain latest WOLA chunk of compressed signal (after OLA).
+        """
+
+        # Renaming
+        wTildeExt = self.wTildeExt[k]
+        h = self.winWOLAanalysis
+        f = self.winWOLAsynthesis
+        zqPrevious = self.zLocalPrimeBuffer[k]
+        # -- TODO: see eq. (36) in Szurley's paper --> we need to invert by wTildeInt, probably, not wTildeExt.
+
+        # Transfer local observations to frequency domain
+        n = yq.shape[0]     # DFT order
+
+        yqHat = np.fft.fft(yq * h[:, np.newaxis], n, axis=0)
+        # Keep only positive frequencies
+        yqHat = yqHat[:int(n/2 + 1), :]
+        # Compute compression vector
+        allIdx = np.arange(wTildeExt.shape[-1])
+        if (wTildeExt[:, self.referenceSensor] == 1).all() and\
+            (wTildeExt[:, allIdx != self.referenceSensor] == 0).all():
+            p = wTildeExt[:, :yq.shape[-1]]
+        else:
+            # If the external filters have started updating, we must 
+            # transform by the inverse of the part of the estimator
+            # corresponding to the in-network sum.
+            p = wTildeExt[:, :yq.shape[-1]] * (1 / wTildeExt[:, -1:])
+            # p = wTildeExt[:, :yq.shape[-1]] * wTildeExt[:, -1:]
+            # p = wTildeExt[:, :yq.shape[-1]]
+        # Apply linear combination to form compressed signal.zZ
+        zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
+
+        # WOLA synthesis stage
+        if zqPrevious is not None:
+            # IDFT
+            zqCurr = base.back_to_time_domain(zqHat, n, axis=0)
+            zqCurr = np.real_if_close(zqCurr)
+            zqCurr *= f    # multiply by synthesis window
+
+            if not np.any(zqPrevious):
+                # No previous frame, keep current frame
+                zq = zqCurr
+            else:
+                # Overlap-add
+                zq = np.zeros(n)
+                # TODO: consider case with multiple neighbor nodes
+                # (`len(zqPrevious) > 1`).
+                zq[:(n // 2)] = zqPrevious[-(n // 2):]
+                zq += zqCurr
+        else:
+            zq = None
+        
+        return zqHat, zq
+    
+    def ti_update_external_filters(self, k, t):
+        """
+        Update external filters for relaxed filter update.
+        To be used when using simultaneous or asynchronous node-updating.
+        When using sequential node-updating, do not differential between
+        internal (`self.wTilde`) and external filters. 
+        For TI-DANSE.
+        
+        Parameters
+        ----------
+        k : int
+            Receiving node index.
+        t : float
+            Current time instant [s].
+        """
+
+        if self.noExternalFilterRelaxation:
+            # No relaxation (i.e., no "external" filters)
+            self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
+        else:
+            # Simultaneous or asynchronous node-updating
+            if self.nodeUpdating in ['sim', 'asy', 'topo-indep']:
+                # Relaxed external filter update
+                self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
+                    (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
+                # Update targets
+                if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
+                    self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
+                        self.wTildeExtTarget[k] + self.alphaExternalFilters *\
+                        self.wTilde[k][:, self.i[k] + 1, :]
+                    # Update last external filter update instant [s]
+                    self.lastExtFiltUp[k] = t
+                    if self.printout_externalFilterUpdate:    # inform user
+                        print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
+            # Sequential node-updating
+            elif self.nodeUpdating == 'seq':
+                self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]

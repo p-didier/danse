@@ -204,6 +204,10 @@ class DANSEparameters(Hyperparameters):
             self.broadcastLength = 1
         if self.estimateSROs not in ['Oracle', 'CohDrift', 'DXCPPhaT']:
             raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
+        if self.noExternalFilterRelaxation:
+            # no differentiating between external and
+            # internal filters (bypass-studies).
+            self.timeBtwExternalFiltUpdates = 0.
 
     def get_wasn_info(self, wasnParams: WASNparameters):
         """Adds useful info to DANSEparameters object from WASNparameters

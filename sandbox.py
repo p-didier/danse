@@ -12,7 +12,7 @@ from danse_toolbox.d_utils import wipe_folder
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
-SEED = 12346
+SEED = 12347
 
 p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
@@ -26,28 +26,30 @@ p = TestParameters(
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
-            # userDefinedTopo=np.array([
-            #     [1, 1, 0],  # Node 1
-            #     [1, 1, 1],  # Node 2
-            #     [0, 1, 1],  # Node 3
-            # ]),
-            userDefinedTopo=np.ones((4, 4)),  # 20.02.2023: replicating ICASSP paper's WASN structure
+            userDefinedTopo=np.array([
+                [1, 1, 0],  # Node 1
+                [1, 1, 1],  # Node 2
+                [0, 1, 1],  # Node 3
+            ]),
+            # userDefinedTopo=np.ones((3, 3)),
+            # userDefinedTopo=np.ones((4, 4)),  # 20.02.2023: replicating ICASSP paper's WASN structure
             # userDefinedTopo=np.array([
             #     [1, 1],  # Node 1
             #     [1, 1],  # Node 2
             # ])
         ),
-        sigDur=10,
+        sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
-        t60=0.2,
+        t60=0.0,
         interSensorDist=0.2,
         # nNodes=2,
-        # nNodes=3,
-        nNodes=4,
+        nNodes=3,
+        # nNodes=4,
         # nSensorPerNode=[1, 1],
-        # nSensorPerNode=[1, 1, 1],
-        nSensorPerNode=[1, 3, 2, 5],
+        nSensorPerNode=[1, 1, 1],
+        # nSensorPerNode=[1, 3, 2],
+        # nSensorPerNode=[1, 3, 2, 5],
         # nSensorPerNode=[1, 1, 1, 1],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
@@ -84,13 +86,13 @@ p = TestParameters(
             loop='open',
             alpha=0.95
         ),
-        # vvvvvvvv FOR BASIC TI-DANSE TESTING ONLY vvvvvvvv
+        # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
         computeCentralised=True,
         computeLocal=True,
-        # noExternalFilterRelaxation=True,
-        noExternalFilterRelaxation=False,
-        # performGEVD=False,
-        performGEVD=True,
+        noExternalFilterRelaxation=True,
+        # noExternalFilterRelaxation=False,
+        performGEVD=False,
+        # performGEVD=True,
         # bypassUpdates=True  # /!\
         t_expAvg50p=50,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
