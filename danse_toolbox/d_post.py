@@ -52,6 +52,8 @@ class DANSEoutputs(DANSEparameters):
         # DANSE desired signal estimates
         self.TDdesiredSignals_est = dv.d
         self.STFTDdesiredSignals_est = dv.dhat
+        self.TDfiltSpeech, self.STFTfiltSpeech = self.get_filtered(dv.cleanSpeechSignalsAtNodes, dv.wTilde)
+        self.TDfiltNoise, self.STFTfiltNoise = self.get_filtered('noise', 'danse')
         if self.computeCentralised:
             # Centralised desired signal estimates
             self.TDdesiredSignals_est_c = dv.dCentr
@@ -80,7 +82,37 @@ class DANSEoutputs(DANSEparameters):
         self.initialised = True
 
         return self
+    
+    def get_filtered(self, signalTD, filterSTFT):
+        """
+        Filters speech- or noise-only signals.
 
+        Parameters
+        ----------
+        signalTD : [K x 1] list of [N x C] np.ndarray[float]
+            Time-domain signals.
+        filterSTFT : [Nf x Nt x C] np.ndarray
+            If `filterType == 'danse'`: use DANSE filters.
+            If `filterType == 'centralised'`: use centralised filters.
+            If `filterType == 'local'`: use local filters.
+        """
+        pass # TODO: FIGURE OUT WHAT TO DO ABOUT THE "SPEECH-/NOISE-ONLY" FUSED SIGNALS???
+        # if signalType == 'speech':
+        #     # signal = self
+        # elif signalType == 'noise':
+        #     pass
+        # else:
+        #     raise ValueError(f'Signal type "{signalType}" invalid (use "speech" or "noise").')
+        
+        # if filterType == 'danse':
+        #     pass
+        # elif filterType == 'centralised':
+        #     pass
+        # elif filterType == 'local':
+        #     pass
+        # else:
+        #     raise ValueError(f'Filter type "{filterType}" invalid (use "danse", "centralised", or "local").')
+    
     def check_init(self):
         """Check if object is correctly initialised."""
         if not self.initialised:
@@ -416,6 +448,12 @@ def compute_metrics(
             clean=wasn[k].cleanspeechCombined,
             # Microphone signals
             noisy=wasn[k].data[:, out.referenceSensor],
+            # filteredNoise
+            # filteredSpeech
+            # filteredNoise_c
+            # filteredSpeech_c
+            # filteredNoise_l
+            # filteredSpeech_l
             # DANSE outputs (desired signal estimates)
             enhan=out.TDdesiredSignals_est[:, k],
             enhan_c=TDdesiredSignals_est_c,
@@ -1198,5 +1236,3 @@ def normalize_toint16(nparray):
     nparrayNormalized = (amplitude * nparray / \
         np.amax(nparray) * 0.5).astype(np.int16)  # 0.5 to avoid clipping
     return nparrayNormalized
-
-

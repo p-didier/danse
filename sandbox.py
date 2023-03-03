@@ -89,8 +89,8 @@ p = TestParameters(
         # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
         computeCentralised=True,
         computeLocal=True,
-        noExternalFilterRelaxation=True,
-        # noExternalFilterRelaxation=False,
+        # noExternalFilterRelaxation=True,
+        noExternalFilterRelaxation=False,
         performGEVD=False,
         # performGEVD=True,
         # bypassUpdates=True  # /!\
@@ -103,10 +103,17 @@ p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
 def main(p: TestParameters):
 
     # Build room
-    room, vad, wetSpeechAtRefSensor = sig_ut.build_room(p.wasnParams)
+    room, vad, wetSpeechAtRefSensor, wetNoiseAtRefSensor =\
+        sig_ut.build_room(p.wasnParams)
 
     # Build WASN (asynchronicities, topology)
-    wasnObj = sig_ut.build_wasn(room, vad, wetSpeechAtRefSensor, p.wasnParams)
+    wasnObj = sig_ut.build_wasn(
+        room,
+        vad,
+        wetSpeechAtRefSensor,
+        wetNoiseAtRefSensor,
+        p.wasnParams
+    )
 
     # pp.plot_asc(
     #     room,

@@ -76,7 +76,7 @@ def get_metrics(
         enhan_c=None,
         enhan_l=None,
         fs=16e3,
-        VAD=None,
+        vad=None,
         dynamic: DynamicMetricsParameters=None,
         startIdx=0,
         startIdxCentr=None,
@@ -102,7 +102,7 @@ def get_metrics(
         The enhanced signal (after local processing).
     fs : int
         Sampling frequency [samples/s].
-    VAD : [N x 1] np.ndarray (float)
+    vad : [N x 1] np.ndarray (float)
         Voice Activity Detector (1: voice + noise; 0: noise only).
     dynamic : DynamicMetricsParameters object
         Parameters for dynamic metrics estimation
@@ -147,13 +147,13 @@ def get_metrics(
     # noisy_c = noisy[startIdxCentr:]
     # noisy_l = noisy[startIdxLocal:]
     noisy = noisy[startIdx:]
-    VAD_c = VAD[startIdxCentr:]
-    VAD_l = VAD[startIdxLocal:]
-    VAD = VAD[startIdx:]
+    vad_c = vad[startIdxCentr:]
+    vad_l = vad[startIdxLocal:]
+    vad = vad[startIdx:]
     
     # Unweighted SNR
-    snr.before = get_snr(noisy, VAD)
-    snr.after = get_snr(enhan, VAD)
+    snr.before = get_snr(noisy, vad)
+    snr.after = get_snr(enhan, vad)
     snr.diff = snr.after - snr.before
     # Frequency-weight segmental SNR
     fwSNRseg_allFrames = get_fwsnrseg(
@@ -188,14 +188,14 @@ def get_metrics(
 
     # Consider centralised and local estimates
     if enhan_c is not None:
-        snr.afterCentr = get_snr(enhan_c, VAD_c)
+        snr.afterCentr = get_snr(enhan_c, vad_c)
         fwSNRseg_allFrames = get_fwsnrseg(
             clean_c, enhan_c, fs, fLen, gamma
         )
         fwSNRseg.afterCentr = np.mean(fwSNRseg_allFrames)
         myStoi.afterCentr = stoi_fcn(clean_c, enhan_c, fs, extended=True)
     if enhan_l is not None:
-        snr.afterLocal = get_snr(enhan_l, VAD_l)
+        snr.afterLocal = get_snr(enhan_l, vad_l)
         fwSNRseg_allFrames = get_fwsnrseg(
             clean_l, enhan_l, fs, fLen, gamma
         )
@@ -217,7 +217,7 @@ def get_metrics(
             dynFcns.append(pesq)
 
         dynMetrics = get_dynamic_metric(
-            dynFcns, clean, noisy, enhan, fs, VAD, dynamic, gamma, fLen)
+            dynFcns, clean, noisy, enhan, fs, vad, dynamic, gamma, fLen)
 
         # Store dynamic metrics
         for key, value in dynMetrics.items():
@@ -400,7 +400,34 @@ def getSNR(timeDomainSignal, VAD):
     return SNRout
 
 
-def get_snr(Y: np.ndarray, VAD):
+def get_snr(speech: np.ndarray, noise: np.ndarray, vad: np.ndarray):
+    """
+    Estimate SNR based on (filtered) speech and (filtered) noise (+ VAD).
+
+    Parameters
+    ----------
+    speech : [Nt x Nchannels] np.ndarray[float]
+        Time-domain (filtered) speech signal (no noise).
+    noise : [Nt x Nchannels] np.ndarray[float]
+        Time-domain (filtered) noise signal (no speech).
+    vad : [Nt x Nchannels] np.ndarray[bool or int (1 or 0) or float (1. or 0.)]
+        Corresponding voice activity detector (VAD).
+    
+    Returns
+    -------
+    snrEst : [Nchannels x 1] np.ndarray[float]
+        Signal-to-noise ratio estimate [dB].
+    """
+    vad = vad.astype(bool)  # convert to boolean
+    nChannels = speech.shape[-1]
+
+    snrEst = np.zeros(nChannels)
+    for c in range(nChannels):
+        snrEst[c] = np.mean(np.abs(speech[vad[:, c], c]) ** 2) /\
+            np.mean(np.abs(noise[vad[:, c], c]) ** 2)
+
+
+def get_snr_old(Y: np.ndarray, VAD):
     """
     SNRest -- Estimate SNR from time-domain VAD.
     

@@ -29,8 +29,11 @@ def build_room(p: classes.WASNparameters):
         Room (acoustic scenario) object.
     vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
-    wetSpeechAtRefSensor : [N x Nnodes x Nsources] np.ndarray (float)
+    wetSpeechAtRefSensor : [N x Nnodes x Nspeechsources] np.ndarray (float)
         Wet (RIR-affected) individual speech signal at the reference
+        sensor of each node.
+    wetNoiseAtRefSensor : [N x Nnodes x Nnoisesources] np.ndarray (float)
+        Wet (RIR-affected) individual noise signal at the reference
         sensor of each node.
     """
 
@@ -93,6 +96,7 @@ def build_room(p: classes.WASNparameters):
         room.add_soundsource(ssrc)
 
     # Add noise sources
+    noiseSignalsRaw = np.zeros((int(p.sigDur * p.fs), p.nNoiseSources))
     for ii in range(p.nNoiseSources):
         # Load sound file
         y, fsOriginal = librosa.load(p.noiseSignalFile[ii])
@@ -103,6 +107,7 @@ def build_room(p: classes.WASNparameters):
         # Whiten and apply gain
         y = (y - np.mean(y)) / np.std(y)    # whiten
         y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
+        noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
         ssrc = pra.soundsource.SoundSource(
             position=np.random.uniform(size=(3,)) *\
                 (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
@@ -117,15 +122,31 @@ def build_room(p: classes.WASNparameters):
     room.mic_array.signals = room.mic_array.signals[:, :int(p.fs * p.sigDur)]
 
     # Extract 1 set of desired source RIRs per node
-    rirsNodes = []
+    rirsDesiredSources = []
     for k in range(p.nNodes):
         rirsCurr = [room.rir[ii][:p.nDesiredSources]\
             for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
-        rirsNodes.append(rirsCurr[p.referenceSensor])
+        rirsDesiredSources.append(rirsCurr[p.referenceSensor])
+    # Extract 1 set of noise source RIRs per node
+    rirsNoiseSources = []
+    for k in range(p.nNodes):
+        rirsCurr = [room.rir[ii][-p.nNoiseSources:]\
+            for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
+        rirsNoiseSources.append(rirsCurr[p.referenceSensor])
     # Compute VAD
-    vad, wetSpeechAtRefSensor = get_vad(rirsNodes, desiredSignalsRaw, p)
+    vad, wetSpeechAtRefSensor = get_vad(
+        rirsDesiredSources,
+        desiredSignalsRaw,
+        p
+    )
+    # Get wet noise
+    _, wetNoiseAtRefSensor = get_vad(
+        rirsDesiredSources,
+        noiseSignalsRaw,
+        p
+    )
 
-    return room, vad, wetSpeechAtRefSensor
+    return room, vad, wetSpeechAtRefSensor, wetNoiseAtRefSensor
 
 
 # def load_asc_from_folder(path):
@@ -373,9 +394,13 @@ def compute_VAD(chunk_x,thrs):
     return VADout
 
 
-def build_wasn(room: pra.room.ShoeBox,
-        vad, wetSpeechAtRefSensor,
-        p: classes.WASNparameters):
+def build_wasn(
+        room: pra.room.ShoeBox,
+        vad,
+        wetSpeechAtRefSensor,
+        wetNoiseAtRefSensor,
+        p: classes.WASNparameters
+    ):
     """
     Build WASN from parameters (including asynchronicities and topology).
     
@@ -385,10 +410,13 @@ def build_wasn(room: pra.room.ShoeBox,
         Room (acoustic scenario) object. Augmented with VAD and 
         wet speech signals at each node's reference sensor (output of
         `build_room()`).
-    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
+    vad : [N x Nnodes x Nspeechsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
-    wetSpeechAtRefSensor : [N x Nnodes x Nsources] np.ndarray (float)
+    wetSpeechAtRefSensor : [N x Nnodes x Nspeechsources] np.ndarray (float)
         Wet (RIR-affected) individual speech signal at the reference
+        sensor of each node.
+    wetNoiseAtRefSensor : [N x Nnodes x Nnoisesources] np.ndarray (float)
+        Wet (RIR-affected) individual noise signal at the reference
         sensor of each node.
     p : `WASNparameters` object
         WASN parameters
@@ -416,22 +444,31 @@ def build_wasn(room: pra.room.ShoeBox,
             sto=0.
         )
         # Apply microphone self-noise
-        sn = np.zeros_like(sigs)
+        selfNoise = np.zeros_like(sigs)
         for m in range(sigs.shape[-1]):
-            sigs[:, m], sn[:, m] = apply_self_noise(
+            sigs[:, m], selfNoise[:, m] = apply_self_noise(
                 sigs[:, m], p.selfnoiseSNR
             )
-        sn0 = sn[:, 0]
+        selfNoiseRefSensor = selfNoise[:, 0]
 
-        # also to speech-only signal
-        speechonly, _, _ = apply_asynchronicity_at_node(
+        # Apply asynchronicities also to speech-only signal
+        speechOnly, _, _ = apply_asynchronicity_at_node(
             y=wetSpeechAtRefSensor[:, k, :],
             fs=p.fs,
             sro=p.SROperNode[k],
             sto=0.
         )
         # Add same microphone self-noise
-        speechonly += sn0[:, np.newaxis]
+        speechOnly += selfNoiseRefSensor[:, np.newaxis]
+        # Apply asynchronicities also to noise-only signal
+        noiseOnly, _, _ = apply_asynchronicity_at_node(
+            y=wetNoiseAtRefSensor[:, k, :],
+            fs=p.fs,
+            sro=p.SROperNode[k],
+            sto=0.
+        )
+        # Add same microphone self-noise
+        noiseOnly += selfNoiseRefSensor[:, np.newaxis]
 
         # Get geometrical parameters
         sensorPositions = room.mic_array.R[:, p.sensorToNodeIndices == k]
@@ -444,7 +481,8 @@ def build_wasn(room: pra.room.ShoeBox,
             sro=p.SROperNode[k],
             fs=fsSRO,
             data=sigs,
-            cleanspeech=speechonly,
+            cleanspeech=speechOnly,
+            cleannoise=noiseOnly,
             timeStamps=t,
             neighborsIdx=neighbors[k],
             vad=vad[:, k, :],

@@ -217,6 +217,8 @@ class DANSEvariables(base.DANSEparameters):
         # Create fields
         self.avgProdResiduals = avgProdResiduals
         self.bufferFlags = bufferFlags
+        self.cleanSpeechSignalsAtNodes = [node.cleanspeech for node in wasn]
+        self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
         self.d = np.zeros(
             (wasn[self.referenceSensor].data.shape[0], nNodes)
         )

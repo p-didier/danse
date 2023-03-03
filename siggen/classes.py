@@ -140,6 +140,7 @@ class Node:
     sro: float = 0.
     fs: float = 16000.
     cleanspeech: np.ndarray = np.array([])  # mic. signals if no noise present
+    cleannoise: np.ndarray = np.array([])  # mic. signals if no speech present
     data: np.ndarray = np.array([])  # mic. signals
     enhancedData: np.ndarray = np.array([]) # signals after enhancement
     enhancedData_c: np.ndarray = np.array([]) # after CENTRALISED enhancement
