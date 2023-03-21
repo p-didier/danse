@@ -7,6 +7,7 @@ from siggen.classes import *
 from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
+from danse_toolbox.d_post import get_stft
 
 @dataclass
 class TestParameters:
@@ -219,6 +220,19 @@ class DANSEvariables(base.DANSEparameters):
         self.bufferFlags = bufferFlags
         self.cleanSpeechSignalsAtNodes = [node.cleanspeech for node in wasn]
         self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
+        # self.cleanSpeechSignalsAtNodesSTFT = [get_stft(
+        #         x=node.cleanspeech,
+        #         fs=node.fs,
+        #         win=self.winWOLAanalysis,
+        #         ovlp=self.WOLAovlp
+        #     )[0] for node in wasn]
+        # self.cleanNoiseSignalsAtNodesSTFT = [get_stft(
+        #         x=node.cleannoise,
+        #         fs=node.fs,
+        #         win=self.winWOLAanalysis,
+        #         ovlp=self.WOLAovlp
+        #     )[0] for node in wasn]
+
         self.d = np.zeros(
             (wasn[self.referenceSensor].data.shape[0], nNodes)
         )
@@ -320,10 +334,26 @@ class DANSEvariables(base.DANSEparameters):
         """
 
         # Extract correct frame of local signals
-        ykFrame = base.local_chunk_for_broadcast(self.yin[k], tCurr, fs, self.DFTsize)
+        ykFrame = base.local_chunk_for_broadcast(
+            self.yin[k],
+            tCurr,
+            fs,
+            self.DFTsize
+        )
+        # ykFrame_s = base.local_chunk_for_broadcast(
+        #     self.cleanSpeechSignalsAtNodes[k],
+        #     tCurr,
+        #     fs,
+        #     self.DFTsize
+        # )
+        # ykFrame_n = base.local_chunk_for_broadcast(
+        #     self.cleanNoiseSignalsAtNodes[k],
+        #     tCurr,
+        #     fs,
+        #     self.DFTsize
+        # )
 
         if len(ykFrame) < self.DFTsize:
-
             print('Cannot perform compression: not enough local signals samples.')
 
         elif self.broadcastType == 'wholeChunk':
@@ -336,6 +366,20 @@ class DANSEvariables(base.DANSEparameters):
                 self.winWOLAsynthesis,
                 zqPrevious=self.zLocal[k]
             )  # local compressed signals (time-domain)
+            # _, self.zLocal_s[k] = base.danse_compression_whole_chunk(
+            #     ykFrame_s,
+            #     self.wTildeExt[k],
+            #     self.winWOLAanalysis,
+            #     self.winWOLAsynthesis,
+            #     zqPrevious=self.zLocal[k]
+            # )  # local compressed signals (time-domain) - speech-only for SNR computation
+            # _, self.zLocal_n[k] = base.danse_compression_whole_chunk(
+            #     ykFrame_n,
+            #     self.wTildeExt[k],
+            #     self.winWOLAanalysis,
+            #     self.winWOLAsynthesis,
+            #     zqPrevious=self.zLocal[k]
+            # )  # local compressed signals (time-domain) - noise-only for SNR computation
 
             # Fill buffers in
             self.zBuffer = base.fill_buffers_whole_chunk(
@@ -1338,6 +1382,8 @@ class TIDANSEvariables(DANSEvariables):
         # `zLocalPrimeBuffer`: fused local signals after WOLA overlap
         # (last Ns samples are influence by the window).
         self.zLocalPrimeBuffer = [np.array([]) for _ in range(self.nNodes)]
+        self.zLocalPrimeBuffer_speech = [np.array([]) for _ in range(self.nNodes)]
+        self.zLocalPrimeBuffer_noise = [np.array([]) for _ in range(self.nNodes)]
         # `zBufferTI`: partial in-network sums given from upstream neighbors.
         #       == $\{\dot{z}_l[n]\}_{l\in\mathcal{T}_k\backslash\{q\}}}$,
         #           following notation from [1].
@@ -1373,6 +1419,18 @@ class TIDANSEvariables(DANSEvariables):
             fs,
             self.DFTsize
         )
+        # cleanSpeechFrame = base.local_chunk_for_broadcast(
+        #     self.cleanSpeechSignalsAtNodes[k],
+        #     tCurr,
+        #     fs,
+        #     self.DFTsize
+        # )  # [useful for SNR computation]
+        # cleanNoiseFrame = base.local_chunk_for_broadcast(
+        #     self.cleanNoiseSignalsAtNodes[k],
+        #     tCurr,
+        #     fs,
+        #     self.DFTsize
+        # )  # [useful for SNR computation]
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
@@ -1381,6 +1439,11 @@ class TIDANSEvariables(DANSEvariables):
             # Time-domain chunk-wise compression
             _, self.zLocalPrimeBuffer[k] =\
                 self.ti_compression_whole_chunk(k, ykFrame)
+            # _, self.zLocalPrimeBuffer_speech[k] =\
+            #     self.ti_compression_whole_chunk(k, cleanSpeechFrame)  # [useful for SNR computation]
+            # _, self.zLocalPrimeBuffer_noise[k] =\
+            #     self.ti_compression_whole_chunk(k, cleanNoiseFrame)  # [useful for SNR computation]
+            
             # _, self.zLocalPrimeBuffer[k] = base.danse_compression_whole_chunk(
             #     ykFrame,
             #     self.wTildeExt[k][:, :ykFrame.shape[-1]],

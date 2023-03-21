@@ -52,7 +52,7 @@ class DANSEoutputs(DANSEparameters):
         # DANSE desired signal estimates
         self.TDdesiredSignals_est = dv.d
         self.STFTDdesiredSignals_est = dv.dhat
-        self.TDfiltSpeech, self.STFTfiltSpeech = self.get_filtered(dv.cleanSpeechSignalsAtNodes, dv.wTilde)
+        self.TDfiltSpeech, self.STFTfiltSpeech = self.get_filtered(dv.cleanSpeechSignalsAtNodesSTFT, dv.wTilde)
         self.TDfiltNoise, self.STFTfiltNoise = self.get_filtered('noise', 'danse')
         if self.computeCentralised:
             # Centralised desired signal estimates
@@ -83,35 +83,37 @@ class DANSEoutputs(DANSEparameters):
 
         return self
     
-    def get_filtered(self, signalTD, filterSTFT):
+    def get_filtered(self, sig, filters, type='danse'):
         """
         Filters speech- or noise-only signals.
 
         Parameters
         ----------
-        signalTD : [K x 1] list of [N x C] np.ndarray[float]
-            Time-domain signals.
-        filterSTFT : [Nf x Nt x C] np.ndarray
-            If `filterType == 'danse'`: use DANSE filters.
-            If `filterType == 'centralised'`: use centralised filters.
-            If `filterType == 'local'`: use local filters.
+        sig : [K x 1] list of [Nf x Nt x C[k]] np.ndarray[complex]
+            Signals in the STFT domain.
+            `K`: number of nodes.
+            `Nf`: number of frequency bins.
+            `Nt`: number of time frames.
+            `C[k]`: number of microphones at node `k`.
+        filters : [K x 1] list of [Nf x Nt x M[k]] np.ndarray[complex]
+            Filters in the STFT domain.
+            `M[k]`: number of available channels at node `k` (`M[k]` >= `C[k]`).
+        type : str
+            If "danse": perform filtering as in DANSE.
+            If "centralised": perform filtering as in a centralised case.
+            If "local": perform filtering as in a local estimation case.
         """
-        pass # TODO: FIGURE OUT WHAT TO DO ABOUT THE "SPEECH-/NOISE-ONLY" FUSED SIGNALS???
-        # if signalType == 'speech':
-        #     # signal = self
-        # elif signalType == 'noise':
-        #     pass
-        # else:
-        #     raise ValueError(f'Signal type "{signalType}" invalid (use "speech" or "noise").')
+
+        if type == 'danse':
+            pass  # TODO:
+        elif type == 'centralised':
+            pass  # TODO:
+        elif type == 'local':
+            pass  # TODO:
+        else:
+            raise ValueError(f'Type "{type}" invalid. Possible values: ["danse", "centralised", "local"].')
         
-        # if filterType == 'danse':
-        #     pass
-        # elif filterType == 'centralised':
-        #     pass
-        # elif filterType == 'local':
-        #     pass
-        # else:
-        #     raise ValueError(f'Filter type "{filterType}" invalid (use "danse", "centralised", or "local").')
+
     
     def check_init(self):
         """Check if object is correctly initialised."""
@@ -1179,8 +1181,10 @@ def get_stft(x, fs, win, ovlp):
         Time-domain signal(s).
     fs : int
         Sampling frequency [samples/s].
-    settings : ProgramSettings object
-        Settings (contains window, window length, overlap)
+    win : np.ndarray[float]
+        Analysis window.
+    ovlp : float
+        Amount of window overlap.
 
     Returns
     -------
