@@ -133,7 +133,7 @@ def build_room(p: classes.WASNparameters):
         rirsCurr = [room.rir[ii][-p.nNoiseSources:]\
             for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
         rirsNoiseSources.append(rirsCurr[p.referenceSensor])
-    # Compute VAD
+    # Get wet speech and compute VAD
     vad, wetSpeechAtRefSensor = get_vad(
         rirsDesiredSources,
         desiredSignalsRaw,
@@ -141,7 +141,7 @@ def build_room(p: classes.WASNparameters):
     )
     # Get wet noise
     _, wetNoiseAtRefSensor = get_vad(
-        rirsDesiredSources,
+        rirsNoiseSources,
         noiseSignalsRaw,
         p
     )

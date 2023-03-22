@@ -71,7 +71,14 @@ class DynamicMetric:
 
 def get_metrics(
         clean,
+        noiseOnly,
         noisy,
+        filteredSpeech,
+        filteredNoise,
+        filteredSpeech_c,
+        filteredNoise_c,
+        filteredSpeech_l,
+        filteredNoise_l,
         enhan,
         enhan_c=None,
         enhan_l=None,
@@ -92,8 +99,22 @@ def get_metrics(
     ----------
     clean : [N x 1] np.ndarray (float)
         The clean, noise-free signal used as reference.
+    noiseOnly : [N x 1] np.ndarray (float)
+        The speech-free (noise only) signal captured at the reference mic.
     noisy : [N x 1] np.ndarray (float)
         The noisy signal (pre-signal enhancement).
+    filteredSpeech : [N x 1] np.ndarray (float)
+        The filtered speech-only signal (post-signal enhancement).
+    filteredNoise : [N x 1] np.ndarray (float)
+        The filtered noise-only signal (post-signal enhancement).
+    filteredSpeech_c : [N x 1] np.ndarray (float)
+        The filtered speech-only signal (after centralised processing).
+    filteredNoise_c : [N x 1] np.ndarray (float)
+        The filtered noise-only signal (after centralised processing).
+    filteredSpeech_l : [N x 1] np.ndarray (float)
+        The filtered speech-only signal (after local processing).
+    filteredNoise_l : [N x 1] np.ndarray (float)
+        The filtered noise-only signal (after local processing).
     enhan : [N x 1] np.ndarray (float)
         The enhanced signal (post-signal enhancement).
     enhan_c : [N x 1] np.ndarray (float)
@@ -135,25 +156,35 @@ def get_metrics(
     myStoi = Metric()
     myPesq = Metric()
 
-    # Adapt lengths
+    # Trim to correct lengths (avoiding initial filter convergence
+    # in calculation of metrics)
     clean_c = clean[startIdxCentr:]
     clean_l = clean[startIdxLocal:]
     clean = clean[startIdx:]
+    noiseOnly_c = noiseOnly[startIdx:]
+    noiseOnly_l = noiseOnly[startIdx:]
+    noiseOnly = noiseOnly[startIdx:]
     if enhan_c is not None:
         enhan_c = enhan_c[startIdxCentr:]
+        vad_c = vad[startIdxCentr:]
     if enhan_l is not None:
         enhan_l = enhan_l[startIdxLocal:]
+        vad_l = vad[startIdxLocal:]
     enhan = enhan[startIdx:]
-    # noisy_c = noisy[startIdxCentr:]
-    # noisy_l = noisy[startIdxLocal:]
     noisy = noisy[startIdx:]
-    vad_c = vad[startIdxCentr:]
-    vad_l = vad[startIdxLocal:]
     vad = vad[startIdx:]
+    filteredSpeech = filteredSpeech[startIdx:]
+    filteredNoise = filteredNoise[startIdx:]
+    if filteredSpeech_c is not None:
+        filteredSpeech_c = filteredSpeech_c[startIdxCentr:]
+        filteredNoise_c = filteredNoise_c[startIdxCentr:]
+    if filteredSpeech_l is not None:
+        filteredSpeech_l = filteredSpeech_l[startIdxLocal:]
+        filteredNoise_l = filteredNoise_l[startIdxLocal:]
     
     # Unweighted SNR
-    snr.before = get_snr(noisy, vad)
-    snr.after = get_snr(enhan, vad)
+    snr.before = get_snr(clean, noiseOnly, vad)
+    snr.after = get_snr(filteredSpeech, filteredNoise, vad)
     snr.diff = snr.after - snr.before
     # Frequency-weight segmental SNR
     fwSNRseg_allFrames = get_fwsnrseg(
@@ -188,14 +219,14 @@ def get_metrics(
 
     # Consider centralised and local estimates
     if enhan_c is not None:
-        snr.afterCentr = get_snr(enhan_c, vad_c)
+        snr.afterCentr = get_snr(filteredSpeech_c, filteredNoise_c, vad_c)
         fwSNRseg_allFrames = get_fwsnrseg(
             clean_c, enhan_c, fs, fLen, gamma
         )
         fwSNRseg.afterCentr = np.mean(fwSNRseg_allFrames)
         myStoi.afterCentr = stoi_fcn(clean_c, enhan_c, fs, extended=True)
     if enhan_l is not None:
-        snr.afterLocal = get_snr(enhan_l, vad_l)
+        snr.afterLocal = get_snr(filteredSpeech_l, filteredNoise_l, vad_l)
         fwSNRseg_allFrames = get_fwsnrseg(
             clean_l, enhan_l, fs, fLen, gamma
         )
@@ -418,13 +449,39 @@ def get_snr(speech: np.ndarray, noise: np.ndarray, vad: np.ndarray):
     snrEst : [Nchannels x 1] np.ndarray[float]
         Signal-to-noise ratio estimate [dB].
     """
+    # Check for single-channel case
+    if speech.ndim == 1:
+        speech = speech[:, np.newaxis]
+    if noise.ndim == 1:
+        noise = noise[:, np.newaxis]
+    if vad.ndim == 1:
+        vad = vad[:, np.newaxis]
+
     vad = vad.astype(bool)  # convert to boolean
     nChannels = speech.shape[-1]
 
+
+
     snrEst = np.zeros(nChannels)
     for c in range(nChannels):
-        snrEst[c] = np.mean(np.abs(speech[vad[:, c], c]) ** 2) /\
+        snrEst[c] = 10 * np.log10(
+            np.mean(np.abs(speech[vad[:, c], c]) ** 2) /\
             np.mean(np.abs(noise[vad[:, c], c]) ** 2)
+        )
+        
+    if 0:
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(1,1)
+        fig.set_size_inches(8.5, 3.5)
+        axes.plot(speech)
+        axes.plot(noise)
+        axes.plot(vad)
+        axes.grid()
+        axes.set_title(f'SNR = {snrEst}')
+        plt.tight_layout()	
+        plt.show()
+
+    return snrEst
 
 
 def get_snr_old(Y: np.ndarray, VAD):
@@ -473,6 +530,12 @@ def get_fwsnrseg(cleanSig, enhancedSig, fs, frameLen=0.03, overlap=0.75, gamma=0
 
     See inline comments for EDITS w.r.t. original implementation.
     """
+
+    # Addition on 22.03.2023 -- Robustness to input array dimensions
+    if cleanSig.ndim == 2 and enhancedSig.ndim == 1:
+        cleanSig = cleanSig[:, 0]
+    if cleanSig.ndim == 1 and enhancedSig.ndim == 2:
+        enhancedSig = enhancedSig[:, 0]
 
     if cleanSig.shape!=enhancedSig.shape:
         raise ValueError('The two signals do not match!')

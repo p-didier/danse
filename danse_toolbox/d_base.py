@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 import networkx as nx
 from numba import njit
+import scipy.signal as sig
 import scipy.linalg as sla
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
@@ -1653,3 +1654,57 @@ def generate_graph_for_wasn(wasn: list[Node]) -> nx.Graph:
     Gnx = nx.from_numpy_array(adjMat)
 
     return Gnx
+
+
+def get_stft(x, fs, win, ovlp):
+    """
+    Derives time-domain signals' STFT representation
+    given certain settings.
+
+    Parameters
+    ----------
+    x : [N x C] np.ndarray (float)
+        Time-domain signal(s).
+    fs : int
+        Sampling frequency [samples/s].
+    win : np.ndarray[float]
+        Analysis window.
+    ovlp : float
+        Amount of window overlap.
+
+    Returns
+    -------
+    out : [Nf x Nt x C] np.ndarray (complex)
+        STFT-domain signal(s).
+    f : [Nf x C] np.ndarray (real)
+        STFT frequency bins, per channel (because of different sampling rates).
+    t : [Nt x 1] np.ndarray (real)
+        STFT time frames.
+    """
+
+    if x.ndim == 1:
+        x = x[:, np.newaxis]
+
+    for channel in range(x.shape[-1]):
+
+        fcurr, t, tmp = sig.stft(
+            x[:, channel],
+            fs=fs,
+            window=win,
+            nperseg=len(win),
+            noverlap=int(ovlp * len(win)),
+            return_onesided=True
+        )
+        if channel == 0:
+            out = np.zeros(
+                (tmp.shape[0], tmp.shape[1], x.shape[-1]), dtype=complex
+            )
+            f = np.zeros((tmp.shape[0], x.shape[-1]))
+        out[:, :, channel] = tmp
+        f[:, channel] = fcurr
+
+    # Flatten array in case of single-channel data
+    if x.shape[-1] == 1:
+        f = np.array([i[0] for i in f])
+
+    return out, f, t

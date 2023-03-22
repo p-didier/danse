@@ -168,6 +168,12 @@ class Node:
         )
         # Combined wet clean speeches
         self.cleanspeechCombined = np.sum(self.cleanspeech, axis=1)
+        if self.cleanspeechCombined.ndim == 1:
+            self.cleanspeechCombined = self.cleanspeechCombined[:, np.newaxis]
+        # Combined wet clean noises
+        self.cleannoiseCombined = np.sum(self.cleannoise, axis=1)
+        if self.cleannoiseCombined.ndim == 1:
+            self.cleannoiseCombined = self.cleannoiseCombined[:, np.newaxis]
 
 
 @dataclass

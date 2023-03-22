@@ -152,6 +152,9 @@ def stoi_any_fs(x, y, fs_sig, extended=False):
             IEEE Transactions on Audio, Speech and Language Processing, 2016.
     """
 
+    x = np.squeeze(x)  # addition by P. Didier on 22.03.2023
+    y = np.squeeze(y)  # addition by P. Didier on 22.03.2023
+
     if x.shape != y.shape:
         raise Exception('x and y should have the same length,' +
                         'found {} and {}'.format(x.shape, y.shape))

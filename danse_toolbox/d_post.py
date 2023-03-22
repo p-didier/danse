@@ -15,7 +15,7 @@ from danse_toolbox.d_eval import *
 from dataclasses import dataclass, fields
 import danse_toolbox.dataclass_methods as met
 from siggen.classes import Node, WASNparameters
-from danse_toolbox.d_base import DANSEparameters
+from danse_toolbox.d_base import DANSEparameters, back_to_time_domain, get_stft
 from danse_toolbox.d_classes import DANSEvariables
 
 @dataclass
@@ -46,22 +46,40 @@ class DANSEoutputs(DANSEparameters):
         self.STFTDdesiredSignals_est_c = None
         self.TDdesiredSignals_est_l = None
         self.STFTDdesiredSignals_est_l = None
+        self.TDfiltSpeech_c = None
+        self.STFTfiltSpeech_c = None
+        self.TDfiltNoise_c = None
+        self.STFTfiltNoise_c = None
+        self.TDfiltSpeech_l = None
+        self.STFTfiltSpeech_l = None
+        self.TDfiltNoise_l = None
+        self.STFTfiltNoise_l = None
 
         # Original microphone signals
         self.micSignals = dv.yin
         # DANSE desired signal estimates
         self.TDdesiredSignals_est = dv.d
         self.STFTDdesiredSignals_est = dv.dhat
-        self.TDfiltSpeech, self.STFTfiltSpeech = self.get_filtered(dv.cleanSpeechSignalsAtNodesSTFT, dv.wTilde)
-        self.TDfiltNoise, self.STFTfiltNoise = self.get_filtered('noise', 'danse')
+        self.TDfiltSpeech = dv.d_s
+        self.STFTfiltSpeech = dv.dhat_s
+        self.TDfiltNoise = dv.d_n
+        self.STFTfiltNoise = dv.dhat_n
         if self.computeCentralised:
             # Centralised desired signal estimates
             self.TDdesiredSignals_est_c = dv.dCentr
             self.STFTDdesiredSignals_est_c = dv.dHatCentr
+            self.TDfiltSpeech_c = dv.dCentr_s
+            self.STFTfiltSpeech_c = dv.dHatCentr_s
+            self.TDfiltNoise_c = dv.dCentr_n
+            self.STFTfiltNoise_c = dv.dHatCentr_n
         if self.computeLocal:
             # Local desired signal estimates
             self.TDdesiredSignals_est_l = dv.dLocal
             self.STFTDdesiredSignals_est_l = dv.dHatLocal
+            self.TDfiltSpeech_l = dv.dCentr_s
+            self.STFTfiltSpeech_l = dv.dHatCentr_s
+            self.TDfiltNoise_l = dv.dCentr_n
+            self.STFTfiltNoise_l = dv.dHatCentr_n
         # SROs
         self.SROgroundTruth = dv.SROsppm
         self.SROsEstimates = dv.SROsEstimates
@@ -83,36 +101,40 @@ class DANSEoutputs(DANSEparameters):
 
         return self
     
-    def get_filtered(self, sig, filters, type='danse'):
-        """
-        Filters speech- or noise-only signals.
+    # def get_filtered(self, y, w):
+    #     """
+    #     Filters speech- or noise-only signals.
 
-        Parameters
-        ----------
-        sig : [K x 1] list of [Nf x Nt x C[k]] np.ndarray[complex]
-            Signals in the STFT domain.
-            `K`: number of nodes.
-            `Nf`: number of frequency bins.
-            `Nt`: number of time frames.
-            `C[k]`: number of microphones at node `k`.
-        filters : [K x 1] list of [Nf x Nt x M[k]] np.ndarray[complex]
-            Filters in the STFT domain.
-            `M[k]`: number of available channels at node `k` (`M[k]` >= `C[k]`).
-        type : str
-            If "danse": perform filtering as in DANSE.
-            If "centralised": perform filtering as in a centralised case.
-            If "local": perform filtering as in a local estimation case.
-        """
+    #     Parameters
+    #     ----------
+    #     y : [K x 1] list of [Nf x Nt x M[k]] np.ndarray[complex]
+    #         Signals available at node `k` in the STFT domain.
+    #         `K`: number of nodes.
+    #         `Nf`: number of frequency bins.
+    #         `Nt`: number of time frames.
+    #         `M[k]`: number of available channels at node `k` (`M[k]` >= `C[k]`).
+    #     w : [K x 1] list of [Nf x Nt x M[k]] np.ndarray[complex]
+    #         Corresponding filters in the STFT domain.
+    #     """
 
-        if type == 'danse':
-            pass  # TODO:
-        elif type == 'centralised':
-            pass  # TODO:
-        elif type == 'local':
-            pass  # TODO:
-        else:
-            raise ValueError(f'Type "{type}" invalid. Possible values: ["danse", "centralised", "local"].')
-        
+    #     # TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: 
+    #     # Compute desired signal chunk estimate using WOLA
+    #     for k in range(len(y)):
+    #         for ii in range(y[k].shape[1]):
+    #             dhatCurr = np.einsum(
+    #                 'ij,ij->i',
+    #                 w[k][:, ii, :].conj(),
+    #                 y[k][:, ii, :]
+    #             )
+    #             # Transform back to time domain (WOLA processing)
+    #             dChunCurr = self.normFactWOLA * self.winWOLAsynthesis *\
+    #                 back_to_time_domain(dhatCurr, len(self.winWOLAsynthesis))
+    #             # Overlap and add construction of output time-domain signal
+    #             if len(dChunk) < len(self.winWOLAsynthesis):
+    #                 dChunk += np.real_if_close(dChunCurr[-len(dChunk):])
+    #             else:
+    #                 dChunk += np.real_if_close(dChunCurr)
+    #             stop = 1
 
     
     def check_init(self):
@@ -432,14 +454,20 @@ def compute_metrics(
 
         # Compute starting indices for centralised and local estimates
         TDdesiredSignals_est_c, TDdesiredSignals_est_l = None, None
+        TDfilteredSpeech_c, TDfilteredSpeech_l = None, None
+        TDfilteredNoise_c, TDfilteredNoise_l = None, None
         if out.computeCentralised:
             TDdesiredSignals_est_c = out.TDdesiredSignals_est_c[:, k]
+            TDfilteredSpeech_c = out.TDfiltSpeech_c[:, k]
+            TDfilteredNoise_c = out.TDfiltNoise_c[:, k]
             startIdxCentr[k] = int(np.floor(
                 out.tStartForMetricsCentr[k] * wasn[k].fs
             ))
             print(f"Node {k+1}: computing speech enhancement metrics for CENTRALISED PROCESSING from the {startIdxCentr[k] + 1}'th sample on (t_start = {out.tStartForMetricsCentr[k]} s).")
         if out.computeLocal:
             TDdesiredSignals_est_l = out.TDdesiredSignals_est_l[:, k]
+            TDfilteredSpeech_l = out.TDfiltSpeech_l[:, k]
+            TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
             startIdxLocal[k] = int(np.floor(
                 out.tStartForMetricsLocal[k] * wasn[k].fs
             ))
@@ -447,15 +475,16 @@ def compute_metrics(
 
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
-            clean=wasn[k].cleanspeechCombined,
+            clean=np.squeeze(wasn[k].cleanspeechCombined),
+            noiseOnly=np.squeeze(wasn[k].cleannoiseCombined),
             # Microphone signals
             noisy=wasn[k].data[:, out.referenceSensor],
-            # filteredNoise
-            # filteredSpeech
-            # filteredNoise_c
-            # filteredSpeech_c
-            # filteredNoise_l
-            # filteredSpeech_l
+            filteredSpeech=out.TDfiltSpeech[:, k],
+            filteredNoise=out.TDfiltNoise[:, k],
+            filteredSpeech_c=TDfilteredSpeech_c,
+            filteredNoise_c=TDfilteredNoise_c,
+            filteredSpeech_l=TDfilteredSpeech_l,
+            filteredNoise_l=TDfilteredNoise_l,
             # DANSE outputs (desired signal estimates)
             enhan=out.TDdesiredSignals_est[:, k],
             enhan_c=TDdesiredSignals_est_c,
@@ -466,7 +495,7 @@ def compute_metrics(
             startIdxLocal=startIdxLocal[k],
             # Other parameters
             fs=wasn[k].fs,
-            VAD=wasn[k].vadCombined,
+            vad=wasn[k].vadCombined,
             dynamic=out.dynMetrics,
             gamma=out.gammafwSNRseg,
             fLen=out.frameLenfwSNRseg
@@ -1170,58 +1199,58 @@ def stft_subplot(ax, t, f, data, vlims, label=''):
     return cb
 
 
-def get_stft(x, fs, win, ovlp):
-    """
-    Derives time-domain signals' STFT representation
-    given certain settings.
+# def get_stft(x, fs, win, ovlp):
+#     """
+#     Derives time-domain signals' STFT representation
+#     given certain settings.
 
-    Parameters
-    ----------
-    x : [N x C] np.ndarray (float)
-        Time-domain signal(s).
-    fs : int
-        Sampling frequency [samples/s].
-    win : np.ndarray[float]
-        Analysis window.
-    ovlp : float
-        Amount of window overlap.
+#     Parameters
+#     ----------
+#     x : [N x C] np.ndarray (float)
+#         Time-domain signal(s).
+#     fs : int
+#         Sampling frequency [samples/s].
+#     win : np.ndarray[float]
+#         Analysis window.
+#     ovlp : float
+#         Amount of window overlap.
 
-    Returns
-    -------
-    out : [Nf x Nt x C] np.ndarray (complex)
-        STFT-domain signal(s).
-    f : [Nf x C] np.ndarray (real)
-        STFT frequency bins, per channel (because of different sampling rates).
-    t : [Nt x 1] np.ndarray (real)
-        STFT time frames.
-    """
+#     Returns
+#     -------
+#     out : [Nf x Nt x C] np.ndarray (complex)
+#         STFT-domain signal(s).
+#     f : [Nf x C] np.ndarray (real)
+#         STFT frequency bins, per channel (because of different sampling rates).
+#     t : [Nt x 1] np.ndarray (real)
+#         STFT time frames.
+#     """
 
-    if x.ndim == 1:
-        x = x[:, np.newaxis]
+#     if x.ndim == 1:
+#         x = x[:, np.newaxis]
 
-    for channel in range(x.shape[-1]):
+#     for channel in range(x.shape[-1]):
 
-        fcurr, t, tmp = sig.stft(
-            x[:, channel],
-            fs=fs,
-            window=win,
-            nperseg=len(win),
-            noverlap=int(ovlp * len(win)),
-            return_onesided=True
-        )
-        if channel == 0:
-            out = np.zeros(
-                (tmp.shape[0], tmp.shape[1], x.shape[-1]), dtype=complex
-            )
-            f = np.zeros((tmp.shape[0], x.shape[-1]))
-        out[:, :, channel] = tmp
-        f[:, channel] = fcurr
+#         fcurr, t, tmp = sig.stft(
+#             x[:, channel],
+#             fs=fs,
+#             window=win,
+#             nperseg=len(win),
+#             noverlap=int(ovlp * len(win)),
+#             return_onesided=True
+#         )
+#         if channel == 0:
+#             out = np.zeros(
+#                 (tmp.shape[0], tmp.shape[1], x.shape[-1]), dtype=complex
+#             )
+#             f = np.zeros((tmp.shape[0], x.shape[-1]))
+#         out[:, :, channel] = tmp
+#         f[:, channel] = fcurr
 
-    # Flatten array in case of single-channel data
-    if x.shape[-1] == 1:
-        f = np.array([i[0] for i in f])
+#     # Flatten array in case of single-channel data
+#     if x.shape[-1] == 1:
+#         f = np.array([i[0] for i in f])
 
-    return out, f, t
+#     return out, f, t
 
 
 def normalize_toint16(nparray):

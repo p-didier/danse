@@ -21,8 +21,8 @@ p = TestParameters(
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
-            # topologyType='fully-connected',
-            topologyType='user-defined',
+            topologyType='fully-connected',
+            # topologyType='user-defined',
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
@@ -38,7 +38,7 @@ p = TestParameters(
             #     [1, 1],  # Node 2
             # ])
         ),
-        sigDur=15,
+        sigDur=5,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.0,
