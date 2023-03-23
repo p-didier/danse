@@ -232,8 +232,8 @@ class DANSEvariables(base.DANSEparameters):
         # Create fields
         self.avgProdResiduals = avgProdResiduals
         self.bufferFlags = bufferFlags
-        self.cleanSpeechSignalsAtNodes = [node.cleanspeechCombined for node in wasn]
-        self.cleanNoiseSignalsAtNodes = [node.cleannoiseCombined for node in wasn]
+        self.cleanSpeechSignalsAtNodes = [node.cleanspeech for node in wasn]
+        self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
         self.d = np.zeros(
             (wasn[self.referenceSensor].data.shape[0], nNodes)
         )
@@ -2062,9 +2062,8 @@ class TIDANSEvariables(DANSEvariables):
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
             p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
-            # p = self.wTildeExt[k][:, :yq.shape[-1]] * self.wTildeExt[k][:, -1:]
             # p = self.wTildeExt[k][:, :yq.shape[-1]]
-        # Apply linear combination to form compressed signal.zZ
+        # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 
         # WOLA synthesis stage
