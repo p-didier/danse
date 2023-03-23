@@ -94,7 +94,7 @@ p = TestParameters(
         performGEVD=False,
         # performGEVD=True,
         # bypassUpdates=True  # /!\
-        t_expAvg50p=2,
+        t_expAvg50p=50,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     )
 )

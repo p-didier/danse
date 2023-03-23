@@ -217,6 +217,7 @@ class DANSEparameters(Hyperparameters):
         self.nSensorPerNode = wasnParams.nSensorPerNode
         self.referenceSensor = wasnParams.referenceSensor
         self.baseFs = wasnParams.fs
+        self.seed = wasnParams.topologyParams.seed
     
 def prep_sigs_for_FFT(y, N, Ns, t):
     """

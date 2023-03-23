@@ -181,6 +181,13 @@ def get_metrics(
     if filteredSpeech_l is not None:
         filteredSpeech_l = filteredSpeech_l[startIdxLocal:]
         filteredNoise_l = filteredNoise_l[startIdxLocal:]
+
+    # import simpleaudio as sa
+    # import copy
+    # audio_array = copy.deepcopy(filteredSpeech[:int(len(filteredSpeech)/2)])
+    # audio_array *= 32767 / max(abs(audio_array))
+    # audio_array = audio_array.astype(np.int16)
+    # sa.play_buffer(audio_array,1,2,int(fs))
     
     # Unweighted SNR
     snr.before = get_snr(clean, noiseOnly, vad)

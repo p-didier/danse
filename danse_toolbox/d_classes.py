@@ -107,15 +107,20 @@ class DANSEvariables(base.DANSEparameters):
         zBuffer = []
         zLocal = []
 
-        def _init_complex_filter(size, refIdx=0):
+        def _init_complex_filter(size, refIdx=0, initType='selectFirstSensor'):
             """Returns an initialized STFT-domain filter vector,
             i.e., a selector of the reference sensor at node 1."""
-            wtmp = np.zeros(size, dtype=complex)
-            if len(size) == 3:
-                wtmp[:, :, refIdx] = 1
-            elif len(size) == 2:
-                wtmp[:, refIdx] = 1
-            return wtmp
+            if initType == 'selectFirstSensor':
+                wInit = np.zeros(size, dtype=complex)
+                if len(size) == 3:
+                    wInit[:, :, refIdx] = 1
+                elif len(size) == 2:
+                    wInit[:, refIdx] = 1
+            elif initType == 'random':
+                rng = np.random.default_rng(self.seed)
+                wInit = (rng.random(size) - 0.5) +\
+                    1j * (rng.random(size) - 0.5)
+            return wInit
 
         for k in range(nNodes):
             nNeighbors = len(wasn[k].neighborsIdx)
@@ -168,7 +173,8 @@ class DANSEvariables(base.DANSEparameters):
             if tidanseFlag:
                 wTildeExt.append(_init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
-                    self.referenceSensor
+                    self.referenceSensor,
+                    # initType='random'  # !! 23.03.2023
                 ))
                 wTildeExtTarget.append(_init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
@@ -1719,12 +1725,21 @@ class TIDANSEvariables(DANSEvariables):
 
         elif self.broadcastType == 'wholeChunk':
             # Time-domain chunk-wise compression
-            _, self.zLocalPrimeBuffer[k] =\
-                self.ti_compression_whole_chunk(k, ykFrame)
-            _, self.zLocalPrimeBuffer_s[k] =\
-                self.ti_compression_whole_chunk(k, ykFrame_s)  # [useful for SNR computation]
-            _, self.zLocalPrimeBuffer_n[k] =\
-                self.ti_compression_whole_chunk(k, ykFrame_n)  # [useful for SNR computation]
+            _, self.zLocalPrimeBuffer[k] = self.ti_compression_whole_chunk(
+                k,
+                ykFrame,
+                zForSynthesis=self.zLocalPrimeBuffer[k]
+            )
+            _, self.zLocalPrimeBuffer_s[k] = self.ti_compression_whole_chunk(
+                k,
+                ykFrame_s,
+                zForSynthesis=self.zLocalPrimeBuffer_s[k]
+            )
+            _, self.zLocalPrimeBuffer_n[k] = self.ti_compression_whole_chunk(
+                k,
+                ykFrame_n,
+                zForSynthesis=self.zLocalPrimeBuffer_n[k]
+            )
             
             # _, self.zLocalPrimeBuffer[k] = base.danse_compression_whole_chunk(
             #     ykFrame,
@@ -1998,7 +2013,7 @@ class TIDANSEvariables(DANSEvariables):
         self.yTildeHat_s[k][:, self.i[k], :] = yTildeHatCurr_s[:self.nPosFreqs, :]
         self.yTildeHat_n[k][:, self.i[k], :] = yTildeHatCurr_n[:self.nPosFreqs, :]
 
-    def ti_compression_whole_chunk(self, k, yq: np.ndarray):
+    def ti_compression_whole_chunk(self, k, yq: np.ndarray, zForSynthesis: np.ndarray):
         """
         Performs local signals compression in the frequency domain
         for TI-DANSE.
@@ -2009,6 +2024,8 @@ class TIDANSEvariables(DANSEvariables):
             Node index.
         yq : [N x nSensors] np.ndarray (float)
             Local sensor signals.
+        zForSynthesis : np.ndarray[float]
+            Previous local buffer chunk for overlap-add synthesis.
 
         Returns
         -------
@@ -2035,20 +2052,20 @@ class TIDANSEvariables(DANSEvariables):
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
-            # p = wTildeExt[:, :yq.shape[-1]] * wTildeExt[:, -1:]
-            # p = wTildeExt[:, :yq.shape[-1]]
+            # p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
+            # p = self.wTildeExt[k][:, :yq.shape[-1]] * self.wTildeExt[k][:, -1:]
+            p = self.wTildeExt[k][:, :yq.shape[-1]]
         # Apply linear combination to form compressed signal.zZ
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 
         # WOLA synthesis stage
-        if self.zLocalPrimeBuffer[k] is not None:
+        if zForSynthesis is not None:
             # IDFT
             zqCurr = base.back_to_time_domain(zqHat, DFTorder, axis=0)
             zqCurr = np.real_if_close(zqCurr)
             zqCurr *= self.winWOLAsynthesis    # multiply by synthesis window
 
-            if not np.any(self.zLocalPrimeBuffer[k]):
+            if not np.any(zForSynthesis):
                 # No previous frame, keep current frame
                 zq = zqCurr
             else:
@@ -2056,7 +2073,7 @@ class TIDANSEvariables(DANSEvariables):
                 zq = np.zeros(DFTorder)
                 # TODO: consider case with multiple neighbor nodes
                 # (`len(zqPrevious) > 1`).
-                zq[:(DFTorder // 2)] = self.zLocalPrimeBuffer[k][-(DFTorder // 2):]
+                zq[:(DFTorder // 2)] = zForSynthesis[-(DFTorder // 2):]
                 zq += zqCurr
         else:
             zq = None
