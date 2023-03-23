@@ -76,10 +76,10 @@ class DANSEoutputs(DANSEparameters):
             # Local desired signal estimates
             self.TDdesiredSignals_est_l = dv.dLocal
             self.STFTDdesiredSignals_est_l = dv.dHatLocal
-            self.TDfiltSpeech_l = dv.dCentr_s
-            self.STFTfiltSpeech_l = dv.dHatCentr_s
-            self.TDfiltNoise_l = dv.dCentr_n
-            self.STFTfiltNoise_l = dv.dHatCentr_n
+            self.TDfiltSpeech_l = dv.dLocal_s
+            self.STFTfiltSpeech_l = dv.dHatLocal_s
+            self.TDfiltNoise_l = dv.dLocal_n
+            self.STFTfiltNoise_l = dv.dHatLocal_n
         # SROs
         self.SROgroundTruth = dv.SROsppm
         self.SROsEstimates = dv.SROsEstimates

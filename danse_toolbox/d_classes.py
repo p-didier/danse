@@ -1214,8 +1214,7 @@ class DANSEvariables(base.DANSEparameters):
             yyH,
             vad=self.oVADframes[self.i[k]]
         )  # update
-        if k == 0:
-            stop = 1
+
         self.yyH[k][self.i[k], :, :, :] = yyH  # saving for SRO estimation...
         
         # Consider centralised / local estimation(s)
@@ -1663,24 +1662,23 @@ class TIDANSEvariables(DANSEvariables):
         # `zLocalPrime`: fused local signals (!= partial in-network sum!).
         #       == $\dot{z}_kl[n]'$, following notation from [1].
         self.zLocalPrime = [np.zeros(self.DFTsize) for _ in range(self.nNodes)]
+        self.zLocalPrime_s = [np.zeros(self.DFTsize) for _ in range(self.nNodes)]
+        self.zLocalPrime_n = [np.zeros(self.DFTsize) for _ in range(self.nNodes)]
         # `zLocalPrimeBuffer`: fused local signals after WOLA overlap
         # (last Ns samples are influence by the window).
         self.zLocalPrimeBuffer = [np.array([]) for _ in range(self.nNodes)]
-        self.zLocalPrimeBuffer_speech = [np.array([]) for _ in range(self.nNodes)]
-        self.zLocalPrimeBuffer_noise = [np.array([]) for _ in range(self.nNodes)]
-        # `zBufferTI`: partial in-network sums given from upstream neighbors.
-        #       == $\{\dot{z}_l[n]\}_{l\in\mathcal{T}_k\backslash\{q\}}}$,
-        #           following notation from [1].
-        self.zBufferTI = [
-            [np.array([]) for _ in range(len(self.upstreamNeighbors[k]))]\
-                for k in range(self.nNodes)
-        ]
+        self.zLocalPrimeBuffer_s = [np.array([]) for _ in range(self.nNodes)]
+        self.zLocalPrimeBuffer_n = [np.array([]) for _ in range(self.nNodes)]
         # `eta`: in-network sum.
         #       == $\dot{\eta}[n]$ extrapolating notation from [1] & [2].
         self.eta = [np.array([]) for _ in range(self.nNodes)]
+        self.eta_s = [np.array([]) for _ in range(self.nNodes)]
+        self.eta_n = [np.array([]) for _ in range(self.nNodes)]
         # `etaMk`: in-network sum minus local fused signal.
         #       == $\dot{\eta}_{-k}[n]$ extrapolating notation from [1] & [2].
         self.etaMk = [np.array([]) for _ in range(self.nNodes)]
+        self.etaMk_s = [np.array([]) for _ in range(self.nNodes)]
+        self.etaMk_n = [np.array([]) for _ in range(self.nNodes)]
 
     def ti_fusion(self, k, tCurr, fs):
         """
@@ -1703,18 +1701,18 @@ class TIDANSEvariables(DANSEvariables):
             fs,
             self.DFTsize
         )
-        # cleanSpeechFrame = base.local_chunk_for_broadcast(
-        #     self.cleanSpeechSignalsAtNodes[k],
-        #     tCurr,
-        #     fs,
-        #     self.DFTsize
-        # )  # [useful for SNR computation]
-        # cleanNoiseFrame = base.local_chunk_for_broadcast(
-        #     self.cleanNoiseSignalsAtNodes[k],
-        #     tCurr,
-        #     fs,
-        #     self.DFTsize
-        # )  # [useful for SNR computation]
+        ykFrame_s = base.local_chunk_for_broadcast(
+            self.cleanSpeechSignalsAtNodes[k],
+            tCurr,
+            fs,
+            self.DFTsize
+        )  # [useful for SNR computation]
+        ykFrame_n = base.local_chunk_for_broadcast(
+            self.cleanNoiseSignalsAtNodes[k],
+            tCurr,
+            fs,
+            self.DFTsize
+        )  # [useful for SNR computation]
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
@@ -1723,10 +1721,10 @@ class TIDANSEvariables(DANSEvariables):
             # Time-domain chunk-wise compression
             _, self.zLocalPrimeBuffer[k] =\
                 self.ti_compression_whole_chunk(k, ykFrame)
-            # _, self.zLocalPrimeBuffer_speech[k] =\
-            #     self.ti_compression_whole_chunk(k, cleanSpeechFrame)  # [useful for SNR computation]
-            # _, self.zLocalPrimeBuffer_noise[k] =\
-            #     self.ti_compression_whole_chunk(k, cleanNoiseFrame)  # [useful for SNR computation]
+            _, self.zLocalPrimeBuffer_s[k] =\
+                self.ti_compression_whole_chunk(k, ykFrame_s)  # [useful for SNR computation]
+            _, self.zLocalPrimeBuffer_n[k] =\
+                self.ti_compression_whole_chunk(k, ykFrame_n)  # [useful for SNR computation]
             
             # _, self.zLocalPrimeBuffer[k] = base.danse_compression_whole_chunk(
             #     ykFrame,
@@ -1756,37 +1754,32 @@ class TIDANSEvariables(DANSEvariables):
             self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
             self.zLocalPrimeBuffer[k][:self.Ns]
         ))
+        self.zLocalPrime_s[k] = np.concatenate((
+            self.zLocalPrime_s[k][-(self.DFTsize - self.Ns):],
+            self.zLocalPrimeBuffer_s[k][:self.Ns]
+        ))
+        self.zLocalPrime_n[k] = np.concatenate((
+            self.zLocalPrime_n[k][-(self.DFTsize - self.Ns):],
+            self.zLocalPrimeBuffer_n[k][:self.Ns]
+        ))
 
         # Compute partial sum
         self.zLocal[k] = copy.deepcopy(self.zLocalPrime[k])
+        self.zLocal_s[k] = copy.deepcopy(self.zLocalPrime_s[k])
+        self.zLocal_n[k] = copy.deepcopy(self.zLocalPrime_n[k])
         for l in self.upstreamNeighbors[k]:
             self.zLocal[k] += self.zLocal[l]
+            self.zLocal_s[k] += self.zLocal_s[l]
+            self.zLocal_n[k] += self.zLocal_n[l]
 
-        # At the root, the sum is not partial, but complete
+        # At the root, the sum is not partial, it is complete
         if len(self.downstreamNeighbors[k]) == 0:
             self.eta[k] = copy.deepcopy(self.zLocal[k])
+            self.eta_s[k] = copy.deepcopy(self.zLocal_s[k])
+            self.eta_n[k] = copy.deepcopy(self.zLocal_n[k])
             self.etaMk[k] = self.eta[k] - self.zLocalPrime[k]
-        
-    # def ti_broadcast_partial_sum_downstream(self, k):
-    #     """
-    #     Broadcast local partial in-network sum data to downstream neighbors.
-
-    #     Parameters
-    #     ----------
-    #     k : int
-    #         Node index.
-    #     """
-    #     for q in self.downstreamNeighbors[k]:
-    #         # Find index of node `k` from the perspective of node `q`
-    #         allIdx = np.arange(len(self.upstreamNeighbors[q]))
-    #         idx = allIdx[self.upstreamNeighbors[q] == k]
-    #         if len(idx) == 0:
-    #             pass  # no downstream neighbor to broadcast to
-    #         elif len(idx) == 1:
-    #             # Broadcast partial in-network sum
-    #             self.zBufferTI[q][int(idx[0])] = self.zLocal[k]
-    #         else:
-    #             raise ValueError()
+            self.etaMk_s[k] = self.eta_s[k] - self.zLocalPrime_s[k]
+            self.etaMk_n[k] = self.eta_n[k] - self.zLocalPrime_n[k]
 
     def ti_relay_innetwork_sum_upstream(self, k):
         """
@@ -1799,7 +1792,11 @@ class TIDANSEvariables(DANSEvariables):
         """
         for l in self.upstreamNeighbors[k]:
             self.eta[l] = copy.deepcopy(self.eta[k])  # relay
+            self.eta_s[l] = copy.deepcopy(self.eta_s[k])  # relay
+            self.eta_n[l] = copy.deepcopy(self.eta_n[k])  # relay
             self.etaMk[l] = self.eta[k] - self.zLocalPrime[l]  # $\eta_{-k}$
+            self.etaMk_s[l] = self.eta_s[k] - self.zLocalPrime_s[l]  # $\eta_{-k}$
+            self.etaMk_n[l] = self.eta_n[k] - self.zLocalPrime_n[l]  # $\eta_{-k}$
 
     def ti_update_and_estimate(self, k, tCurr, fs):
         """
@@ -1834,16 +1831,23 @@ class TIDANSEvariables(DANSEvariables):
         # Compute current VAD
         self.compute_vad(k)
         
-        # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
             self.build_ycentr(tCurr, fs, k)
         if self.computeLocal:  # extract local info from `\tilde{y}_k`
             self.yLocal[k][:, self.i[k], :] =\
                 self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
+            self.yLocal_s[k][:, self.i[k], :] =\
+                self.yTilde_s[k][:, self.i[k], :self.nSensorPerNode[k]]
+            self.yLocal_n[k][:, self.i[k], :] =\
+                self.yTilde_n[k][:, self.i[k], :self.nSensorPerNode[k]]
+            #
             self.yHatLocal[k][:, self.i[k], :] =\
                 self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            self.yHatLocal_s[k][:, self.i[k], :] =\
+                self.yTildeHat_s[k][:, self.i[k], :self.nSensorPerNode[k]]
+            self.yHatLocal_n[k][:, self.i[k], :] =\
+                self.yTildeHat_n[k][:, self.i[k], :self.nSensorPerNode[k]]
 
         # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
         # # Account for buffer flags
@@ -1884,6 +1888,8 @@ class TIDANSEvariables(DANSEvariables):
 
         # Compute desired signal chunk estimate
         self.get_desired_signal(k)
+
+        stop = 1
 
         # vvvvvvv DEBUGGING STUFF vvvvvvv
         if 0:
@@ -1933,13 +1939,41 @@ class TIDANSEvariables(DANSEvariables):
                 Ndft=self.DFTsize,
                 Ns=self.Ns
             )
+        yLocalCurr_s, _, _ =\
+            base.local_chunk_for_update(
+                self.cleanSpeechSignalsAtNodes[k],
+                tCurr,
+                fs,
+                bd=self.broadcastType,
+                Ndft=self.DFTsize,
+                Ns=self.Ns
+            )
+        yLocalCurr_n, _, _ =\
+            base.local_chunk_for_update(
+                self.cleanNoiseSignalsAtNodes[k],
+                tCurr,
+                fs,
+                bd=self.broadcastType,
+                Ndft=self.DFTsize,
+                Ns=self.Ns
+            )
 
         # Build full available observation vector
         yTildeCurr = np.concatenate(
             (yLocalCurr, self.etaMk[k][:, np.newaxis]),
             axis=1
         )
+        yTildeCurr_s = np.concatenate(
+            (yLocalCurr_s, self.etaMk_s[k][:, np.newaxis]),
+            axis=1
+        )
+        yTildeCurr_n = np.concatenate(
+            (yLocalCurr_n, self.etaMk_n[k][:, np.newaxis]),
+            axis=1
+        )
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
+        self.yTilde_s[k][:, self.i[k], :] = yTildeCurr_s
+        self.yTilde_n[k][:, self.i[k], :] = yTildeCurr_n
         # Go to frequency domain
         yTildeHatCurr = 1 / self.normFactWOLA * np.fft.fft(
             self.yTilde[k][:, self.i[k], :] *\
@@ -1947,8 +1981,22 @@ class TIDANSEvariables(DANSEvariables):
             self.DFTsize,
             axis=0
         )
+        yTildeHatCurr_s = 1 / self.normFactWOLA * np.fft.fft(
+            self.yTilde_s[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        )
+        yTildeHatCurr_n = 1 / self.normFactWOLA * np.fft.fft(
+            self.yTilde_n[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        )
         # Keep only positive frequencies
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
+        self.yTildeHat_s[k][:, self.i[k], :] = yTildeHatCurr_s[:self.nPosFreqs, :]
+        self.yTildeHat_n[k][:, self.i[k], :] = yTildeHatCurr_n[:self.nPosFreqs, :]
 
     def ti_compression_whole_chunk(self, k, yq: np.ndarray):
         """

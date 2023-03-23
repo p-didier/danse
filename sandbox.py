@@ -15,14 +15,14 @@ SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 SEED = 12347
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230126_baseTests',
+    exportFolder = f'{Path(__file__).parent}/out/20230323_tests',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
-            topologyType='fully-connected',
-            # topologyType='user-defined',
+            # topologyType='fully-connected',
+            topologyType='user-defined',
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
@@ -38,7 +38,7 @@ p = TestParameters(
             #     [1, 1],  # Node 2
             # ])
         ),
-        sigDur=5,
+        sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.0,
@@ -94,7 +94,7 @@ p = TestParameters(
         performGEVD=False,
         # performGEVD=True,
         # bypassUpdates=True  # /!\
-        t_expAvg50p=50,
+        t_expAvg50p=2,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     )
 )
