@@ -2018,50 +2018,45 @@ class TIDANSEvariables(DANSEvariables):
             Time-domain latest WOLA chunk of compressed signal (after OLA).
         """
 
-        # Renaming
-        wTildeExt = self.wTildeExt[k]
-        h = self.winWOLAanalysis
-        f = self.winWOLAsynthesis
-        zqPrevious = self.zLocalPrimeBuffer[k]
-        # -- TODO: see eq. (36) in Szurley's paper --> we need to invert by wTildeInt, probably, not wTildeExt.
+        # -- TODO: see eq. (36) in Szurley's paper --> do we need to invert by `wTildeInt` or `wTildeExt`?
 
         # Transfer local observations to frequency domain
-        n = yq.shape[0]     # DFT order
+        DFTorder = yq.shape[0]  # DFT order
 
-        yqHat = np.fft.fft(yq * h[:, np.newaxis], n, axis=0)
+        yqHat = np.fft.fft(yq * self.winWOLAanalysis[:, np.newaxis], DFTorder, axis=0)
         # Keep only positive frequencies
-        yqHat = yqHat[:int(n/2 + 1), :]
+        yqHat = yqHat[:int(DFTorder/2 + 1), :]
         # Compute compression vector
-        allIdx = np.arange(wTildeExt.shape[-1])
-        if (wTildeExt[:, self.referenceSensor] == 1).all() and\
-            (wTildeExt[:, allIdx != self.referenceSensor] == 0).all():
-            p = wTildeExt[:, :yq.shape[-1]]
+        allIdx = np.arange(self.wTildeExt[k].shape[-1])
+        if (self.wTildeExt[k][:, self.referenceSensor] == 1).all() and\
+            (self.wTildeExt[k][:, allIdx != self.referenceSensor] == 0).all():
+            p = self.wTildeExt[k][:, :yq.shape[-1]]
         else:
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            p = wTildeExt[:, :yq.shape[-1]] * (1 / wTildeExt[:, -1:])
+            p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
             # p = wTildeExt[:, :yq.shape[-1]] * wTildeExt[:, -1:]
             # p = wTildeExt[:, :yq.shape[-1]]
         # Apply linear combination to form compressed signal.zZ
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 
         # WOLA synthesis stage
-        if zqPrevious is not None:
+        if self.zLocalPrimeBuffer[k] is not None:
             # IDFT
-            zqCurr = base.back_to_time_domain(zqHat, n, axis=0)
+            zqCurr = base.back_to_time_domain(zqHat, DFTorder, axis=0)
             zqCurr = np.real_if_close(zqCurr)
-            zqCurr *= f    # multiply by synthesis window
+            zqCurr *= self.winWOLAsynthesis    # multiply by synthesis window
 
-            if not np.any(zqPrevious):
+            if not np.any(self.zLocalPrimeBuffer[k]):
                 # No previous frame, keep current frame
                 zq = zqCurr
             else:
                 # Overlap-add
-                zq = np.zeros(n)
+                zq = np.zeros(DFTorder)
                 # TODO: consider case with multiple neighbor nodes
                 # (`len(zqPrevious) > 1`).
-                zq[:(n // 2)] = zqPrevious[-(n // 2):]
+                zq[:(DFTorder // 2)] = self.zLocalPrimeBuffer[k][-(DFTorder // 2):]
                 zq += zqCurr
         else:
             zq = None
