@@ -29,25 +29,13 @@ def build_room(p: classes.WASNparameters):
         Room (acoustic scenario) object.
     vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
-    wetSpeechAtRefSensor : [N x Nnodes x Nspeechsources] np.ndarray (float)
-        Wet (RIR-affected) individual speech signal at the reference
-        sensor of each node.
-    wetNoiseAtRefSensor : [N x Nnodes x Nnoisesources] np.ndarray (float)
-        Wet (RIR-affected) individual noise signal at the reference
-        sensor of each node.
+    wetSpeeches : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
+        Wet (RIR-affected) speech signal at each sensor of each node.
+        `Nm[k]` is the number of microphones at node `k`.
+    wetNoises : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
+        Wet (RIR-affected) noise signal at each sensor of each node.
     """
 
-    # if p.loadFrom is not None:
-    #     # Check `p.loadFrom` is a valid path to a pre-built acoustic scenario
-    #     if Path(p.loadFrom + '/AcousticScenario.pkl.gz').is_file():
-    #         print(f'Loading ASC from path: "{p.loadFrom}"')
-    #         load_asc_from_folder(p.loadFrom)
-    #     else:
-    #         inp = input(f'Path: "{p.loadFrom}" does not correspond to ASC. Continue? [[y]/n]  ')
-    #         if inp in ['n', 'N']:
-    #             raise ValueError('Aborted.')
-
-    
     # Invert Sabine's formula to obtain the parameters for the ISM simulator
     if p.t60 == 0:
         max_order = 0
@@ -121,44 +109,32 @@ def build_room(p: classes.WASNparameters):
     # Truncate signals (no need for reverb tail)
     room.mic_array.signals = room.mic_array.signals[:, :int(p.fs * p.sigDur)]
 
-    # Extract 1 set of desired source RIRs per node
+    # Extract desired source RIRs per node
     rirsDesiredSources = []
     for k in range(p.nNodes):
         rirsCurr = [room.rir[ii][:p.nDesiredSources]\
             for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
-        rirsDesiredSources.append(rirsCurr[p.referenceSensor])
-    # Extract 1 set of noise source RIRs per node
+        rirsDesiredSources.append(rirsCurr)
+    # Extract noise source RIRs per node
     rirsNoiseSources = []
     for k in range(p.nNodes):
         rirsCurr = [room.rir[ii][-p.nNoiseSources:]\
             for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
-        rirsNoiseSources.append(rirsCurr[p.referenceSensor])
+        rirsNoiseSources.append(rirsCurr)
     # Get wet speech and compute VAD
-    vad, wetSpeechAtRefSensor = get_vad(
+    vad, wetSpeeches = get_vad(
         rirsDesiredSources,
         desiredSignalsRaw,
         p
     )
     # Get wet noise
-    _, wetNoiseAtRefSensor = get_vad(
+    _, wetNoises = get_vad(
         rirsNoiseSources,
         noiseSignalsRaw,
         p
     )
 
-    return room, vad, wetSpeechAtRefSensor, wetNoiseAtRefSensor
-
-
-# def load_asc_from_folder(path):
-#     """Load an existing acoustic scenario from a directory."""
-
-#     # Load raw
-#     asc = classes.AcousticScenario().load(path)
-
-#     # Process to match format of non-loaded ASCs
-#     stop = 1
-
-#     return None
+    return room, vad, wetSpeeches, wetNoises
 
 
 def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
@@ -180,26 +156,31 @@ def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
     -------
     vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
-    wetsigs : [N x Nnodes x Nsources] np.ndarray (float)
-        Wet (RIR-affected) individual speech signal at the reference
-        sensor of each node.
+    wetsigs : [K x 1] list of [Nsensor[k] x N] np.ndarray (float)
+        Wet (RIR-affected) speech (or noise) signal at each sensor of each node.
     """
 
-    vad = np.zeros((xdry.shape[0], len(rirs), len(rirs[0])))
-    wetsigs = np.zeros_like(vad)
+    vad = np.zeros((xdry.shape[0], len(rirs), len(rirs[0][0])))
+    wetsigs = [np.zeros((len(rirs[k]), xdry.shape[0], len(rirs[k][0]))) for k in range(len(rirs))]
     for k in range(len(rirs)):  # for each node
-        for ii in range(len(rirs[k])):  # for each desired source
-            # Compute wet desired-only signal
-            wetsig = sig.fftconvolve(xdry[:, ii], rirs[k][ii], axes=0)
-            wetsigs[:, k, ii] = wetsig[:xdry.shape[0]]  # truncate
+        for m in range(len(rirs[k])):  # for each microphone
+            for ii in range(len(rirs[k][m])):  # for each desired source
+                # Compute wet desired-only signal
+                wetsig = sig.fftconvolve(xdry[:, ii], rirs[k][m][ii], axes=0)
+                wetsigs[k][m, :, ii] = wetsig[:xdry.shape[0]]  # truncate
 
-            thrsVAD = np.amax(wetsigs[:, k, ii] ** 2) / p.VADenergyFactor
+        for ii in range(len(rirs[k][p.referenceSensor])):  # for each desired source
+            thrsVAD = np.amax(wetsigs[k][p.referenceSensor, :, ii] ** 2) /\
+                p.VADenergyFactor
             vad[:, k, ii], _ = oracleVAD(
-                wetsigs[:, k, ii],
+                wetsigs[k][p.referenceSensor, :, ii],
                 tw=p.VADwinLength,
                 thrs=thrsVAD,
                 Fs=p.fs
             )
+
+    # Sum wet signals over sources
+    wetsigs = [np.sum(wetsig, axis=-1) for wetsig in wetsigs]
 
     return vad, wetsigs
 
@@ -397,8 +378,8 @@ def compute_VAD(chunk_x,thrs):
 def build_wasn(
         room: pra.room.ShoeBox,
         vad,
-        wetSpeechAtRefSensor,
-        wetNoiseAtRefSensor,
+        wetSpeeches,
+        wetNoises,
         p: classes.WASNparameters
     ):
     """
@@ -412,12 +393,11 @@ def build_wasn(
         `build_room()`).
     vad : [N x Nnodes x Nspeechsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
-    wetSpeechAtRefSensor : [N x Nnodes x Nspeechsources] np.ndarray (float)
-        Wet (RIR-affected) individual speech signal at the reference
-        sensor of each node.
-    wetNoiseAtRefSensor : [N x Nnodes x Nnoisesources] np.ndarray (float)
-        Wet (RIR-affected) individual noise signal at the reference
-        sensor of each node.
+    wetSpeeches : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
+        Wet (RIR-affected) speech signal at each sensor of each node.
+        `Nm[k]` is the number of microphones at node `k`.
+    wetNoises : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
+        Wet (RIR-affected) noise signal at each sensor of each node.
     p : `WASNparameters` object
         WASN parameters
 
@@ -453,7 +433,7 @@ def build_wasn(
 
         # Apply asynchronicities also to speech-only signal
         speechOnly, _, _ = apply_asynchronicity_at_node(
-            y=wetSpeechAtRefSensor[:, k, :],
+            y=wetSpeeches[k].T,
             fs=p.fs,
             sro=p.SROperNode[k],
             sto=0.
@@ -462,7 +442,7 @@ def build_wasn(
         speechOnly += selfNoiseRefSensor[:, np.newaxis]
         # Apply asynchronicities also to noise-only signal
         noiseOnly, _, _ = apply_asynchronicity_at_node(
-            y=wetNoiseAtRefSensor[:, k, :],
+            y=wetNoises[k].T,
             fs=p.fs,
             sro=p.SROperNode[k],
             sto=0.
@@ -478,6 +458,7 @@ def build_wasn(
         node = classes.Node(
             index=k,
             nSensors=p.nSensorPerNode[k],
+            refSensorIdx=p.referenceSensor,
             sro=p.SROperNode[k],
             fs=fsSRO,
             data=sigs,

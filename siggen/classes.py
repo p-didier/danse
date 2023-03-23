@@ -137,6 +137,7 @@ class WASNparameters(AcousticScenarioParameters):
 class Node:
     index: int = 0
     nSensors: int = 1
+    refSensorIdx: int = 0
     sro: float = 0.
     fs: float = 16000.
     cleanspeech: np.ndarray = np.array([])  # mic. signals if no noise present
@@ -166,14 +167,10 @@ class Node:
             [1 if sum(self.vad[ii, :]) > 0 else 0\
                 for ii in range(self.vad.shape[0])]
         )
-        # Combined wet clean speeches
-        self.cleanspeechCombined = np.sum(self.cleanspeech, axis=1)
-        if self.cleanspeechCombined.ndim == 1:
-            self.cleanspeechCombined = self.cleanspeechCombined[:, np.newaxis]
-        # Combined wet clean noises
-        self.cleannoiseCombined = np.sum(self.cleannoise, axis=1)
-        if self.cleannoiseCombined.ndim == 1:
-            self.cleannoiseCombined = self.cleannoiseCombined[:, np.newaxis]
+        # Wet clean speech at reference sensor
+        self.cleanspeechRefSensor = self.cleanspeech[:, self.refSensorIdx]
+        # Wet clean noise at reference sensor
+        self.cleannoiseRefSensor = self.cleannoise[:, self.refSensorIdx]
 
 
 @dataclass

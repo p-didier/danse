@@ -475,8 +475,8 @@ def compute_metrics(
 
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
-            clean=np.squeeze(wasn[k].cleanspeechCombined),
-            noiseOnly=np.squeeze(wasn[k].cleannoiseCombined),
+            clean=np.squeeze(wasn[k].cleanspeechRefSensor),
+            noiseOnly=np.squeeze(wasn[k].cleannoiseRefSensor),
             # Microphone signals
             noisy=wasn[k].data[:, out.referenceSensor],
             filteredSpeech=out.TDfiltSpeech[:, k],
@@ -1089,12 +1089,12 @@ def plot_signals(node: Node, win, ovlp):
     delta = np.amax(np.abs(node.data))
     ax.plot(
         node.timeStamps,
-        node.cleanspeechCombined,
+        node.cleanspeechRefSensor,
         label='Desired (ref. sensor)'
     )
     ax.plot(
         node.timeStamps,
-        node.vad * np.amax(node.cleanspeechCombined) * 1.1,
+        node.vad * np.amax(node.cleanspeechRefSensor) * 1.1,
         'k-',
         label='VAD (ref. sensor)'
     )
@@ -1133,7 +1133,7 @@ def plot_signals(node: Node, win, ovlp):
     nRows = 3
 
     # Compute STFTs
-    cleanSTFT, f, t = get_stft(node.cleanspeechCombined, node.fs, win, ovlp)
+    cleanSTFT, f, t = get_stft(node.cleanspeechRefSensor, node.fs, win, ovlp)
     noisySTFT, _, _ = get_stft(node.data[:, 0], node.fs, win, ovlp)
     enhanSTFT, _, _ = get_stft(node.enhancedData, node.fs, win, ovlp)
     if len(node.enhancedData_l) > 0:
