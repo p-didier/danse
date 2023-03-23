@@ -107,7 +107,7 @@ class DANSEvariables(base.DANSEparameters):
         zBuffer = []
         zLocal = []
 
-        def _init_complex_filter(size, refIdx=0, initType='selectFirstSensor'):
+        def _init_complex_filter(size, refIdx=0, initType='selectFirstSensor', fixedValue=0.):
             """Returns an initialized STFT-domain filter vector,
             i.e., a selector of the reference sensor at node 1."""
             if initType == 'selectFirstSensor':
@@ -120,6 +120,14 @@ class DANSEvariables(base.DANSEparameters):
                 rng = np.random.default_rng(self.seed)
                 wInit = (rng.random(size) - 0.5) +\
                     1j * (rng.random(size) - 0.5)
+            elif initType == 'fixedValue':
+                wInit = np.full(size, fill_value=fixedValue, dtype=complex)
+            elif initType == 'selectFirstSensor_andFixedValue':
+                wInit = np.full(size, fill_value=fixedValue, dtype=complex)
+                if len(size) == 3:
+                    wInit[:, :, refIdx] = 1
+                elif len(size) == 2:
+                    wInit[:, refIdx] = 1
             return wInit
 
         for k in range(nNodes):
@@ -174,7 +182,8 @@ class DANSEvariables(base.DANSEparameters):
                 wTildeExt.append(_init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
                     self.referenceSensor,
-                    # initType='random'  # !! 23.03.2023
+                    initType='selectFirstSensor_andFixedValue',  # !! 23.03.2023
+                    fixedValue=0.01
                 ))
                 wTildeExtTarget.append(_init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
@@ -2052,9 +2061,9 @@ class TIDANSEvariables(DANSEvariables):
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            # p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
+            p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
             # p = self.wTildeExt[k][:, :yq.shape[-1]] * self.wTildeExt[k][:, -1:]
-            p = self.wTildeExt[k][:, :yq.shape[-1]]
+            # p = self.wTildeExt[k][:, :yq.shape[-1]]
         # Apply linear combination to form compressed signal.zZ
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 
