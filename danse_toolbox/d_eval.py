@@ -431,15 +431,15 @@ def getSNR(timeDomainSignal, VAD):
     return SNRout
 
 
-def get_snr(speech: np.ndarray, noise: np.ndarray, vad: np.ndarray):
+def get_snr(s: np.ndarray, n: np.ndarray, vad: np.ndarray):
     """
     Estimate SNR based on (filtered) speech and (filtered) noise (+ VAD).
 
     Parameters
     ----------
-    speech : [Nt x Nchannels] np.ndarray[float]
+    s : [Nt x Nchannels] np.ndarray[float]
         Time-domain (filtered) speech signal (no noise).
-    noise : [Nt x Nchannels] np.ndarray[float]
+    n : [Nt x Nchannels] np.ndarray[float]
         Time-domain (filtered) noise signal (no speech).
     vad : [Nt x Nchannels] np.ndarray[bool or int (1 or 0) or float (1. or 0.)]
         Corresponding voice activity detector (VAD).
@@ -450,37 +450,23 @@ def get_snr(speech: np.ndarray, noise: np.ndarray, vad: np.ndarray):
         Signal-to-noise ratio estimate [dB].
     """
     # Check for single-channel case
-    if speech.ndim == 1:
-        speech = speech[:, np.newaxis]
-    if noise.ndim == 1:
-        noise = noise[:, np.newaxis]
+    if s.ndim == 1:
+        s = s[:, np.newaxis]
+    if n.ndim == 1:
+        n = n[:, np.newaxis]
     if vad.ndim == 1:
         vad = vad[:, np.newaxis]
 
     vad = vad.astype(bool)  # convert to boolean
-    nChannels = speech.shape[-1]
-
-
+    nChannels = s.shape[-1]
 
     snrEst = np.zeros(nChannels)
     for c in range(nChannels):
         snrEst[c] = 10 * np.log10(
-            np.mean(np.abs(speech[vad[:, c], c]) ** 2) /\
-            np.mean(np.abs(noise[vad[:, c], c]) ** 2)
+            np.mean(np.abs(s[vad[:, c], c]) ** 2) /\
+            np.mean(np.abs(n[vad[:, c], c]) ** 2)
         )
-        
-    if 0:
-        import matplotlib.pyplot as plt
-        fig, axes = plt.subplots(1,1)
-        fig.set_size_inches(8.5, 3.5)
-        axes.plot(speech)
-        axes.plot(noise)
-        axes.plot(vad)
-        axes.grid()
-        axes.set_title(f'SNR = {snrEst}')
-        plt.tight_layout()	
-        plt.show()
-
+    
     return snrEst
 
 
