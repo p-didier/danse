@@ -47,8 +47,8 @@ p = TestParameters(
         nNodes=3,
         # nNodes=4,
         # nSensorPerNode=[1, 1],
-        # nSensorPerNode=[1, 1, 1],
-        nSensorPerNode=[1, 3, 2],
+        nSensorPerNode=[1, 1, 1],
+        # nSensorPerNode=[1, 3, 2],
         # nSensorPerNode=[1, 3, 2, 5],
         # nSensorPerNode=[1, 1, 1, 1],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
@@ -67,9 +67,9 @@ p = TestParameters(
         # SROperNode=np.array([0, 50, -50, 100]),
         # SROperNode=np.array([0, 20, -20, 40]),
         # SROperNode=np.array([0, 0, 0, 0]),
-        # SROperNode=np.array([0, 50]),
+        SROperNode=np.array([0, 100, 200]),
         # SROperNode=np.array([0, 0]),
-        SROperNode=np.array([0]),
+        # SROperNode=np.array([0]),
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
@@ -78,6 +78,8 @@ p = TestParameters(
         nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
+        #
+        # vvvvvvvvv SRO-RELATED vvvvvvvvv
         estimateSROs='CohDrift',
         # estimateSROs='DXCPPhaT',
         # compensateSROs=True,
@@ -86,6 +88,11 @@ p = TestParameters(
             loop='open',
             alpha=0.95
         ),
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        #
+        filterInitType='selectFirstSensor_andFixedValue',
+        filterInitFixedValue=1,
+        #
         # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
         computeCentralised=True,
         computeLocal=True,
@@ -95,7 +102,8 @@ p = TestParameters(
         # performGEVD=True,
         # bypassUpdates=True  # /!\
         t_expAvg50p=50,
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        timeBtwExternalFiltUpdates=1,
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     )
 )
 p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters

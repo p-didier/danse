@@ -122,7 +122,7 @@ class DANSEvariables(base.DANSEparameters):
                     1j * (rng.random(size) - 0.5)
             elif initType == 'fixedValue':
                 wInit = np.full(size, fill_value=fixedValue, dtype=complex)
-            elif initType == 'selectFirstSensor_andFixedValue':
+            elif initType == self.filterInitType:
                 wInit = np.full(size, fill_value=fixedValue, dtype=complex)
                 if len(size) == 3:
                     wInit[:, :, refIdx] = 1
@@ -176,35 +176,47 @@ class DANSEvariables(base.DANSEparameters):
             wIR.append(wtmp)
             wTilde.append(_init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, dimYTilde[k]),
-                self.referenceSensor
+                self.referenceSensor,
+                initType=self.filterInitType,
+                fixedValue=self.filterInitFixedValue
             ))
             if tidanseFlag:
                 wTildeExt.append(_init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
                     self.referenceSensor,
-                    initType='selectFirstSensor_andFixedValue',  # !! 23.03.2023
-                    fixedValue=0.01
+                    initType=self.filterInitType,
+                    fixedValue=self.filterInitFixedValue
                 ))
                 wTildeExtTarget.append(_init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
-                    self.referenceSensor
+                    self.referenceSensor,
+                    initType=self.filterInitType,
+                    fixedValue=self.filterInitFixedValue
                 ))
             else:
                 wTildeExt.append(_init_complex_filter(
                     (self.nPosFreqs, wasn[k].nSensors),
-                    self.referenceSensor
+                    self.referenceSensor,
+                    initType=self.filterInitType,
+                    fixedValue=self.filterInitFixedValue
                 ))
                 wTildeExtTarget.append(_init_complex_filter(
                     (self.nPosFreqs, wasn[k].nSensors),
-                    self.referenceSensor
+                    self.referenceSensor,
+                    initType=self.filterInitType,
+                    fixedValue=self.filterInitFixedValue
                 ))
             wCentr.append(_init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, nSensorsTotal),
-                self.referenceSensor
+                self.referenceSensor,
+                initType=self.filterInitType,
+                fixedValue=self.filterInitFixedValue
             ))
             wLocal.append(_init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, wasn[k].nSensors),
-                self.referenceSensor
+                self.referenceSensor,
+                initType=self.filterInitType,
+                fixedValue=self.filterInitFixedValue
             ))
             #
             yCentr.append(np.zeros(
@@ -2053,16 +2065,15 @@ class TIDANSEvariables(DANSEvariables):
         # Keep only positive frequencies
         yqHat = yqHat[:int(DFTorder/2 + 1), :]
         # Compute compression vector
-        allIdx = np.arange(self.wTildeExt[k].shape[-1])
-        if (self.wTildeExt[k][:, self.referenceSensor] == 1).all() and\
-            (self.wTildeExt[k][:, allIdx != self.referenceSensor] == 0).all():
+        # allIdx = np.arange(self.wTildeExt[k].shape[-1])
+        if not self.startUpdates[k]:
             p = self.wTildeExt[k][:, :yq.shape[-1]]
         else:
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
-            # p = self.wTildeExt[k][:, :yq.shape[-1]]
+            # p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
+            p = self.wTildeExt[k][:, :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 

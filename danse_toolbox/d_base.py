@@ -173,6 +173,14 @@ class DANSEparameters(Hyperparameters):
                                         # for external filter target update.
     t_expAvg50p: float = 2.     # [s] Time in the past at which the value is
                                 # weighted by 50% via exponential averaging.
+    filterInitType: str = 'selectFirstSensor'
+        # type of complex filter vector initialization:
+        # -- 'selectFirstSensor' == [1, 0, ..., 0]^T,
+        # -- 'random' == random vector between -0.5 and 0.5
+        # -- 'fixedValue' == [e, ..., e]^T with e = `filterInitFixedValue`.
+        # -- 'selectFirstSensor_andFixedValue' == [1, e, ..., e]^T,
+        #   with e = `filterInitFixedValue`.
+    filterInitFixedValue: float = 0.
     # ---- Desired signal estimation
     desSigProcessingType: str = 'wola'  # processing scheme used to compute
         # the desired signal estimates: "wola": WOLA synthesis,

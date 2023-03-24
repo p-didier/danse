@@ -417,7 +417,7 @@ def build_wasn(
     myWASN = classes.WASN()
     for k in range(p.nNodes):
         # Apply asynchronicities
-        sigs, t, fsSRO = apply_asynchronicity_at_node(
+firs        sigs, t, fsSRO = apply_asynchronicity_at_node(
             y=room.mic_array.signals[p.sensorToNodeIndices == k, :].T,
             fs=p.fs,
             sro=p.SROperNode[k],
