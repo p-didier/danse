@@ -1167,27 +1167,36 @@ def events_parser_ti_danse(
         ('up', 'Filter update w_k[i+1]'),
     ])
 
-    print(f'TI-DANSE: ---- t = {np.round(events.t, 3)} s ----')
+    print(f'TI-DANSE: ---- t = {events.t} s ----')
     # Init while-loop
     flagEnd = False
     prevType = events.type[0]
-    currNodes = [events.nodes[0]]
-    ii = 1
+    currNodes = []
+    ii = 0
     while not flagEnd:
-        while events.type[ii] == prevType:
-            if not events.bypass[ii] and\
-                not ((not startUpdates[events.nodes[ii]])\
-                    and events.type[ii] == 'up'):
-                currNodes.append(events.nodes[ii])
+        if events.type[ii] != prevType:
+            currNodes.append(events.nodes[ii])
             ii += 1
             if ii >= len(events.type):
                 flagEnd = True
-                break
+        else:
+            # address all identical events
+            counter = 0
+            while events.type[ii] == prevType:
+                if not events.bypass[ii] and\
+                    not ((not startUpdates[events.nodes[ii]])\
+                        and events.type[ii] == 'up'):
+                    currNodes.append(events.nodes[ii])
+                ii += 1
+                counter += 1
+                if ii >= len(events.type):
+                    flagEnd = True
+                    break  # break sub while-loop
         # Prepare printout
         nodesStr = ''
         for k in currNodes:
             nodesStr += f'{k} -> '
-        fullTxt = f'TI-DANSE -- Node(s) [{nodesStr[:-4]}]: {strCodes[prevType]}'
+        fullTxt = f'TI-DANSE -- Node(s) {nodesStr[:-4]}: {strCodes[prevType]}'
         if is_interactive():  # if we are running from a notebook
             # Print on the same line
             print(f"\r{fullTxt}", end="")
@@ -1196,7 +1205,7 @@ def events_parser_ti_danse(
             print(fullTxt)
         # Prepare next while-loop pass
         if not flagEnd:
-            prevType = events.type[ii + 1]
+            prevType = events.type[ii]
             currNodes = []
 
 
