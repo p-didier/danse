@@ -67,9 +67,9 @@ p = TestParameters(
         # SROperNode=np.array([0, 50, -50, 100]),
         # SROperNode=np.array([0, 20, -20, 40]),
         # SROperNode=np.array([0, 0, 0, 0]),
-        SROperNode=np.array([0, 100, 200]),
+        # SROperNode=np.array([0, 100, 200]),
         # SROperNode=np.array([0, 0]),
-        # SROperNode=np.array([0]),
+        SROperNode=np.array([0]),
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
@@ -91,7 +91,7 @@ p = TestParameters(
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         #
         filterInitType='selectFirstSensor_andFixedValue',
-        filterInitFixedValue=1,
+        filterInitFixedValue=0.01,
         #
         # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
         computeCentralised=True,
@@ -101,7 +101,7 @@ p = TestParameters(
         performGEVD=False,
         # performGEVD=True,
         # bypassUpdates=True  # /!\
-        t_expAvg50p=50,
+        t_expAvg50p=30,
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     )

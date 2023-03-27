@@ -1830,9 +1830,9 @@ class TIDANSEvariables(DANSEvariables):
             self.eta[l] = copy.deepcopy(self.eta[k])  # relay
             self.eta_s[l] = copy.deepcopy(self.eta_s[k])  # relay
             self.eta_n[l] = copy.deepcopy(self.eta_n[k])  # relay
-            self.etaMk[l] = self.eta[k] - self.zLocalPrime[l]  # $\eta_{-k}$
-            self.etaMk_s[l] = self.eta_s[k] - self.zLocalPrime_s[l]  # $\eta_{-k}$
-            self.etaMk_n[l] = self.eta_n[k] - self.zLocalPrime_n[l]  # $\eta_{-k}$
+            self.etaMk[l] = self.eta[l] - self.zLocalPrime[l]  # $\eta_{-k}$
+            self.etaMk_s[l] = self.eta_s[l] - self.zLocalPrime_s[l]  # $\eta_{-k}$
+            self.etaMk_n[l] = self.eta_n[l] - self.zLocalPrime_n[l]  # $\eta_{-k}$
 
     def ti_update_and_estimate(self, k, tCurr, fs):
         """
