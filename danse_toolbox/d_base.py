@@ -16,6 +16,8 @@ from scipy.signal._arraytools import zero_ext
 from siggen.classes import WASNparameters, Node, WASN
 from danse_toolbox.d_eval import DynamicMetricsParameters
 
+from itertools import cycle, islice, dropwhile
+
 
 @dataclass
 class DANSEeventInstant:
@@ -146,6 +148,8 @@ class DANSEparameters(Hyperparameters):
         # - "topo-indep_seq": round-robin updating for TI-DANSE [5]
         # - "topo-indep_sim": simultaneous updating for TI-DANSE [5]
         # - "topo-indep_asy": asynchronous updating for TI-DANSE [5]
+    seqUpdateStartNodeIdx : int = 1  # index of node updating first.
+        # Used iff `'seq' in nodeUpdating`.
     broadcastType: str = 'wholeChunk'    # type of broadcast
         # -- 'wholeChunk': chunks of compressed signals in time-domain,
         # -- 'fewSamples': T(z)-approximation of WOLA compression process.
@@ -295,8 +299,7 @@ def prep_sigs_for_FFT(y, N, Ns, t):
 def initialize_events(
     timeInstants: np.ndarray,
     p: DANSEparameters,
-    nodeTypes=[],
-    leafToRootOrdering=[]
+    wasnObj=WASN
     ):
     """
     Returns the matrix the columns of which to loop over in SRO-affected
@@ -310,11 +313,9 @@ def initialize_events(
         Time instants corresponding to the samples of each of the `Nn` nodes.
     p : DANSEparameters object
         Parameters.
-    nodeTypes : list[str]
-        List of node types (used iff `'topo-indep' in p.nodeUpdating`).
-    leafToRootOrdering : list[int or list[int]]
-        Leaves to root ordering of node indices. Nodes that live on the same
-        tree depth are groupped in lists.
+    wasnObj : WASN class instance
+        WASN under consideration, state at WASN initialization (before any
+        pruning).
 
     Returns
     -------
@@ -359,6 +360,21 @@ def initialize_events(
     numBcInTtot = np.floor(Ttot * fs / p.broadcastLength)
 
     if 'topo-indep' in p.nodeUpdating:   # ad-hoc (non fully connected) WASN
+        
+        # Arange node indices starting from the sequential-update start-node
+        orderedSeqUpNodes = np.mod(np.arange(
+            start=p.seqUpdateStartNodeIdx,
+            stop=p.seqUpdateStartNodeIdx + nNodes
+        ), nNodes)
+        # Get leaf-to-root orderings for all possible root indices
+        leafToRootOrderings = []
+        for k in orderedSeqUpNodes:
+            # Update WASN with new root
+            updatingWasnObj = prune_wasn_to_tree(wasnObj, forcedRoot=k)
+            leafToRootOrderings.append(updatingWasnObj.leafToRootOrdering)
+        # Cycling through a list (https://stackoverflow.com/a/8940984)
+        orderingsCycled = cycle(leafToRootOrderings)
+        
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             # Expected DANSE update instants
@@ -380,12 +396,27 @@ def initialize_events(
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
             reInstants = copy.deepcopy(fuInstants)  # same relay instants
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
+            if 'seq' in p.nodeUpdating:
+                # form new tree at every DANSE update
+                trInstants = get_sequential_update_instants(
+                    upInstants=upInstants,
+                    startNodeIdx=p.seqUpdateStartNodeIdx
+                )
+            else:
+                # form tree at WASN initialization only
+                trInstants = np.array([0])
+            # Keep only the relevant leaf-to-root orderings
+            leafToRootOrderings = list(
+                islice(orderingsCycled, None, len(trInstants))
+            )
         else:
             raise ValueError('Not yet implemented')
 
     else:   # fully connected WASN
         fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
+        trInstants = np.array([])  # no tree-formation instants
+        leafToRootOrderings = []
         # Expected DANSE update instants
         upInstants = [
             np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
@@ -427,21 +458,54 @@ def initialize_events(
         p.nodeUpdating,
         fuse_t=fuInstants,
         re_t=reInstants,
-        leafToRootOrdering=leafToRootOrdering
+        tr_t=trInstants,
+        leafToRootOrderings=leafToRootOrderings
     )
 
     return outputEvents, fs
 
 
+def get_sequential_update_instants(
+        upInstants: list[np.ndarray],
+        startNodeIdx: int
+    ):
+    """
+    Returns the update instants in a sequential node-updating DANSE scheme,
+    based on the asynchronous update instants `upInstants` and a starting node
+    index `startNodeIdx`. Can account for the presence of SROs.
+
+    Returns
+    -------
+    seqUpInstants : np.ndarrray[float]
+        Sequential updates time instants. 
+    """
+    currInstant = 0
+    updatingNodeIdx = startNodeIdx
+    seqUpInstants = []
+    while currInstant < np.amax(upInstants[updatingNodeIdx]):
+        upInstantsUpdatingNode = upInstants[updatingNodeIdx]
+        currSeqUpInstant = upInstantsUpdatingNode[
+            upInstantsUpdatingNode > currInstant
+        ][0]
+        # Add to list
+        seqUpInstants.append(currSeqUpInstant)
+        currInstant = currSeqUpInstant
+        # Update updating node index
+        updatingNodeIdx = np.mod(updatingNodeIdx + 1, len(upInstants))
+    seqUpInstants = np.array(seqUpInstants)
+
+    return seqUpInstants
+
+
 def build_events_matrix(
-    up_t,
-    bc_t,
-    nodeUpdating,
-    visualizeUps=False,
-    fuse_t=[],
-    re_t=[],
-    tr_t=[],
-    leafToRootOrdering=[]
+        up_t,
+        bc_t,
+        nodeUpdating,
+        visualizeUps=False,
+        fuse_t=[],
+        re_t=[],
+        tr_t=np.array([]),
+        leafToRootOrderings=[]
     ):
     """
     Builds the DANSE events matrix from the update and broadcast instants.
@@ -458,15 +522,17 @@ def build_events_matrix(
     visualizeUps : bool
         If True, plot a visualization of the expected update instants for 
         each node in the WASN.
+    vvvv Used iff `'topo-indep' in nodeUpdating` vvvv
     fuse_t : [nNodes x 1] list of np.ndarrays (float)
-        Fusion instants per node [s] (used iff `'topo-indep' in nodeUpdating`).
+        Fusion instants per node [s].
     re_t : [nNodes x 1] list of np.ndarrays (float)
-        Relay instants per node [s] (used iff `'topo-indep' in nodeUpdating`).
-    tr_t : [nNodes x 1] list of np.ndarrays (float)
-        Relay instants per node [s] (used iff `'topo-indep' in nodeUpdating`).
-    leafToRootOrdering : list[int or list[int]]
-        Leaves to root ordering of node indices. Nodes that live on the same
-        tree depth are groupped in lists.
+        Relay instants per node [s].
+    tr_t : np.ndarray[float]
+        Tree-formation instants [s].
+    leafToRootOrderings : list of list[int or list[int]]
+        Leaves to root ordering of node indices, for each tree-formation
+        instants (elements of `tr_t`).
+        Nodes that live on the same tree depth are groupped in lists.
 
     Returns
     -------
@@ -571,11 +637,23 @@ def build_events_matrix(
     evTypesConcerned = []        # init
     lastUpNode = -1     # index of latest updating node
     # ^^^ init. at -1 so that `lastUpNode + 1 == 0`
+    treeFormationCounter = -1
+    # ^^^ init. at -1 so that `treeFormationIdx + 1 == 0`
+    lastTreeFormationInstant = None
     while eventIdx < numEventInstants:
 
         currInstant = eventInstants[eventIdx, 0]
         nodesConcerned.append(int(eventInstants[eventIdx, 1]))
         evTypesConcerned.append(int(eventInstants[eventIdx, 2]))
+
+        # Check if a new tree topology must be formed
+        if 'topo-indep' in nodeUpdating:
+            if currInstant in tr_t and currInstant != lastTreeFormationInstant:
+                treeFormationCounter += 1
+                lastTreeFormationInstant = currInstant
+            leafToNodeOrder = leafToRootOrderings[lastTreeFormationInstant]
+        else:
+            leafToNodeOrder = []  # no need for an order in a fully conn. WASN
 
         # Group same-time-instant events
         eventIdx, nodesConcerned, evTypesConcerned = events_groupping_check(
@@ -595,7 +673,7 @@ def build_events_matrix(
             nodes=nodesConcerned,
             eventsCodesDict=eventsCodesDict,
             tidanseFlag='topo-indep' in nodeUpdating,
-            leafToRootOrder=leafToRootOrdering
+            leafToRootOrder=leafToNodeOrder
         )
         nodesConcerned = nodesConcerned[indices]
         evTypesConcerned = evTypesConcerned[indices]
@@ -1516,7 +1594,8 @@ def get_desired_sig_chunk(
 def prune_wasn_to_tree(
     wasnObj: WASN,
     algorithm='prim',
-    plotit=False
+    plotit=False,
+    forcedRoot=None
     ) -> WASN:
     """
     Prunes a WASN to a tree topology.
@@ -1531,7 +1610,9 @@ def prune_wasn_to_tree(
         >> According to Paul Didier's testings from December 2022: 
             'kruskal' and 'prim' are faster and more scalable than 'boruvka'.
     plotit : bool
-        If True, plots a visualization of the original graph and pruned graphs. 
+        If True, plots a visualization of the original graph and pruned graphs.
+    forcedRoot : int
+        If not None: tree root node index.
 
     Returns
     -------
@@ -1566,7 +1647,11 @@ def prune_wasn_to_tree(
         if len(prunedWasnObj.wasn[k].neighborsIdx) == 1:
             prunedWasnObj.wasn[k].nodeType = 'leaf'
     # Set root
-    prunedWasnObj.set_tree_root()
+    if forcedRoot is None:
+        prunedWasnObj.set_tree_root()
+    else:
+        prunedWasnObj.rootIdx = forcedRoot
+        prunedWasnObj.wasn[forcedRoot].nodeType = 'root'
     # Add graph orientation from leaves to root
     prunedWasnObj.orientate()
 

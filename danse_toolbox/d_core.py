@@ -148,23 +148,23 @@ def tidanse(
     doi: 10.1109/TSIPN.2016.2623095.
     """
 
-    # Prune WASN to tree
-    wasnTreeObj = base.prune_wasn_to_tree(
-        wasnObj,
-        algorithm=p.treeFormationAlgorithm,
-        plotit=False
+    # # Prune WASN to tree
+    # wasnTreeObj = base.prune_wasn_to_tree(
+    #     wasnObj,
+    #     algorithm=p.treeFormationAlgorithm,
+    #     plotit=False
+    # )
+
+
+    # Compute events
+    eventInstants, fs, wasnTreeObj = base.initialize_events(
+        timeInstants=np.array([node.timeStamps for node in wasnObj.wasn]).T,
+        p=p,
+        wasnObj=wasnObj
     )
 
     # Initialize TI-DANSE variables
     tidv = TIDANSEvariables(p, wasnTreeObj.wasn)
-
-    # Compute events
-    eventInstants, fs = base.initialize_events(
-        timeInstants=tidv.timeInstants,
-        p=p,
-        nodeTypes=[node.nodeType for node in wasnTreeObj.wasn],
-        leafToRootOrdering=wasnTreeObj.leafToRootOrdering
-    )
 
     # Profiling
     def is_interactive():  # if file is run from notebook
