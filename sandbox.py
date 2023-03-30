@@ -15,14 +15,14 @@ SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 SEED = 12347
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230329_tests/sc2',
+    exportFolder = f'{Path(__file__).parent}/out/20230330_tests/danse/test4',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
-            # topologyType='fully-connected',
-            topologyType='user-defined',
+            topologyType='fully-connected',
+            # topologyType='user-defined',
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
@@ -41,8 +41,8 @@ p = TestParameters(
         sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
-        # t60=0.0,
-        t60=0.2,
+        t60=0.0,
+        # t60=0.2,
         # interSensorDist=0.2,
         interSensorDist=0.1,
         # nNodes=2,
@@ -100,6 +100,7 @@ p = TestParameters(
         #
         filterInitType='selectFirstSensor_andFixedValue',
         filterInitFixedValue=1,
+        # filterInitFixedValue=0,
         #
         # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
         computeCentralised=True,
@@ -209,7 +210,9 @@ def postprocess(
                 wipe_folder(p.exportFolder)
     else:
         print(f'Create export folder "{p.exportFolder}".')
-        Path(p.exportFolder).mkdir()
+        # Create dir. with missing parents directories.
+        # https://stackoverflow.com/a/50110841
+        Path(p.exportFolder).mkdir(parents=True)
 
     if runit:
         # Export convergence plot
