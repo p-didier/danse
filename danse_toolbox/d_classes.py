@@ -2072,8 +2072,8 @@ class TIDANSEvariables(DANSEvariables):
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            # p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
-            p = self.wTildeExt[k][:, :yq.shape[-1]]
+            p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
+            # p = self.wTildeExt[k][:, :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 

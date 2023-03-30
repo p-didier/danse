@@ -15,7 +15,7 @@ SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 SEED = 12347
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230323_tests',
+    exportFolder = f'{Path(__file__).parent}/out/20230329_tests/sc2',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -41,13 +41,16 @@ p = TestParameters(
         sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
-        t60=0.0,
-        interSensorDist=0.2,
+        # t60=0.0,
+        t60=0.2,
+        # interSensorDist=0.2,
+        interSensorDist=0.1,
         # nNodes=2,
         nNodes=3,
         # nNodes=4,
         # nSensorPerNode=[1, 1],
-        nSensorPerNode=[1, 1, 1],
+        # nSensorPerNode=[1, 1, 1],
+        nSensorPerNode=[1, 2, 3],
         # nSensorPerNode=[1, 3, 2],
         # nSensorPerNode=[1, 3, 2, 5],
         # nSensorPerNode=[1, 1, 1, 1],
@@ -58,10 +61,15 @@ p = TestParameters(
                 'speech1.wav',
                 'speech2.wav'
             ]],
+        # noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}'\
+        #     for file in [
+        #         'whitenoise_signal_1.wav',
+        #         'whitenoise_signal_2.wav'
+        #     ]],
         noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}'\
             for file in [
-                'whitenoise_signal_1.wav',
-                'whitenoise_signal_2.wav'
+                'ssn/ssn_speech1.wav',
+                'ssn/ssn_speech2.wav'
             ]],
         # SROperNode=np.array([0, 200, -200, 400]),
         # SROperNode=np.array([0, 50, -50, 100]),
@@ -91,7 +99,7 @@ p = TestParameters(
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         #
         filterInitType='selectFirstSensor_andFixedValue',
-        filterInitFixedValue=0.01,
+        filterInitFixedValue=1,
         #
         # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
         computeCentralised=True,

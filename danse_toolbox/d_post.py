@@ -547,7 +547,7 @@ def plot_metrics(out: DANSEoutputs):
     ax.set(title='PESQ')
     ax.legend(bbox_to_anchor=(1, 0), loc="lower left")
 
-    fig1.suptitle("Speech enhancement metrics")
+    # fig1.suptitle("Speech enhancement metrics")
     plt.tight_layout()
 
     # Check where dynamic metrics were computed
@@ -601,7 +601,7 @@ def plot_metrics(out: DANSEoutputs):
                 axes[ii].legend(loc='lower left', fontsize=8)
             axes[ii].set_xlabel('$t$ [s]')  
         plt.tight_layout()
-        fig2.suptitle("Dynamic speech enhancement metrics")
+        # fig2.suptitle("Dynamic speech enhancement metrics")
     else:
         fig2 = None
 
