@@ -85,7 +85,7 @@ def danse(
                     events.t,
                     fs[k],
                     k,
-                    events.bypass[idxEventCurrInstant]  # inform about bypass
+                    events.bypassUpdate[idxEventCurrInstant]
                 )
             else:
                 raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')
@@ -176,41 +176,39 @@ def tidanse(
     t0 = time.perf_counter()    # timing
 
     # Loop over event instants
-    for idx_t in range(len(eventInstants)):
+    for currEvents in eventInstants:
 
         # Parse event matrix and inform user (if asked)
         if tidv.printout_eventsParser:
             base.events_parser_ti_danse(
-                eventInstants[idx_t],
+                currEvents,
                 tidv.startUpdates,
                 tidv.printout_eventsParserNoBC
             )
 
-        # Process events at current instant
-        currEvents = eventInstants[idx_t] 
-        for idx_e in range(currEvents.nEvents):
-            evType = currEvents.type[idx_e]     # event type
-            k = currEvents.nodes[idx_e]         # node index
-            if not currEvents.bypass[idx_e]:
-                if evType == 'fu':
-                    # Fuse local signals
-                    tidv.ti_fusion(k, currEvents.t, fs[k])
-                elif evType == 'bc':
-                    # Build partial in-network sum and broadcast downstream
-                    tidv.ti_compute_partial_sum(k)
-                    # tidv.ti_broadcast_partial_sum_downstream(k)
-                elif evType == 're':
-                    # Relay in-network sum upstream
-                    tidv.ti_relay_innetwork_sum_upstream(k)
-                elif evType == 'up':
-                    # Update DANSE filter coefficients and estimate target
-                    tidv.ti_update_and_estimate(k, currEvents.t, fs[k])
-                else:
-                    raise ValueError(
-                        f'Unknown event type: "{evType}".'
-                    )
+        for idxEventCurrInstant in range(currEvents.nEvents):
+            # Event type
+            evType = currEvents.type[idxEventCurrInstant]
+            # Node index
+            k = currEvents.nodes[idxEventCurrInstant]
+            # Bypass update boolean
+            bpUp = currEvents.bypassUpdate[idxEventCurrInstant]
+
+            if evType == 'fu':
+                # Fuse local signals
+                tidv.ti_fusion(k, currEvents.t, fs[k])
+            elif evType == 'bc':
+                # Build partial in-network sum and broadcast downstream
+                tidv.ti_compute_partial_sum(k)
+                # tidv.ti_broadcast_partial_sum_downstream(k)
+            elif evType == 're':
+                # Relay in-network sum upstream
+                tidv.ti_relay_innetwork_sum_upstream(k)
+            elif evType == 'up':
+                # Update DANSE filter coefficients and estimate target
+                tidv.ti_update_and_estimate(k, currEvents.t, fs[k], bpUp)
             else:
-                print(f'Event at node {currEvents.nodes[idx_e]} at t={np.round(currEvents.t[idx_e], 3)}s (type: "{evType}") is bypassed.')
+                raise ValueError(f'Unknown event type: "{evType}".')
     
     # Profiling
     if not is_interactive():

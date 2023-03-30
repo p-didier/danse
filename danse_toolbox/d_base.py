@@ -22,8 +22,8 @@ class DANSEeventInstant:
     t: float = 0.   # event time instant [s]
     nodes: np.ndarray = np.array([0])   # node(s) concerned
     type: list[str] = field(default_factory=list)   # event type
-    bypass: list[bool] = field(default_factory=list)  
-        # ^^^ if True, bypass event at that instant and for that node.
+    bypassUpdate: list[bool] = field(default_factory=list)  
+        # ^^^ if True, bypass filter update at that instant and for that node.
         # This value is adapted, e.g., depending on the node-updating strategy
         # chosen (may be set to True for certain updates if sequential DANSE
         # node-updating is used). 
@@ -601,7 +601,7 @@ def build_events_matrix(
         types = [reversedEventsCodingDict[ii] for ii in evTypesConcerned]
 
         # Address node-updating strategy
-        bypass = [False for _ in evTypesConcerned]  # default: no bypass
+        bypassUpdate = [False for _ in evTypesConcerned]  # default: no bypass
         if 'up' in types and nodeUpdating == 'seq':
             lastUpNodeUpdated = lastUpNode
             for ii in range(len(evTypesConcerned)):
@@ -612,7 +612,7 @@ def build_events_matrix(
                         # break  # break `for`-loop
                     else:
                         # Bypass update in other nodes
-                        bypass[ii] = True
+                        bypassUpdate[ii] = True
             lastUpNode = lastUpNodeUpdated
 
         # Build events matrix
@@ -620,7 +620,7 @@ def build_events_matrix(
             t=currInstant,
             nodes=nodesConcerned,
             type=types,
-            bypass=bypass
+            bypassUpdate=bypassUpdate
         ))
 
         nodesConcerned = []         # reset list
@@ -639,7 +639,7 @@ def build_events_matrix(
                 k = currEvents.nodes[ii]
                 if currEvents.type[ii] == 'up':
                     alpha = 1
-                    if currEvents.bypass[ii]:
+                    if currEvents.bypassUpdate[ii]:
                         alpha = 0.2
                     axes.vlines(
                         x=t, ymin=k, ymax=k+0.9, colors=f'C{k}', alpha=alpha)
@@ -1122,7 +1122,7 @@ def events_parser(
                         broadcastsTxt += ','
                     broadcastsTxt += f'{k + 1}'
                 elif events.type[idxEvent] == 'up' and\
-                    not events.bypass[idxEvent]:
+                    not events.bypassUpdate[idxEvent]:
                     # Only print if the node actually has started updating
                     # (i.e. there has been sufficiently many autocorrelation
                     # matrices updates since the start of recording).
@@ -1184,7 +1184,7 @@ def events_parser_ti_danse(
             # address all identical events
             counter = 0
             while events.type[ii] == prevType:
-                if not events.bypass[ii] and\
+                if not events.bypassUpdate[ii] and\
                     not ((not startUpdates[events.nodes[ii]])\
                         and events.type[ii] == 'up'):
                     currNodes.append(events.nodes[ii])

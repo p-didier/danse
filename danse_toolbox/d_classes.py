@@ -569,6 +569,9 @@ class DANSEvariables(base.DANSEparameters):
             Node `k`'s sampling frequency [Hz].
         k : int
             Receiving node index.
+        bypassUpdateEventMat : bool
+            If true, bypass filter udpate.
+            (but still compute the desired signal estimate!)
         """
 
         if k == self.referenceSensor and self.nInternalFilterUps[k] == 0:
@@ -1840,7 +1843,7 @@ class TIDANSEvariables(DANSEvariables):
             self.etaMk_s[l] = self.eta_s[l] - self.zLocalPrime_s[l]  # $\eta_{-k}$
             self.etaMk_n[l] = self.eta_n[l] - self.zLocalPrime_n[l]  # $\eta_{-k}$
 
-    def ti_update_and_estimate(self, k, tCurr, fs):
+    def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
         """
         Performs an update of the DANSE filter coefficients at node `k` and
         estimates the desired signal(s).
@@ -1853,6 +1856,9 @@ class TIDANSEvariables(DANSEvariables):
             Current time instant [s].
         fs : float or int
             Current node's sampling frequency [Hz].
+        bypassUpdateEventMat : bool
+            If true, bypass filter udpate.
+            (but still compute the desired signal estimate!)
         """
         
         if self.firstDANSEupdateRefSensor is None and\
@@ -1903,16 +1909,23 @@ class TIDANSEvariables(DANSEvariables):
 
         # if not skipUpdate:
         # If covariance matrices estimates are full-rank, update filters
-        self.perform_update(k)
-        # ^^^ depends on outcome of `check_covariance_matrices()`.
-        # if self.tStartForMetrics[k] is None:
-        self.evaluate_tstart_for_metrics_computation(k, tCurr)
-        # else:
-        #     # Do not update the filter coefficients
-        #     self.wTilde[k][:, self.i[k] + 1, :] =\
-        #         self.wTilde[k][:, self.i[k], :]
-        #     if skipUpdate:
-        #         print(f'Node {k+1}: {self.i[k]+1}^th update skipped.')
+        if not bypassUpdateEventMat:
+            self.perform_update(k)
+            # ^^^ depends on outcome of `check_covariance_matrices()`.
+            # if self.tStartForMetrics[k] is None:
+            self.evaluate_tstart_for_metrics_computation(k, tCurr)
+        else:
+            # Do not update the filter coefficients
+            self.wTilde[k][:, self.i[k] + 1, :] =\
+                self.wTilde[k][:, self.i[k], :]
+            if self.computeCentralised:
+                self.wCentr[k][:, self.i[k] + 1, :] =\
+                    self.wCentr[k][:, self.i[k], :]
+            if self.computeLocal:
+                self.wLocal[k][:, self.i[k] + 1, :] =\
+                    self.wLocal[k][:, self.i[k], :]
+            # if skipUpdate:
+            #     print(f'Node {k+1}: {self.i[k]+1}^th update skipped.')
         if self.bypassUpdates:
             print('!! User-forced bypass of filter coefficients updates !!')
 
@@ -1930,28 +1943,6 @@ class TIDANSEvariables(DANSEvariables):
 
         # Compute desired signal chunk estimate
         self.get_desired_signal(k)
-
-        stop = 1
-
-        # vvvvvvv DEBUGGING STUFF vvvvvvv
-        if 0:
-            if k == 0 and self.oVADframes[self.i[k]]:
-                plt.close()
-                plt.plot(self.yTilde[k][:, self.i[k], :])
-                sop = 11
-        if 0:
-            plt.close()
-            fig, axes = plt.subplots(2,1)
-            fig.set_size_inches(8.5, 3.5)
-            # axes[0].plot(self.yTilde[0][:, self.i[k], :])
-            axes[0].plot(self.yCentr[0][:, self.i[k], :])
-            axes[0].grid()
-            # axes[1].plot(self.yTilde[1][:, self.i[k], :])
-            axes[1].plot(self.yCentr[1][:, self.i[k], :])
-            axes[1].grid()
-            plt.tight_layout()	
-            plt.show()
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         # Update iteration index
         self.i[k] += 1
