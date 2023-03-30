@@ -143,7 +143,9 @@ class DANSEparameters(Hyperparameters):
         # - "seq": round-robin updating [1]
         # - "sim": simultaneous updating [2]
         # - "asy": asynchronous updating [2]
-        # - "topo-indep": updating for TI-DANSE [5]
+        # - "topo-indep_seq": round-robin updating for TI-DANSE [5]
+        # - "topo-indep_sim": simultaneous updating for TI-DANSE [5]
+        # - "topo-indep_asy": asynchronous updating for TI-DANSE [5]
     broadcastType: str = 'wholeChunk'    # type of broadcast
         # -- 'wholeChunk': chunks of compressed signals in time-domain,
         # -- 'fewSamples': T(z)-approximation of WOLA compression process.
@@ -309,7 +311,7 @@ def initialize_events(
     p : DANSEparameters object
         Parameters.
     nodeTypes : list[str]
-        List of node types (used iff `p.nodeUpdating == 'topo-indep'`).
+        List of node types (used iff `'topo-indep' in p.nodeUpdating`).
     leafToRootOrdering : list[int or list[int]]
         Leaves to root ordering of node indices. Nodes that live on the same
         tree depth are groupped in lists.
@@ -344,7 +346,7 @@ def initialize_events(
         fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)
 
     # Check consistency
-    if p.nodeUpdating == 'sim' and any(fs != fs[p.referenceSensor]):
+    if 'sim' in p.nodeUpdating and any(fs != fs[p.referenceSensor]):
         raise ValueError('Simultaneous node-updating is impossible\
             in the presence of SROs.')
 
@@ -356,7 +358,7 @@ def initialize_events(
     # Expected number of broadcasts per node over total signal length
     numBcInTtot = np.floor(Ttot * fs / p.broadcastLength)
 
-    if p.nodeUpdating == 'topo-indep':   # ad-hoc (non fully connected) WASN
+    if 'topo-indep' in p.nodeUpdating:   # ad-hoc (non fully connected) WASN
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             # Expected DANSE update instants
@@ -378,10 +380,7 @@ def initialize_events(
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
             reInstants = copy.deepcopy(fuInstants)  # same relay instants
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            # upInstants = copy.deepcopy(fuInstants)  # same udpate instants
-            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
         else:
-            stop = 1
             raise ValueError('Not yet implemented')
 
     else:   # fully connected WASN
@@ -441,6 +440,7 @@ def build_events_matrix(
     visualizeUps=False,
     fuse_t=[],
     re_t=[],
+    tr_t=[],
     leafToRootOrdering=[]
     ):
     """
@@ -453,14 +453,17 @@ def build_events_matrix(
     bc_t : [nNodes x 1] list of np.ndarrays (float)
         Broadcast instants per node [s].
     nodeUpdating : str
-        Type of node updating ('seq', 'asy', 'sim', or 'topo-indep').
+        Type of node updating ('seq', 'asy', 'sim', 'topo-indep_seq',
+        'topo-indep_asy', 'topo-indep_sim').
     visualizeUps : bool
         If True, plot a visualization of the expected update instants for 
         each node in the WASN.
     fuse_t : [nNodes x 1] list of np.ndarrays (float)
-        Fusion instants per node [s] (used iff `nodeUpdating == 'topo-indep'`).
+        Fusion instants per node [s] (used iff `'topo-indep' in nodeUpdating`).
     re_t : [nNodes x 1] list of np.ndarrays (float)
-        Relay instants per node [s] (used iff `nodeUpdating == 'topo-indep'`).
+        Relay instants per node [s] (used iff `'topo-indep' in nodeUpdating`).
+    tr_t : [nNodes x 1] list of np.ndarrays (float)
+        Relay instants per node [s] (used iff `'topo-indep' in nodeUpdating`).
     leafToRootOrdering : list[int or list[int]]
         Leaves to root ordering of node indices. Nodes that live on the same
         tree depth are groupped in lists.
@@ -504,24 +507,25 @@ def build_events_matrix(
         return eventInstants
     
     # Events dictionary (in chronological order of events)
-    # -- 'fu_ds': fuse local signals (only if `nodeUpdating == 'topo-indep'`)
+    # -- 'fu_ds': fuse local signals (only if `'topo-indep' in nodeUpdating`).
     # -- 'bc_ds': 
-    #    -- if `nodeUpdating != 'topo-indep'`: 
+    #    -- if `'topo-indep' not in nodeUpdating`: 
     #    Fuse and broadcast local data to neighbors.
-    #    -- elif `nodeUpdating == 'topo-indep'`: 
+    #    -- elif `'topo-indep' in nodeUpdating`: 
     #    Compute partial in-network sum and broadcast downstream (towards root).
     # -- 'up_us': perform DANSE filter update.
-    # >> General code: `ds` means "downstream", `us` means "upstream".
+    # >> General code: `ds` means "downstream" (from leaves towards root),
+    #       `us` means "upstream" (from root towards leaves).
     #       The `ds` events should occur through the whole tree before the
     #       `us` events can occur.
     # >> Coding format: '<ref string>': [priority level, up/downstream]
-    #
     eventsCodesDict = dict([
         ('fu', [0, 'ds']),  # 1) fuse local signals;
         ('bc', [1, 'ds']),  # 2) compute partial in-network sum and broadcast;
         ('re', [2, 'us']),  # 3) relay in-network sum from root upstream;
         ('up', [3, 'us']),  # 4) update node-specific filter estimates.
     ])
+
     # Make sure the event codes dictionary is correctly ordered
     if not [eventsCodesDict[list(eventsCodesDict.keys())[ii]] <\
         eventsCodesDict[list(eventsCodesDict.keys())[ii + 1]]\
@@ -590,7 +594,7 @@ def build_events_matrix(
             evTypes=evTypesConcerned,
             nodes=nodesConcerned,
             eventsCodesDict=eventsCodesDict,
-            tidanseFlag=nodeUpdating == 'topo-indep',
+            tidanseFlag='topo-indep' in nodeUpdating,
             leafToRootOrder=leafToRootOrdering
         )
         nodesConcerned = nodesConcerned[indices]

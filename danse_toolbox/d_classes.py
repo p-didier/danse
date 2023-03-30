@@ -32,10 +32,10 @@ class TestParameters:
             any(self.wasnParams.SROperNode != 0):
             raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
         if not self.is_fully_connected_wasn() and\
-            self.danseParams.nodeUpdating != 'topo-indep':
+            'topo-indep' not in self.danseParams.nodeUpdating:
             # Switch to topology-independent node-update system
-            print(f'/!\ The WASN is not fully connected -- switching `danseParams.nodeUpdating` from "{self.danseParams.nodeUpdating}" to "topo-indep".')
-            self.danseParams.nodeUpdating = 'topo-indep'
+            print(f'/!\ The WASN is not fully connected -- switching `danseParams.nodeUpdating` from "{self.danseParams.nodeUpdating}" to "topo-indep_{self.danseParams.nodeUpdating}".')
+            self.danseParams.nodeUpdating = f'topo-indep_{self.danseParams.nodeUpdating}'
 
     def save(self, exportType='pkl'):
         """Saves dataclass to Pickle archive."""
@@ -867,7 +867,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
         else:
             # Simultaneous or asynchronous node-updating
-            if self.nodeUpdating in ['sim', 'asy', 'topo-indep']:
+            if any(x not in self.nodeUpdating for x in ('sim', 'asy')):
                 # Relaxed external filter update
                 self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
                     (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
@@ -881,7 +881,7 @@ class DANSEvariables(base.DANSEparameters):
                     if self.printout_externalFilterUpdate:    # inform user
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
-            elif self.nodeUpdating == 'seq':
+            elif 'seq' in self.nodeUpdating:
                 self.wTildeExt[k] =\
                     self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
                     
@@ -2117,7 +2117,7 @@ class TIDANSEvariables(DANSEvariables):
             self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
         else:
             # Simultaneous or asynchronous node-updating
-            if self.nodeUpdating in ['sim', 'asy', 'topo-indep']:
+            if any(x not in self.nodeUpdating for x in ('sim', 'asy')):
                 # Relaxed external filter update
                 self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
                     (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
@@ -2131,5 +2131,5 @@ class TIDANSEvariables(DANSEvariables):
                     if self.printout_externalFilterUpdate:    # inform user
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
-            elif self.nodeUpdating == 'seq':
+            elif 'seq' in self.nodeUpdating:
                 self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
