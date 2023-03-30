@@ -61,28 +61,34 @@ def danse(
     t0 = time.perf_counter()    # timing
 
     # Loop over event instants
-    for idx_t in range(len(eventInstants)):
+    for idxInstant in range(len(eventInstants)):
+
+        # Process events at current instant
+        events = eventInstants[idxInstant] 
 
         # Parse event matrix and inform user (if asked)
         base.events_parser(
-            eventInstants[idx_t],
+            events,
             dv.startUpdates,
             dv.printout_eventsParser,
             dv.printout_eventsParserNoBC
         )
 
-        # Process events at current instant
-        events = eventInstants[idx_t] 
-        for idx_e in range(events.nEvents):
-            k = events.nodes[idx_e]  # node index
+        for idxEventCurrInstant in range(events.nEvents):
+            k = events.nodes[idxEventCurrInstant]  # node index
             # Broadcast event
-            if events.type[idx_e] == 'bc':
+            if events.type[idxEventCurrInstant] == 'bc':
                 dv.broadcast(events.t, fs[k], k)
             # Filter updates and desired signal estimates event
-            elif events.type[idx_e] == 'up':
-                dv.update_and_estimate(events.t, fs[k], k)
+            elif events.type[idxEventCurrInstant] == 'up':
+                dv.update_and_estimate(
+                    events.t,
+                    fs[k],
+                    k,
+                    events.bypass[idxEventCurrInstant]  # inform about bypass
+                )
             else:
-                raise ValueError(f'Unknown event: "{events.type[idx_e]}".')
+                raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')
 
     # Profiling
     if not is_interactive():

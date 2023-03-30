@@ -15,7 +15,7 @@ SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 SEED = 12347
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230330_tests/danse/test4',
+    exportFolder = f'{Path(__file__).parent}/out/20230330_tests/danse/seq_up/test2',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -82,8 +82,8 @@ p = TestParameters(
     danseParams=DANSEparameters(
         DFTsize=1024,
         WOLAovlp=.5,  # [*100 -> %]
-        # nodeUpdating='seq',
-        nodeUpdating='asy',
+        nodeUpdating='seq',
+        # nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
         #

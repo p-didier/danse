@@ -556,7 +556,7 @@ class DANSEvariables(base.DANSEparameters):
                 currL
             )  # - noise-only for SNR computation
         
-    def update_and_estimate(self, tCurr, fs, k):
+    def update_and_estimate(self, tCurr, fs, k, bypassUpdateEventMat=False):
         """
         Update filter coefficient at current node
         and estimate corresponding desired signal frame.
@@ -611,7 +611,7 @@ class DANSEvariables(base.DANSEparameters):
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k)
 
-        if not skipUpdate:
+        if not skipUpdate and not bypassUpdateEventMat:
             # If covariance matrices estimates are full-rank, update filters
             self.perform_update(k)
             # ^^^ depends on outcome of `check_covariance_matrices()`.
@@ -621,6 +621,12 @@ class DANSEvariables(base.DANSEparameters):
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
                 self.wTilde[k][:, self.i[k], :]
+            if self.computeCentralised:
+                self.wCentr[k][:, self.i[k] + 1, :] =\
+                    self.wCentr[k][:, self.i[k], :]
+            if self.computeLocal:
+                self.wLocal[k][:, self.i[k] + 1, :] =\
+                    self.wLocal[k][:, self.i[k], :]
             if skipUpdate:
                 print(f'Node {k+1}: {self.i[k]+1}^th update skipped.')
         if self.bypassUpdates:

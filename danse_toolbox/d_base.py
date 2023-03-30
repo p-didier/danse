@@ -1121,7 +1121,8 @@ def events_parser(
                     if idxEvent > 0:
                         broadcastsTxt += ','
                     broadcastsTxt += f'{k + 1}'
-                elif events.type[idxEvent] == 'up':
+                elif events.type[idxEvent] == 'up' and\
+                    not events.bypass[idxEvent]:
                     # Only print if the node actually has started updating
                     # (i.e. there has been sufficiently many autocorrelation
                     # matrices updates since the start of recording).
