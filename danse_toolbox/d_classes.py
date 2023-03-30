@@ -395,6 +395,9 @@ class DANSEvariables(base.DANSEparameters):
         )
 
         return self
+    
+    def update_up_downstream_neighbors(self):
+        pass
 
     def broadcast(self, tCurr, fs, k):
         """

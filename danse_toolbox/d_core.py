@@ -49,7 +49,7 @@ def danse(
     dv.init_from_wasn(wasnObj.wasn)
 
     # Compute events
-    eventInstants, fs = base.initialize_events(dv.timeInstants, p)
+    eventInstants, fs, _ = base.initialize_events(dv.timeInstants, p)
 
     # Profiling
     def is_interactive():
@@ -207,6 +207,7 @@ def tidanse(
             elif evType == 'up':
                 # Update DANSE filter coefficients and estimate target
                 tidv.ti_update_and_estimate(k, currEvents.t, fs[k], bpUp)
+
             else:
                 raise ValueError(f'Unknown event type: "{evType}".')
     

@@ -368,9 +368,11 @@ def initialize_events(
         ), nNodes)
         # Get leaf-to-root orderings for all possible root indices
         leafToRootOrderings = []
-        for k in orderedSeqUpNodes:
+        for ii, k in enumerate(orderedSeqUpNodes):
             # Update WASN with new root
             updatingWasnObj = prune_wasn_to_tree(wasnObj, forcedRoot=k)
+            if ii == 0:
+                wasnTreeObj = copy.deepcopy(updatingWasnObj)  # for export
             leafToRootOrderings.append(updatingWasnObj.leafToRootOrdering)
         # Cycling through a list (https://stackoverflow.com/a/8940984)
         orderingsCycled = cycle(leafToRootOrderings)
@@ -417,6 +419,7 @@ def initialize_events(
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
         trInstants = np.array([])  # no tree-formation instants
         leafToRootOrderings = []
+        wasnTreeObj = None
         # Expected DANSE update instants
         upInstants = [
             np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
@@ -462,7 +465,7 @@ def initialize_events(
         leafToRootOrderings=leafToRootOrderings
     )
 
-    return outputEvents, fs
+    return outputEvents, fs, wasnTreeObj
 
 
 def get_sequential_update_instants(
@@ -586,6 +589,7 @@ def build_events_matrix(
     #       `us` events can occur.
     # >> Coding format: '<ref string>': [priority level, up/downstream]
     eventsCodesDict = dict([
+        ('tr', [-1, 'ds']),  # 0) form tree topology;
         ('fu', [0, 'ds']),  # 1) fuse local signals;
         ('bc', [1, 'ds']),  # 2) compute partial in-network sum and broadcast;
         ('re', [2, 'us']),  # 3) relay in-network sum from root upstream;
@@ -651,7 +655,7 @@ def build_events_matrix(
             if currInstant in tr_t and currInstant != lastTreeFormationInstant:
                 treeFormationCounter += 1
                 lastTreeFormationInstant = currInstant
-            leafToNodeOrder = leafToRootOrderings[lastTreeFormationInstant]
+            leafToNodeOrder = leafToRootOrderings[treeFormationCounter]
         else:
             leafToNodeOrder = []  # no need for an order in a fully conn. WASN
 

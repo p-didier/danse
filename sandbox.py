@@ -15,7 +15,7 @@ SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 SEED = 12347
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230330_tests/danse/seq_up/test2_compasy',
+    exportFolder = f'{Path(__file__).parent}/out/20230330_tests/tidanse/test1_asy',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -26,10 +26,16 @@ p = TestParameters(
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
+            # userDefinedTopo=np.array([
+            #     [1, 1, 0],  # Node 1
+            #     [1, 1, 1],  # Node 2
+            #     [0, 1, 1],  # Node 3
+            # ]),
             userDefinedTopo=np.array([
-                [1, 1, 0],  # Node 1
-                [1, 1, 1],  # Node 2
-                [0, 1, 1],  # Node 3
+                [1, 1, 0, 0],  # Node 1
+                [1, 1, 1, 0],  # Node 2
+                [0, 1, 1, 1],  # Node 3
+                [0, 0, 1, 1],  # Node 4
             ]),
             # userDefinedTopo=np.ones((3, 3)),
             # userDefinedTopo=np.ones((4, 4)),  # 20.02.2023: replicating ICASSP paper's WASN structure
@@ -46,11 +52,12 @@ p = TestParameters(
         # interSensorDist=0.2,
         interSensorDist=0.1,
         # nNodes=2,
-        nNodes=3,
-        # nNodes=4,
+        # nNodes=3,
+        nNodes=4,
         # nSensorPerNode=[1, 1],
         # nSensorPerNode=[1, 1, 1],
-        nSensorPerNode=[1, 2, 3],
+        # nSensorPerNode=[1, 2, 3],
+        nSensorPerNode=[1, 2, 3, 2],
         # nSensorPerNode=[1, 3, 2],
         # nSensorPerNode=[1, 3, 2, 5],
         # nSensorPerNode=[1, 1, 1, 1],
@@ -82,8 +89,8 @@ p = TestParameters(
     danseParams=DANSEparameters(
         DFTsize=1024,
         WOLAovlp=.5,  # [*100 -> %]
-        nodeUpdating='seq',
-        # nodeUpdating='asy',
+        # nodeUpdating='seq',
+        nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
         #
