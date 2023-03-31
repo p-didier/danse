@@ -161,11 +161,11 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
 
-    def plot_perf(self, wasn, exportFolder=None):
+    def plot_perf(self, wasn, exportFolder=None, onlySNRandESTOIinPlots=False):
         """Plots DANSE performance."""
         self.check_init()  # check if object is correctly initialised
         self.metrics = compute_metrics(self, wasn)
-        figStatic, figDynamic = plot_metrics(self)
+        figStatic, figDynamic = plot_metrics(self, onlySNRandESTOIinPlots)
         if exportFolder is not None:
             figStatic.savefig(f'{exportFolder}/metrics.png')
             figStatic.savefig(f'{exportFolder}/metrics.pdf')
@@ -518,7 +518,7 @@ def compute_metrics(
 
     return metrics
 
-def plot_metrics(out: DANSEoutputs):
+def plot_metrics(out: DANSEoutputs, onlySNRandESTOIinPlots=False):
     """
     Visualize evaluation metrics.
 
@@ -526,28 +526,38 @@ def plot_metrics(out: DANSEoutputs):
     ----------
     out : `DANSEoutputs` object
         DANSE outputs.
+    onlySNRandESTOIinPlots : bool
+        If True, only include the SNR and the eSTOI.
     """
 
     # Useful variables
     barWidth = 1
+
+    if onlySNRandESTOIinPlots:
+        nCols = 2
+        fig1 = plt.figure(figsize=(8,3))
+    else:
+        nCols = 4
+        fig1 = plt.figure(figsize=(12,3))
     
-    fig1 = plt.figure(figsize=(12,3))
-    ax = fig1.add_subplot(1, 4, 1)   # Unweighted SNR
+    ax = fig1.add_subplot(1, nCols, 1)   # Unweighted SNR
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.snr)
     ax.set(title='SNR', ylabel='[dB]')
     #
-    ax = fig1.add_subplot(1, 4, 2)   # fwSNRseg
-    metrics_subplot(out.nNodes, ax, barWidth, out.metrics.fwSNRseg)
-    ax.set(title='fwSNRseg', ylabel='[dB]')
-    #
-    ax = fig1.add_subplot(1, 4, 3)   # STOI
+    ax = fig1.add_subplot(1, nCols, 2)   # STOI
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.stoi)
     ax.set(title='eSTOI')
     ax.set_ylim([0, 1])
     #
-    ax = fig1.add_subplot(1, 4, 4)   # PESQ
-    metrics_subplot(out.nNodes, ax, barWidth, out.metrics.pesq)
-    ax.set(title='PESQ')
+    if not onlySNRandESTOIinPlots:
+        ax = fig1.add_subplot(1, nCols, 3)   # fwSNRseg
+        metrics_subplot(out.nNodes, ax, barWidth, out.metrics.fwSNRseg)
+        ax.set(title='fwSNRseg', ylabel='[dB]')
+        #
+        ax = fig1.add_subplot(1, nCols, 4)   # PESQ
+        metrics_subplot(out.nNodes, ax, barWidth, out.metrics.pesq)
+        ax.set(title='PESQ')
+    #
     ax.legend(bbox_to_anchor=(1, 0), loc="lower left")
 
     # fig1.suptitle("Speech enhancement metrics")

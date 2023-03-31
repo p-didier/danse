@@ -16,7 +16,7 @@ SEED = 12347
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230331_tests/tidanse_sros/test1',
+    exportFolder = f'{Path(__file__).parent}/out/20230331_forUOLcollab_update3/seq_up_1',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -50,8 +50,8 @@ p = TestParameters(
         fs=16000,
         t60=0.0,
         # t60=0.2,
-        # interSensorDist=0.2,
-        interSensorDist=0.1,
+        interSensorDist=0.2,
+        # interSensorDist=0.1,
         # nNodes=2,
         nNodes=3,
         # nNodes=4,
@@ -83,15 +83,15 @@ p = TestParameters(
         # SROperNode=np.array([0, 50, -50, 100]),
         # SROperNode=np.array([0, 20, -20, 40]),
         # SROperNode=np.array([0, 0, 0, 0]),
-        SROperNode=np.array([0, 100, 200]),
+        # SROperNode=np.array([0, 100, 200]),
         # SROperNode=np.array([0, 0]),
-        # SROperNode=np.array([0]),
+        SROperNode=np.array([0]),
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,
         WOLAovlp=.5,  # [*100 -> %]
-        # nodeUpdating='seq',
-        nodeUpdating='asy',
+        nodeUpdating='seq',
+        # nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
         #
@@ -122,7 +122,8 @@ p = TestParameters(
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         printoutsAndPlotting=PrintoutsAndPlotting(
-            showWASNs=False if BYPASS_DYNAMIC_PLOTS else True
+            showWASNs=False if BYPASS_DYNAMIC_PLOTS else True,
+            onlySNRandESTOIinPlots=True
         )
     )
 )
@@ -249,7 +250,11 @@ def postprocess(
         fig.savefig(f'{p.exportFolder}/sroEvolution.pdf')
 
         # Plot performance metrics (+ export)
-        out.plot_perf(wasnObj.wasn, p.exportFolder)
+        out.plot_perf(
+            wasnObj.wasn,
+            p.exportFolder,
+            p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots
+        )
 
         # Plot signals at specific nodes (+ export)
         out.plot_sigs(wasnObj.wasn, p.exportFolder)

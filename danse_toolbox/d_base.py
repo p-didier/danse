@@ -112,6 +112,8 @@ class PrintoutsAndPlotting:
     showWASNs : bool = False    # if True, shows a 3-D plot of the WASN every
         # time the topology changes (e.g., when a new tree is formed, or a new
         # root is set, in TI-DANSE).
+    onlySNRandESTOIinPlots : bool = False   # if True, only include the SNR and
+        # the eSTOI in the metrics plot.
 
 @dataclass
 class DANSEparameters(Hyperparameters):
