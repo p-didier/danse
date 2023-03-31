@@ -9,13 +9,13 @@ import danse_toolbox.d_post as pp
 import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_utils import wipe_folder
-from danse_toolbox.d_base import DANSEparameters, CohDriftParameters
+from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
 SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
 SEED = 12347
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230330_tests/tidanse/test1_asy',
+    exportFolder = f'{Path(__file__).parent}/out/20230331_tests/tidanse/test1_seq',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -89,8 +89,8 @@ p = TestParameters(
     danseParams=DANSEparameters(
         DFTsize=1024,
         WOLAovlp=.5,  # [*100 -> %]
-        # nodeUpdating='seq',
-        nodeUpdating='asy',
+        nodeUpdating='seq',
+        # nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
         #
@@ -120,6 +120,9 @@ p = TestParameters(
         t_expAvg50p=30,
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        printoutsAndPlotting=PrintoutsAndPlotting(
+            showWASNs=True
+        )
     )
 )
 p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters

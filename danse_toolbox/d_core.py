@@ -155,16 +155,15 @@ def tidanse(
     #     plotit=False
     # )
 
+    # Initialize TI-DANSE variables
+    tidv = TIDANSEvariables(p, wasnObj.wasn)
 
     # Compute events
-    eventInstants, fs, wasnTreeObj = base.initialize_events(
-        timeInstants=np.array([node.timeStamps for node in wasnObj.wasn]).T,
+    eventInstants, fs, wasnObjList = base.initialize_events(
+        timeInstants=tidv.timeInstants,
         p=p,
         wasnObj=wasnObj
     )
-
-    # Initialize TI-DANSE variables
-    tidv = TIDANSEvariables(p, wasnTreeObj.wasn)
 
     # Profiling
     def is_interactive():  # if file is run from notebook
@@ -174,6 +173,12 @@ def tidanse(
         profiler = Profiler()
         profiler.start()
     t0 = time.perf_counter()    # timing
+
+    # Plotting
+    fig = plt.figure()
+    fig.set_size_inches(4.5, 4.5)
+    ax = fig.add_subplot(projection='3d')
+    plt.show(block=False)
 
     # Loop over event instants
     for currEvents in eventInstants:
@@ -207,7 +212,18 @@ def tidanse(
             elif evType == 'up':
                 # Update DANSE filter coefficients and estimate target
                 tidv.ti_update_and_estimate(k, currEvents.t, fs[k], bpUp)
-
+            elif evType == 'tr':
+                # New tree formation: update up-/downstream neighbors lists
+                tidv.update_up_downstream_neighbors(
+                    wasnObjList[tidv.treeFormationCounter],
+                    plotit=True,
+                    ax=ax,
+                    scatterSize=np.amax(fig.get_size_inches()) * 50
+                )
+                ax.set_title(f'Tree formation #{tidv.treeFormationCounter}')
+                fig.canvas.draw()
+                fig.canvas.flush_events()
+                time.sleep(0.05)
             else:
                 raise ValueError(f'Unknown event type: "{evType}".')
     
@@ -228,11 +244,11 @@ def tidanse(
     out.import_params(p)
     out.from_variables(tidv)
     # Update WASN object
-    for k in range(len(wasnTreeObj.wasn)):
-        wasnTreeObj.wasn[k].enhancedData = tidv.d[:, k]
+    for k in range(len(wasnObj.wasn)):
+        wasnObj.wasn[k].enhancedData = tidv.d[:, k]
         if tidv.computeCentralised:
-            wasnTreeObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
+            wasnObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
         if tidv.computeLocal:
-            wasnTreeObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
+            wasnObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
 
-    return out, wasnTreeObj
+    return out, wasnObj

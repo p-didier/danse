@@ -263,8 +263,18 @@ class WASN:
         self.leafToRootOrdering.reverse()  # reverse to go from leaves to root
             
 
-    def plot_me(self, ax=None):
-        """Plot function"""
+    def plot_me(self, ax=None, scatterSize=300):
+        """
+        Plots the WASN in 3D.
+
+        Parameters
+        ----------
+        ax : matplotlib.pyplot.Axes3D object
+            3D axes where to plot.
+        scatterSize : int /or/ float
+            Size of the markers for scatter plots.
+        """
+
         # Convert to NetworkX `Graph` object
         Gnx = nx.from_numpy_array(self.adjacencyMatrix)
         nodesPos = dict(
@@ -283,17 +293,30 @@ class WASN:
             fig = plt.figure()
             fig.set_size_inches(8.5, 3.5)
             ax = fig.add_subplot(projection='3d')
-        ax.scatter(*node_xyz.T, s=100, ec="w")
+        ax.scatter(*node_xyz.T, s=scatterSize, ec="w")
         # Add node numbers
         for ii in range(len(nodesPos)):
+            # Reference for node type (single letter)
+            nodeTypeRef = self.wasn[ii].nodeType[0].upper()
             ax.text(
                 node_xyz[ii][0],
                 node_xyz[ii][1],
                 node_xyz[ii][2],
-                f'$\\mathbf{{{ii+1}}}$ ({self.wasn[ii].nodeType[0].upper()}.)'
+                f'$\\mathbf{{{ii+1}}}$ ({nodeTypeRef}.)'
             )
+            if nodeTypeRef == 'R':
+                # Root node: highlight it
+                ax.scatter(
+                    node_xyz[ii][0],
+                    node_xyz[ii][1],
+                    node_xyz[ii][2],
+                    s=scatterSize * 1.5,
+                    c='r',
+                    alpha=0.5
+                )
 
-        # Plot the edges
+        # Plot the upstream edges
+        colorUpstream = 'black'
         for ii, vizedge in enumerate(edge_xyz):
             if (vizedge[0, :] != vizedge[1, :]).any():
                 if 'root' in [node.nodeType for node in self.wasn]:
@@ -302,10 +325,14 @@ class WASN:
                         self.wasn[edge_xyz_idx[ii][1]].upstreamNeighborsIdx:
                         arrowOrientation = "<|-"
                     draw_3d_arrow(
-                        ax, vizedge, arrowOrientation, color="tab:gray"
+                        ax, vizedge, arrowOrientation, color=colorUpstream
                     )  # draw arrows
                 else:
-                    ax.plot(*vizedge.T, color="tab:gray")
+                    ax.plot(*vizedge.T, color=colorUpstream)
+        
+        ax.set_xlabel('$x$ [m]')
+        ax.set_ylabel('$y$ [m]')
+        ax.set_zlabel('$z$ [m]')
 
 
 def draw_3d_arrow(ax, coords, arrowOrientation, color="tab:gray"):

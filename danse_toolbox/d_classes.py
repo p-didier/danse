@@ -1,7 +1,7 @@
 import copy
+import time
 import random
 import numpy as np
-from pathlib import Path
 import scipy.linalg as sla
 from siggen.classes import *
 from dataclasses import dataclass
@@ -49,6 +49,14 @@ class TestParameters:
         return self.wasnParams.topologyParams.topologyType == 'fully-connected'
 
 
+def check_if_fully_connected(wasn: list[Node]):
+    """
+    Returns True if the WASN is fully connected, False otherwise.
+    """
+    return np.array(
+        [len(node.neighborsIdx) == len(wasn) - 1 for node in wasn]
+    ).all()
+
 @dataclass
 class DANSEvariables(base.DANSEparameters):
     """
@@ -69,10 +77,7 @@ class DANSEvariables(base.DANSEparameters):
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
         # Check for TI-DANSE case
-        tidanseFlag = False
-        if len(wasn[0].upstreamNeighborsIdx) > 0 or\
-            len(wasn[0].downstreamNeighborsIdx) > 0:
-            tidanseFlag = True
+        tidanseFlag = ~check_if_fully_connected(wasn)
 
         avgProdResiduals = []   # average residuals product coming out of
                                 # filter-shift processing (SRO estimation).
@@ -395,9 +400,6 @@ class DANSEvariables(base.DANSEparameters):
         )
 
         return self
-    
-    def update_up_downstream_neighbors(self):
-        pass
 
     def broadcast(self, tCurr, fs, k):
         """
@@ -1718,6 +1720,30 @@ class TIDANSEvariables(DANSEvariables):
         self.etaMk = [np.array([]) for _ in range(self.nNodes)]
         self.etaMk_s = [np.array([]) for _ in range(self.nNodes)]
         self.etaMk_n = [np.array([]) for _ in range(self.nNodes)]
+        #
+        self.treeFormationCounter = 0  # counting the number of tree-formations
+
+    def update_up_downstream_neighbors(
+            self,
+            newWasnObj: WASN,
+            plotit: bool=False,
+            ax=None,
+            scatterSize=300
+        ):
+        """
+        Updates the neighbors lists based on the new WASN (after a new tree
+        formation -- i.e., for a new update in sequential node-updating
+        TI-DANSE).
+        """
+        self.upstreamNeighbors =\
+            [node.upstreamNeighborsIdx for node in newWasnObj.wasn]
+        self.downstreamNeighbors =\
+            [node.downstreamNeighborsIdx for node in newWasnObj.wasn]
+        self.treeFormationCounter += 1  # update counter too
+        if plotit:
+            ax.clear()
+            newWasnObj.plot_me(ax, scatterSize=scatterSize)
+
 
     def ti_fusion(self, k, tCurr, fs):
         """

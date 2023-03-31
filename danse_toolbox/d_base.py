@@ -108,6 +108,12 @@ class Hyperparameters:
     bypassUpdates: bool = False   # if True, do not update filters.
 
 @dataclass
+class PrintoutsAndPlotting:
+    showWASNs : bool = False    # if True, shows a 3-D plot of the WASN every
+        # time the topology changes (e.g., when a new tree is formed, or a new
+        # root is set, in TI-DANSE).
+
+@dataclass
 class DANSEparameters(Hyperparameters):
     """
     Parameters for the DANSE algorithm.
@@ -187,6 +193,8 @@ class DANSEparameters(Hyperparameters):
         # -- 'selectFirstSensor_andFixedValue' == [1, e, ..., e]^T,
         #   with e = `filterInitFixedValue`.
     filterInitFixedValue: float = 0.
+    # ---- Plotting
+    printoutsAndPlotting : PrintoutsAndPlotting = PrintoutsAndPlotting()
     # ---- Desired signal estimation
     desSigProcessingType: str = 'wola'  # processing scheme used to compute
         # the desired signal estimates: "wola": WOLA synthesis,
@@ -321,6 +329,11 @@ def initialize_events(
     -------
     outputEvents : [Ne x 1] list of DANSEeventInstant objects
         Event instants matrix.
+    fs : [Nn x 1] np.ndarray[float]
+        Sampling frequency at each node [Hz].
+    wasnObjList : list[WASN class instances]
+        List of the WASNs topologies that exist through the entire signal
+        duration.
     """
     
     # Make sure time stamps matrix is indeed a matrix, correctly oriented
@@ -368,14 +381,15 @@ def initialize_events(
         ), nNodes)
         # Get leaf-to-root orderings for all possible root indices
         leafToRootOrderings = []
+        possibleWASNs = []
         for ii, k in enumerate(orderedSeqUpNodes):
             # Update WASN with new root
             updatingWasnObj = prune_wasn_to_tree(wasnObj, forcedRoot=k)
-            if ii == 0:
-                wasnTreeObj = copy.deepcopy(updatingWasnObj)  # for export
             leafToRootOrderings.append(updatingWasnObj.leafToRootOrdering)
+            possibleWASNs.append(updatingWasnObj)
         # Cycling through a list (https://stackoverflow.com/a/8940984)
         orderingsCycled = cycle(leafToRootOrderings)
+        wasnObjListCycled = cycle(possibleWASNs)
         
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
@@ -400,16 +414,22 @@ def initialize_events(
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
             if 'seq' in p.nodeUpdating:
                 # form new tree at every DANSE update
-                trInstants = get_sequential_update_instants(
+                trInstants, upNodeIndices = get_sequential_update_instants(
                     upInstants=upInstants,
                     startNodeIdx=p.seqUpdateStartNodeIdx
                 )
             else:
                 # form tree at WASN initialization only
                 trInstants = np.array([0])
+                upNodeIndices = np.array([p.seqUpdateStartNodeIdx])
+            trInstantsArranged = [trInstants[upNodeIndices == k] for k in range(nNodes)]
             # Keep only the relevant leaf-to-root orderings
             leafToRootOrderings = list(
                 islice(orderingsCycled, None, len(trInstants))
+            )
+            # Keep only the relevant WASNs
+            wasnObjList = list(
+                islice(wasnObjListCycled, None, len(trInstants))
             )
         else:
             raise ValueError('Not yet implemented')
@@ -419,7 +439,6 @@ def initialize_events(
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
         trInstants = np.array([])  # no tree-formation instants
         leafToRootOrderings = []
-        wasnTreeObj = None
         # Expected DANSE update instants
         upInstants = [
             np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
@@ -461,11 +480,11 @@ def initialize_events(
         p.nodeUpdating,
         fuse_t=fuInstants,
         re_t=reInstants,
-        tr_t=trInstants,
+        tr_t=trInstantsArranged,
         leafToRootOrderings=leafToRootOrderings
     )
 
-    return outputEvents, fs, wasnTreeObj
+    return outputEvents, fs, wasnObjList
 
 
 def get_sequential_update_instants(
@@ -481,10 +500,13 @@ def get_sequential_update_instants(
     -------
     seqUpInstants : np.ndarrray[float]
         Sequential updates time instants. 
+    updatingNodeIndices : np.ndarrray[float]
+        Corresponding updating node indices. 
     """
     currInstant = 0
     updatingNodeIdx = startNodeIdx
     seqUpInstants = []
+    updatingNodeIndices = [startNodeIdx]
     while currInstant < np.amax(upInstants[updatingNodeIdx]):
         upInstantsUpdatingNode = upInstants[updatingNodeIdx]
         currSeqUpInstant = upInstantsUpdatingNode[
@@ -493,11 +515,15 @@ def get_sequential_update_instants(
         # Add to list
         seqUpInstants.append(currSeqUpInstant)
         currInstant = currSeqUpInstant
-        # Update updating node index
-        updatingNodeIdx = np.mod(updatingNodeIdx + 1, len(upInstants))
+        if currInstant < np.amax(upInstants[updatingNodeIdx]):
+            # Update updating node index
+            updatingNodeIdx = np.mod(updatingNodeIdx + 1, len(upInstants))
+            updatingNodeIndices.append(updatingNodeIdx)
+    # Convert to arrays
     seqUpInstants = np.array(seqUpInstants)
+    updatingNodeIndices = np.array(updatingNodeIndices)
 
-    return seqUpInstants
+    return seqUpInstants, updatingNodeIndices
 
 
 def build_events_matrix(
@@ -609,31 +635,34 @@ def build_events_matrix(
     reversedEventsCodingDict = dict(
         [(eventsCodesDict[a][0], a) for a in eventsCodesDict]
     )
-    fusionInstantsFlag = fuse_t != [] and len(fuse_t) == nNodes
+    tiFlag = fuse_t != [] and len(fuse_t) == nNodes  # TI-DANSE flag
 
     # Create event lists
     upInstants = _flatten_instants(nNodes, up_t, eventsCodesDict['up'][0])
     bcInstants = _flatten_instants(nNodes, bc_t, eventsCodesDict['bc'][0])
     # Total number of unique events
     numEventInstants = upInstants.shape[0] + bcInstants.shape[0]
-    if fusionInstantsFlag:
-        # Consider fusion and relay instants (TI-DANSE)
+    if tiFlag:
+        # Consider fusion, relay, and tree-formation instants (TI-DANSE)
         fuInstants = _flatten_instants(nNodes, fuse_t, eventsCodesDict['fu'][0])
         reInstants = _flatten_instants(nNodes, re_t, eventsCodesDict['re'][0])
-        numEventInstants += fuInstants.shape[0] + reInstants.shape[0]
+        trInstants = _flatten_instants(nNodes, tr_t, eventsCodesDict['tr'][0])
+        numEventInstants += fuInstants.shape[0] + reInstants.shape[0] +\
+            trInstants.shape[0]
     else:
-        fuInstants = np.zeros((0, 3))  # default: no fusion instants (DANSE)
-        reInstants = np.zeros((0, 3))  # default: no relay instants (DANSE)
+        fuInstants = np.zeros((0, 3))  # default: no fusion instants
+        reInstants = np.zeros((0, 3))  # default: no relay instants
+        trInstants = np.zeros((0, 3))  # default: no tree-formation instants
     
     # Combine
     eventInstants = np.concatenate(
-        (upInstants, bcInstants, fuInstants, reInstants),
+        (trInstants, upInstants, bcInstants, fuInstants, reInstants),
         axis=0
     )
-
     # Sort
     idxSort = np.argsort(eventInstants[:, 0], axis=0)
     eventInstants = eventInstants[idxSort, :]
+
     # Group
     outputInstants: list[DANSEeventInstant] = []
     eventIdx = 0    # init while-loop
@@ -651,10 +680,12 @@ def build_events_matrix(
         evTypesConcerned.append(int(eventInstants[eventIdx, 2]))
 
         # Check if a new tree topology must be formed
-        if 'topo-indep' in nodeUpdating:
-            if currInstant in tr_t and currInstant != lastTreeFormationInstant:
+        if tiFlag:
+            if currInstant in trInstants and\
+                currInstant != lastTreeFormationInstant:
                 treeFormationCounter += 1
                 lastTreeFormationInstant = currInstant
+            # Set leaves-to-root ordering for current event groupping
             leafToNodeOrder = leafToRootOrderings[treeFormationCounter]
         else:
             leafToNodeOrder = []  # no need for an order in a fully conn. WASN
@@ -676,7 +707,7 @@ def build_events_matrix(
             evTypes=evTypesConcerned,
             nodes=nodesConcerned,
             eventsCodesDict=eventsCodesDict,
-            tidanseFlag='topo-indep' in nodeUpdating,
+            tidanseFlag=tiFlag,
             leafToRootOrder=leafToNodeOrder
         )
         nodesConcerned = nodesConcerned[indices]
@@ -1252,6 +1283,7 @@ def events_parser_ti_danse(
         ('bc', 'PiNS and downstream broadcast of z_k'),
         ('re', 'Upstream relay of η'),
         ('up', 'Filter update w_k[i+1]'),
+        ('tr', 'Tree topology formation'),
     ])
 
     print(f'TI-DANSE: ---- t = {events.t} s ----')
@@ -1283,7 +1315,12 @@ def events_parser_ti_danse(
         nodesStr = ''
         for k in currNodes:
             nodesStr += f'{k} -> '
-        fullTxt = f'TI-DANSE -- Node(s) {nodesStr[:-4]}: {strCodes[prevType]}'
+        if prevType == 'tr':  # different text for tree-formation
+            fullTxt =\
+                f'TI-DANSE -- {strCodes[prevType]} (root: Node {nodesStr[:-4]})'
+        else:
+            fullTxt =\
+                f'TI-DANSE -- Node(s) {nodesStr[:-4]}: {strCodes[prevType]}'
         if is_interactive():  # if we are running from a notebook
             # Print on the same line
             print(f"\r{fullTxt}", end="")
