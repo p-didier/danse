@@ -644,6 +644,10 @@ def metrics_subplot(numNodes, ax, barWidth, data):
 
     delta = barWidth / (2 * widthFact)
 
+    # Add grid
+    ax.grid()
+    ax.set_axisbelow(True)
+    
     for idxNode in range(numNodes):
         if idxNode == 0:    # only add legend labels to first node
             ax.bar(
