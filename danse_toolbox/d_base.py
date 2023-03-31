@@ -405,7 +405,7 @@ def initialize_events(
             ]
             # ^ note that we only start fusing when we have enough samples.
 
-            bcInstants = copy.deepcopy(fuInstants)  # same broadcast instants
+            bcInstants = copy.deepcopy(fuInstants)
             # ^ we differentiate fusion instants from broadcast instants to 
             # ensure fusion occurs in all nodes before broadcasting (necessary
             # to compute partial in-network sums).

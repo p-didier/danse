@@ -509,7 +509,11 @@ def compute_metrics(
 
     # Group measures into EnhancementMeasures object
     metrics = EnhancementMeasures(
-        fwSNRseg=fwSNRseg, stoi=stoi, pesq=pesq, snr=snr, startIdx=startIdx
+        fwSNRseg=fwSNRseg,
+        stoi=stoi,
+        pesq=pesq,
+        snr=snr,
+        startIdx=startIdx
     )
 
     return metrics
@@ -632,7 +636,11 @@ def metrics_subplot(numNodes, ax, barWidth, data):
     if data['Node1'].afterLocal != 0.:
         baseCount += 1
     widthFact = baseCount + 1
-    colShifts = np.arange(start=1-baseCount, stop=baseCount, step=2)
+    colShifts = np.arange(
+        start=1 - baseCount,
+        stop=baseCount,
+        step=2
+    )
 
     delta = barWidth / (2 * widthFact)
 
@@ -644,7 +652,7 @@ def metrics_subplot(numNodes, ax, barWidth, data):
                 width=barWidth / widthFact,
                 color='C0',
                 edgecolor='k',
-                label='Before'
+                label='Raw signal'
             )
             ax.bar(
                 idxNode + colShifts[1] * delta,
@@ -652,7 +660,7 @@ def metrics_subplot(numNodes, ax, barWidth, data):
                 width=barWidth / widthFact,
                 color='C1',
                 edgecolor='k',
-                label='After'
+                label='DANSE est.'
             )
             if data['Node1'].afterCentr != 0.:
                 ax.bar(
@@ -661,7 +669,7 @@ def metrics_subplot(numNodes, ax, barWidth, data):
                     width=barWidth / widthFact,
                     color='C2',
                     edgecolor='k',
-                    label='After (centralised)'
+                    label='Centr. est.'
                 )
             if data['Node1'].afterLocal != 0.:
                 ax.bar(
@@ -670,7 +678,7 @@ def metrics_subplot(numNodes, ax, barWidth, data):
                     width=barWidth / widthFact,
                     color='C3',
                     edgecolor='k',
-                    label='After (local)'
+                    label='Local est.'
                 )
         else:
             ax.bar(
@@ -704,9 +712,27 @@ def metrics_subplot(numNodes, ax, barWidth, data):
                     edgecolor='k',
                 )
 
+            # Consider case where the metrics was not computed (e.g., PESQ with
+            # SRO-affected sampling frequency).
+            if data[f'Node{idxNode + 1}'].after == 0 and\
+                data[f'Node{idxNode + 1}'].before == 0 and\
+                data[f'Node{idxNode + 1}'].afterCentr == 0 and\
+                data[f'Node{idxNode + 1}'].afterLocal == 0:
+                ax.text(
+                    idxNode,
+                    0.05,
+                    s='Not computed',  # write "Not computed" on plot
+                    horizontalalignment='center',
+                    rotation='vertical'
+                )
+            
+
         if data[f'Node{idxNode + 1}'].after < 0 or\
-            data[f'Node{idxNode + 1}'].before < 0:
+            data[f'Node{idxNode + 1}'].before < 0 or\
+            data[f'Node{idxNode + 1}'].afterCentr < 0 or\
+            data[f'Node{idxNode + 1}'].afterLocal < 0:
             flagZeroBar = True
+    
     plt.xticks(
         np.arange(numNodes),
         [f'N{ii + 1}' for ii in range(numNodes)],

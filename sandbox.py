@@ -16,7 +16,7 @@ SEED = 12347
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230331_tests/tidanse/test2_asy',
+    exportFolder = f'{Path(__file__).parent}/out/20230331_tests/tidanse_sros/test1',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -27,17 +27,17 @@ p = TestParameters(
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
-            # userDefinedTopo=np.array([
-            #     [1, 1, 0],  # Node 1
-            #     [1, 1, 1],  # Node 2
-            #     [0, 1, 1],  # Node 3
-            # ]),
             userDefinedTopo=np.array([
-                [1, 1, 0, 0],  # Node 1
-                [1, 1, 1, 0],  # Node 2
-                [0, 1, 1, 1],  # Node 3
-                [0, 0, 1, 1],  # Node 4
+                [1, 1, 0],  # Node 1
+                [1, 1, 1],  # Node 2
+                [0, 1, 1],  # Node 3
             ]),
+            # userDefinedTopo=np.array([
+            #     [1, 1, 0, 0],  # Node 1
+            #     [1, 1, 1, 0],  # Node 2
+            #     [0, 1, 1, 1],  # Node 3
+            #     [0, 0, 1, 1],  # Node 4
+            # ]),
             # userDefinedTopo=np.ones((3, 3)),
             # userDefinedTopo=np.ones((4, 4)),  # 20.02.2023: replicating ICASSP paper's WASN structure
             # userDefinedTopo=np.array([
@@ -53,12 +53,12 @@ p = TestParameters(
         # interSensorDist=0.2,
         interSensorDist=0.1,
         # nNodes=2,
-        # nNodes=3,
-        nNodes=4,
+        nNodes=3,
+        # nNodes=4,
         # nSensorPerNode=[1, 1],
-        # nSensorPerNode=[1, 1, 1],
+        nSensorPerNode=[1, 1, 1],
         # nSensorPerNode=[1, 2, 3],
-        nSensorPerNode=[1, 2, 3, 2],
+        # nSensorPerNode=[1, 2, 3, 2],
         # nSensorPerNode=[1, 3, 2],
         # nSensorPerNode=[1, 3, 2, 5],
         # nSensorPerNode=[1, 1, 1, 1],
@@ -83,9 +83,9 @@ p = TestParameters(
         # SROperNode=np.array([0, 50, -50, 100]),
         # SROperNode=np.array([0, 20, -20, 40]),
         # SROperNode=np.array([0, 0, 0, 0]),
-        # SROperNode=np.array([0, 100, 200]),
+        SROperNode=np.array([0, 100, 200]),
         # SROperNode=np.array([0, 0]),
-        SROperNode=np.array([0]),
+        # SROperNode=np.array([0]),
     ),
     danseParams=DANSEparameters(
         DFTsize=1024,

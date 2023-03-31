@@ -1824,6 +1824,7 @@ class TIDANSEvariables(DANSEvariables):
         # if self.i[k] == 0:
         #     self.zLocalPrime[k] = copy.deepcopy(self.zLocalPrimeBuffer[k])
         # else:
+
         self.zLocalPrime[k] = np.concatenate((
             self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
             self.zLocalPrimeBuffer[k][:self.Ns]
@@ -1842,9 +1843,10 @@ class TIDANSEvariables(DANSEvariables):
         self.zLocal_s[k] = copy.deepcopy(self.zLocalPrime_s[k])
         self.zLocal_n[k] = copy.deepcopy(self.zLocalPrime_n[k])
         for l in self.upstreamNeighbors[k]:
-            self.zLocal[k] += self.zLocal[l]
-            self.zLocal_s[k] += self.zLocal_s[l]
-            self.zLocal_n[k] += self.zLocal_n[l]
+            if len(self.zLocal[l] > 0):  # do not consider empty buffers
+                self.zLocal[k] += self.zLocal[l]
+                self.zLocal_s[k] += self.zLocal_s[l]
+                self.zLocal_n[k] += self.zLocal_n[l]
 
         # At the root, the sum is not partial, it is complete
         if len(self.downstreamNeighbors[k]) == 0:
@@ -2082,12 +2084,12 @@ class TIDANSEvariables(DANSEvariables):
             Time-domain latest WOLA chunk of compressed signal (after OLA).
         """
 
-        # -- TODO: see eq. (36) in Szurley's paper --> do we need to invert by `wTildeInt` or `wTildeExt`?
-
         # Transfer local observations to frequency domain
         DFTorder = yq.shape[0]  # DFT order
 
-        yqHat = np.fft.fft(yq * self.winWOLAanalysis[:, np.newaxis], DFTorder, axis=0)
+        yqHat = np.fft.fft(
+            yq * self.winWOLAanalysis[:, np.newaxis], DFTorder, axis=0
+        )
         # Keep only positive frequencies
         yqHat = yqHat[:int(DFTorder/2 + 1), :]
         # Compute compression vector
