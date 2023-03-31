@@ -11,11 +11,12 @@ from danse_toolbox.d_classes import *
 from danse_toolbox.d_utils import wipe_folder
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
-SIGNALSPATH = f'{Path(__file__).parent}/testing/sigs'
+SIGNALS_PATH = f'{Path(__file__).parent}/testing/sigs'
 SEED = 12347
+BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230331_tests/tidanse/test1_seq',
+    exportFolder = f'{Path(__file__).parent}/out/20230331_tests/tidanse/test2_asy',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -63,7 +64,7 @@ p = TestParameters(
         # nSensorPerNode=[1, 1, 1, 1],
         # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
         selfnoiseSNR=99,
-        desiredSignalFile=[f'{SIGNALSPATH}/01_speech/{file}'\
+        desiredSignalFile=[f'{SIGNALS_PATH}/01_speech/{file}'\
             for file in [
                 'speech1.wav',
                 'speech2.wav'
@@ -73,7 +74,7 @@ p = TestParameters(
         #         'whitenoise_signal_1.wav',
         #         'whitenoise_signal_2.wav'
         #     ]],
-        noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}'\
+        noiseSignalFile=[f'{SIGNALS_PATH}/02_noise/{file}'\
             for file in [
                 'ssn/ssn_speech1.wav',
                 'ssn/ssn_speech2.wav'
@@ -89,8 +90,8 @@ p = TestParameters(
     danseParams=DANSEparameters(
         DFTsize=1024,
         WOLAovlp=.5,  # [*100 -> %]
-        nodeUpdating='seq',
-        # nodeUpdating='asy',
+        # nodeUpdating='seq',
+        nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
         #
@@ -121,7 +122,7 @@ p = TestParameters(
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         printoutsAndPlotting=PrintoutsAndPlotting(
-            showWASNs=True
+            showWASNs=False if BYPASS_DYNAMIC_PLOTS else True
         )
     )
 )
@@ -151,12 +152,8 @@ def main(p: TestParameters):
     # DANSE
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
 
-    # Visualize results
-    out = postprocess(out, wasnObjUpdated, room, p)
-# 
-    # Save `DANSEoutputs` object after metrics computation in `postprocess()`
-    out.save(foldername=p.exportFolder, light=True)
-    p.save()    # save `TestParameters` object
+    # Post-process results (save, export, plot...)
+    postprocess(out, wasnObjUpdated, room, p)
 
 
 def danse_it_up(
@@ -257,7 +254,9 @@ def postprocess(
         # Plot signals at specific nodes (+ export)
         out.plot_sigs(wasnObj.wasn, p.exportFolder)
 
-    return out
+        # Save `DANSEoutputs` object after metrics computation
+        out.save(foldername=p.exportFolder, light=True)
+        p.save()    # save `TestParameters` object
 
 
 if __name__ == '__main__':

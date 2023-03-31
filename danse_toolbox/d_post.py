@@ -166,7 +166,6 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         self.metrics = compute_metrics(self, wasn)
         figStatic, figDynamic = plot_metrics(self)
-        print(exportFolder)
         if exportFolder is not None:
             figStatic.savefig(f'{exportFolder}/metrics.png')
             figStatic.savefig(f'{exportFolder}/metrics.pdf')

@@ -414,10 +414,11 @@ def initialize_events(
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
             if 'seq' in p.nodeUpdating:
                 # form new tree at every DANSE update
-                trInstants, upNodeIndices = get_sequential_update_instants(
+                seqUpInstants, upNodeIndices = get_sequential_update_instants(
                     upInstants=upInstants,
                     startNodeIdx=p.seqUpdateStartNodeIdx
                 )
+                trInstants = copy.deepcopy(seqUpInstants)
             else:
                 # form tree at WASN initialization only
                 trInstants = np.array([0])
@@ -719,7 +720,7 @@ def build_events_matrix(
 
         # Address node-updating strategy
         bypassUpdate = [False for _ in evTypesConcerned]  # default: no bypass
-        if 'up' in types and nodeUpdating == 'seq':
+        if 'up' in types and 'seq' in nodeUpdating:
             lastUpNodeUpdated = lastUpNode
             for ii in range(len(evTypesConcerned)):
                 if types[ii] == 'up':

@@ -175,10 +175,15 @@ def tidanse(
     t0 = time.perf_counter()    # timing
 
     # Plotting
-    fig = plt.figure()
-    fig.set_size_inches(4.5, 4.5)
-    ax = fig.add_subplot(projection='3d')
-    plt.show(block=False)
+    if p.printoutsAndPlotting.showWASNs:
+        fig = plt.figure()
+        fig.set_size_inches(4.5, 4.5)
+        ax = fig.add_subplot(projection='3d')
+        plt.show(block=False)
+
+        scatterSize = np.amax(fig.get_size_inches()) * 50
+    else:
+        scatterSize, ax = None, None
 
     # Loop over event instants
     for currEvents in eventInstants:
@@ -216,14 +221,15 @@ def tidanse(
                 # New tree formation: update up-/downstream neighbors lists
                 tidv.update_up_downstream_neighbors(
                     wasnObjList[tidv.treeFormationCounter],
-                    plotit=True,
+                    plotit=p.printoutsAndPlotting.showWASNs,
                     ax=ax,
-                    scatterSize=np.amax(fig.get_size_inches()) * 50
+                    scatterSize=scatterSize
                 )
-                ax.set_title(f'Tree formation #{tidv.treeFormationCounter}')
-                fig.canvas.draw()
-                fig.canvas.flush_events()
-                time.sleep(0.05)
+                if p.printoutsAndPlotting.showWASNs:
+                    ax.set_title(f't={np.round(currEvents.t, 3)}s; Tree formation #{tidv.treeFormationCounter}')
+                    fig.canvas.draw()
+                    fig.canvas.flush_events()
+                    time.sleep(0.05)
             else:
                 raise ValueError(f'Unknown event type: "{evType}".')
     
