@@ -91,9 +91,9 @@ class DANSEoutputs(DANSEparameters):
         if self.computeCentralised:
             self.filtersCentr = dv.wCentr
         # Other useful things
-        self.tStartForMetrics = dv.tStartForMetrics
-        self.tStartForMetricsCentr = dv.tStartForMetricsCentr
-        self.tStartForMetricsLocal = dv.tStartForMetricsLocal
+        # self.tStartForMetrics = dv.tStartForMetrics
+        # self.tStartForMetricsCentr = dv.tStartForMetricsCentr
+        # self.tStartForMetricsLocal = dv.tStartForMetricsLocal
         self.beta = dv.expAvgBeta
 
         # Show initialised status
@@ -448,8 +448,6 @@ def compute_metrics(
 
     # Initialisations
     startIdx = np.zeros(out.nNodes, dtype=int)
-    startIdxCentr = np.zeros(out.nNodes, dtype=int)
-    startIdxLocal = np.zeros(out.nNodes, dtype=int)
     snr = _ndict(out.nNodes)  # Unweighted SNR
     fwSNRseg = _ndict(out.nNodes)  # Frequency-weighted segmental SNR
     stoi = _ndict(out.nNodes)  # (extended) Short-Time Objective Intelligibility
@@ -457,8 +455,8 @@ def compute_metrics(
     tStart = time.perf_counter()
     for k in range(out.nNodes):
         # Derive starting sample for metrics computations
-        startIdx[k] = int(np.floor(out.tStartForMetrics[k] * wasn[k].fs))
-        print(f"Node {k+1}: computing speech enhancement metrics from the {startIdx[k] + 1}'th sample on (t_start = {out.tStartForMetrics[k]} s --> avoid bias due to initial filters guesses in first iterations)...")
+        startIdx[k] = int(np.floor(wasn[k].metricStartTime * wasn[k].fs))
+        print(f"Node {k+1}: computing speech enhancement metrics from the {startIdx[k] + 1}'th sample on (t_start = {wasn[k].metricStartTime} s --> avoid bias due to initial filters guesses in first iterations)...")
         print(f'Computing signal enhancement evaluation metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
         # Compute starting indices for centralised and local estimates
@@ -469,18 +467,12 @@ def compute_metrics(
             TDdesiredSignals_est_c = out.TDdesiredSignals_est_c[:, k]
             TDfilteredSpeech_c = out.TDfiltSpeech_c[:, k]
             TDfilteredNoise_c = out.TDfiltNoise_c[:, k]
-            startIdxCentr[k] = int(np.floor(
-                out.tStartForMetricsCentr[k] * wasn[k].fs
-            ))
-            print(f"Node {k+1}: computing speech enhancement metrics for CENTRALISED PROCESSING from the {startIdxCentr[k] + 1}'th sample on (t_start = {out.tStartForMetricsCentr[k]} s).")
+            print(f"Node {k+1}: computing speech enhancement metrics for CENTRALISED PROCESSING from the {startIdx[k] + 1}'th sample on (t_start = {wasn[k].metricStartTime} s).")
         if out.computeLocal:
             TDdesiredSignals_est_l = out.TDdesiredSignals_est_l[:, k]
             TDfilteredSpeech_l = out.TDfiltSpeech_l[:, k]
             TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
-            startIdxLocal[k] = int(np.floor(
-                out.tStartForMetricsLocal[k] * wasn[k].fs
-            ))
-            print(f"Node {k+1}: computing speech enhancement metrics for LOCAL PROCESSING from the {startIdxLocal[k] + 1}'th sample on (t_start = {out.tStartForMetricsLocal[k]} s).")
+            print(f"Node {k+1}: computing speech enhancement metrics for LOCAL PROCESSING from the {startIdx[k] + 1}'th sample on (t_start = {wasn[k].metricStartTime} s).")
 
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
@@ -500,8 +492,6 @@ def compute_metrics(
             enhan_l=TDdesiredSignals_est_l,
             # Start indices
             startIdx=startIdx[k],
-            startIdxCentr=startIdxCentr[k],
-            startIdxLocal=startIdxLocal[k],
             # Other parameters
             fs=wasn[k].fs,
             vad=wasn[k].vadCombined,
@@ -528,7 +518,11 @@ def compute_metrics(
 
     return metrics
 
-def plot_metrics(out: DANSEoutputs, onlySNRandESTOIinPlots=False, snrYlimMax=None):
+def plot_metrics(
+        out: DANSEoutputs,
+        onlySNRandESTOIinPlots=False,
+        snrYlimMax=None
+    ):
     """
     Visualize evaluation metrics.
 
@@ -538,9 +532,11 @@ def plot_metrics(out: DANSEoutputs, onlySNRandESTOIinPlots=False, snrYlimMax=Non
         DANSE outputs.
     onlySNRandESTOIinPlots : bool
         If True, only include the SNR and the eSTOI.
+    snrYlimMax : float or int
+        If not None, set a particular y-axis limit for the SNR plot.
     """
 
-    # Useful variables
+    # Hard-coded variables
     barWidth = 1
 
     if onlySNRandESTOIinPlots:
@@ -1181,6 +1177,14 @@ def plot_signals(node: Node, win, ovlp):
             node.enhancedData_c - currDelta - 2*delta,
             label='Enhanced (centr.)'
         )
+    # Plot start of enhancement metrics computations
+    ax.vlines(
+        x=node.metricStartTime,
+        ymin=np.amin(ax.get_ylim()),
+        ymax=np.amax(ax.get_ylim()),
+        colors='0.5',
+    )
+
     ax.set_yticklabels([])
     ax.set(xlabel='$t$ [s]')
     ax.grid()

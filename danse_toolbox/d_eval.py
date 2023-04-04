@@ -86,8 +86,6 @@ def get_metrics(
         vad=None,
         dynamic: DynamicMetricsParameters=None,
         startIdx=0,
-        startIdxCentr=None,
-        startIdxLocal=None,
         gamma=0.2,
         fLen=0.03
     ):
@@ -129,10 +127,6 @@ def get_metrics(
         Parameters for dynamic metrics estimation
     startIdx : int
         Sample index to start at when computing the metrics.
-    startIdxCentr : int
-        Same as above, for the centralised estimates.
-    startIdxLocal : int
-        Same as above, for the local estimates.
     gamma : float
         Gamma exponent for fwSNRseg computation.
     fLen : float
@@ -158,29 +152,29 @@ def get_metrics(
 
     # Trim to correct lengths (avoiding initial filter convergence
     # in calculation of metrics)
-    clean_c = clean[startIdxCentr:]
-    clean_l = clean[startIdxLocal:]
+    clean_c = clean[startIdx:]
+    clean_l = clean[startIdx:]
     clean = clean[startIdx:]
-    noiseOnly_c = noiseOnly[startIdx:]
-    noiseOnly_l = noiseOnly[startIdx:]
+    # noiseOnly_c = noiseOnly[startIdx:]
+    # noiseOnly_l = noiseOnly[startIdx:]
     noiseOnly = noiseOnly[startIdx:]
     if enhan_c is not None:
-        enhan_c = enhan_c[startIdxCentr:]
-        vad_c = vad[startIdxCentr:]
+        enhan_c = enhan_c[startIdx:]
+        vad_c = vad[startIdx:]
     if enhan_l is not None:
-        enhan_l = enhan_l[startIdxLocal:]
-        vad_l = vad[startIdxLocal:]
+        enhan_l = enhan_l[startIdx:]
+        vad_l = vad[startIdx:]
     enhan = enhan[startIdx:]
     noisy = noisy[startIdx:]
     vad = vad[startIdx:]
     filteredSpeech = filteredSpeech[startIdx:]
     filteredNoise = filteredNoise[startIdx:]
     if filteredSpeech_c is not None:
-        filteredSpeech_c = filteredSpeech_c[startIdxCentr:]
-        filteredNoise_c = filteredNoise_c[startIdxCentr:]
+        filteredSpeech_c = filteredSpeech_c[startIdx:]
+        filteredNoise_c = filteredNoise_c[startIdx:]
     if filteredSpeech_l is not None:
-        filteredSpeech_l = filteredSpeech_l[startIdxLocal:]
-        filteredNoise_l = filteredNoise_l[startIdxLocal:]
+        filteredSpeech_l = filteredSpeech_l[startIdx:]
+        filteredNoise_l = filteredNoise_l[startIdx:]
     
     # Unweighted SNR
     snr.before = get_snr(clean, noiseOnly, vad)

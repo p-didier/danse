@@ -476,6 +476,11 @@ def build_wasn(
 
     # Include adjacency matrix
     myWASN.adjacencyMatrix = adjacencyMatrix
+    
+    # Infer a good start time for the computation of speech enhancement
+    # metrics based on the speech signal used (after 1 speech utterance -->
+    # whenever the VAD has gone up and down).
+    myWASN.get_metrics_start_time()
 
     return myWASN
 

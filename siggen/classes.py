@@ -33,7 +33,7 @@ class AcousticScenarioParameters:
     noiseSignalFile : list[str] = field(default_factory=list)    # list of paths to noise signal file(s)
     baseSNR : int = 5                        # [dB] SNR between dry desired signals and dry noise
     # vvv VAD parameters vvv
-    VADenergyDecrease_dB : float = 35   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
+    VADenergyDecrease_dB : float = 40   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
     VADenergyFactor = 10 ** (VADenergyDecrease_dB / 10)     # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
     VADwinLength : float = 40e-3     # [s] VAD window length
     #
@@ -160,6 +160,9 @@ class Node:
         # -'default': no particular type. Used, e.g., in fully connected WASNs;
         # -'leaf': leaf node, with only one neighbor.
         # -'root': root node, root of a tree-topology WASN.\
+    # Other
+    metricStartTime : float = 0.    # start time instant to compute speech
+        # enhancement metrics at that node [s].
 
     def __post_init__(self):
         # Combined VAD
@@ -218,6 +221,27 @@ class WASN:
         # Set root
         self.wasn[rootIdx].nodeType = 'root'
         self.rootIdx = rootIdx
+    
+    def get_metrics_start_time(self):
+        """Infers a good start time for the computation of speech enhancement
+        metrics based on the speech signal used (after 1 speech utterance -->
+        whenever the VAD has gone up and down)."""
+
+        VADs = [node.vad for node in self.wasn]
+
+        if VADs[0].shape[-1] > 1:
+            raise ValueError('NYI: multiple-sources VAD case.')  # TODO:
+
+        nNodes = len(VADs)
+        for k in range(nNodes):
+            allIndices = np.arange(1, len(VADs[k]))
+            vadDiffVect = np.diff(np.squeeze(VADs[k]), axis=0)
+            vadChangesIndices = allIndices[vadDiffVect != 0]
+            secondVADchange = vadChangesIndices[1]
+            # Check that the VAD at the second change instant is back to 0
+            if VADs[k][secondVADchange][0] != 0:
+                raise ValueError('Unexpected outcome: is the VAD starting ON?')
+            self.wasn[k].metricStartTime = secondVADchange / self.wasn[k].fs
 
     def orientate(self):
         """Orientate the tree-topology from leaves towards root."""
