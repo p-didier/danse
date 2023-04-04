@@ -16,7 +16,7 @@ SEED = 12347
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230331_forUOLcollab_update3/seq_up_1',
+    exportFolder = f'{Path(__file__).parent}/out/20230331_forUOLcollab_update3/gevd_asy_4',
     seed=SEED,
     wasnParams=WASNparameters(
         # generateRandomWASNwithSeed=420,
@@ -48,16 +48,16 @@ p = TestParameters(
         sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
-        t60=0.0,
-        # t60=0.2,
+        # t60=0.0,
+        t60=0.2,
         interSensorDist=0.2,
         # interSensorDist=0.1,
         # nNodes=2,
         nNodes=3,
         # nNodes=4,
         # nSensorPerNode=[1, 1],
-        nSensorPerNode=[1, 1, 1],
-        # nSensorPerNode=[1, 2, 3],
+        # nSensorPerNode=[1, 1, 1],
+        nSensorPerNode=[1, 2, 3],
         # nSensorPerNode=[1, 2, 3, 2],
         # nSensorPerNode=[1, 3, 2],
         # nSensorPerNode=[1, 3, 2, 5],
@@ -90,8 +90,8 @@ p = TestParameters(
     danseParams=DANSEparameters(
         DFTsize=1024,
         WOLAovlp=.5,  # [*100 -> %]
-        nodeUpdating='seq',
-        # nodeUpdating='asy',
+        # nodeUpdating='seq',
+        nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
         #
@@ -115,8 +115,8 @@ p = TestParameters(
         computeLocal=True,
         # noExternalFilterRelaxation=True,
         noExternalFilterRelaxation=False,
-        performGEVD=False,
-        # performGEVD=True,
+        # performGEVD=False,
+        performGEVD=True,
         # bypassUpdates=True  # /!\
         t_expAvg50p=30,
         timeBtwExternalFiltUpdates=1,
@@ -253,7 +253,8 @@ def postprocess(
         out.plot_perf(
             wasnObj.wasn,
             p.exportFolder,
-            p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots
+            p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots,
+            snrYlimMax=p.snrYlimMax
         )
 
         # Plot signals at specific nodes (+ export)

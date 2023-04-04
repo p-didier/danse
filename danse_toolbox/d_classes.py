@@ -21,6 +21,7 @@ class TestParameters:
     exportFolder: str = ''  # folder to export outputs
     #
     seed: int = 12345
+    snrYlimMax : float = None  # SNR ylim max (if None, use auto lim)
 
     def __post_init__(self):
         np.random.seed(self.seed)  # set random seed

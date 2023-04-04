@@ -161,11 +161,21 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
 
-    def plot_perf(self, wasn, exportFolder=None, onlySNRandESTOIinPlots=False):
+    def plot_perf(
+            self,
+            wasn,
+            exportFolder=None,
+            onlySNRandESTOIinPlots=False,
+            snrYlimMax=None
+        ):
         """Plots DANSE performance."""
         self.check_init()  # check if object is correctly initialised
         self.metrics = compute_metrics(self, wasn)
-        figStatic, figDynamic = plot_metrics(self, onlySNRandESTOIinPlots)
+        figStatic, figDynamic = plot_metrics(
+            self,
+            onlySNRandESTOIinPlots,
+            snrYlimMax
+        )
         if exportFolder is not None:
             figStatic.savefig(f'{exportFolder}/metrics.png')
             figStatic.savefig(f'{exportFolder}/metrics.pdf')
@@ -518,7 +528,7 @@ def compute_metrics(
 
     return metrics
 
-def plot_metrics(out: DANSEoutputs, onlySNRandESTOIinPlots=False):
+def plot_metrics(out: DANSEoutputs, onlySNRandESTOIinPlots=False, snrYlimMax=None):
     """
     Visualize evaluation metrics.
 
@@ -543,6 +553,8 @@ def plot_metrics(out: DANSEoutputs, onlySNRandESTOIinPlots=False):
     ax = fig1.add_subplot(1, nCols, 1)   # Unweighted SNR
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.snr)
     ax.set(title='SNR', ylabel='[dB]')
+    if snrYlimMax is not None:
+        ax.set_ylim([0, snrYlimMax])
     #
     ax = fig1.add_subplot(1, nCols, 2)   # STOI
     metrics_subplot(out.nNodes, ax, barWidth, out.metrics.stoi)

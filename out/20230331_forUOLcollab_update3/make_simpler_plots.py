@@ -53,9 +53,10 @@ def plot_metrics_simpler(out: DANSEoutputs):
     ax.set(title='SNR', ylabel='[dB]')
     #
     ax = fig.add_subplot(1, 2, 2)   # eSTOI
-    metrics_subplot(out.nNodes, ax, barWidth, out.metrics.fwSNRseg)
+    metrics_subplot(out.nNodes, ax, barWidth, out.metrics.stoi)
     ax.set(title='eSTOI', ylabel='[dB]')
     ax.legend(bbox_to_anchor=(1, 0), loc="lower left")
+    ax.set_ylim([0, 1])
 
     plt.tight_layout()
 
