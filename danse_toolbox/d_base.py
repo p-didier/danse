@@ -200,6 +200,10 @@ class DANSEparameters(Hyperparameters):
         # type of complex covariance filter initialization:
         # -- 'fully_random' == all entries of the covariance matrix are random (but the same for each frequency)
         # -- 'eye_and_random' == identity matrix to which is added an all-random matrix
+        # -- 'batch_ground_truth' == `Ryy = yy^H`, with `y` the entire (batch) signal.
+    covMatEyeInitScaling: float = 1.
+        # Value by which to scale the diagonal terms of the initial covariance
+        # matrices - used iff `'eye' in covMatInitType`.
     covMatRandomInitScaling: float = np.finfo(float).eps
         # Value by which to scale the [-1,1] normal distribution when
         # initializing the covariance matrices with random numbers.

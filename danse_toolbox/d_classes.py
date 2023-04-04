@@ -144,21 +144,40 @@ class DANSEvariables(base.DANSEparameters):
             # Generate a basis random array for random initializations
             randArray = 2 * rng.random(dims) - 1 +\
                 1j * (2 * rng.random(dims) - 1)
-            if self.covMatInitType == 'full_random':
+            if self.covMatInitType == 'fully_random':
                 # Scale the random array
                 fullSlice = self.covMatRandomInitScaling * randArray
             elif self.covMatInitType == 'eye_and_random':
                 if len(dims) == 2:  # for single freq-bin slice
-                    eyePart = np.eye(dims[-1])
+                    eyePart = np.eye(dims[-1]) * self.covMatEyeInitScaling
                 elif len(dims) == 3:  # for multiple bins
-                    eyePart = np.tile(np.eye(dims[-1]), (dims[0], 1, 1))
+                    eyePart = np.tile(
+                        np.eye(dims[-1]) * self.covMatEyeInitScaling,
+                        (dims[0], 1, 1)
+                    )
                 # Scale the random array and add an identity matrix
                 # to each slice.
                 fullSlice = eyePart + self.covMatRandomInitScaling * randArray
             return fullSlice
 
         # Covariance matrices initialization
-        if self.covMatSameInitForAllNodes:
+        if self.covMatInitType == 'batch_ground_truth':
+            raise ValueError('[NYI]')
+            # TODO: -- see journal week14_2023 TUE
+            
+            # Initialise the covariance matrices with their batch ground truth
+            for k in range(nNodes):
+                nHat = np.fft.fft(wasn[k].cleannoise, n=self.DFTsize, axis=0)
+                yHat = np.fft.fft(wasn[k].data, n=self.DFTsize, axis=0)
+                Rnntilde.append(np.einsum('ij,ik->ijk', nHat, nHat.conj()))
+                Ryytilde.append(np.einsum('ij,ik->ijk', yHat, yHat.conj()))
+
+                # Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+                # Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+
+                # Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
+                # Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
+        elif self.covMatSameInitForAllNodes:
             if self.covMatSameInitForAllFreqs:
                 fullSlice = _init_covmats(
                     (nSensorsTotal, nSensorsTotal)

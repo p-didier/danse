@@ -119,14 +119,22 @@ p = TestParameters(
         # performGEVD=True,
         # bypassUpdates=True  # /!\
         # t_expAvg50p=10,
-        t_expAvg50p=3.2,
+        t_expAvg50p=3,
         # t_expAvg50p=1,
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         printoutsAndPlotting=PrintoutsAndPlotting(
             showWASNs=False if BYPASS_DYNAMIC_PLOTS else True,
             onlySNRandESTOIinPlots=True
-        )
+        ),
+        # vvvv Covariance matrices initialization parameters
+        covMatInitType='fully_random',
+        # covMatInitType='eye_and_random',
+        # covMatInitType='batch_ground_truth',
+        # covMatEyeInitScaling=0.0001,
+        # covMatRandomInitScaling=0.00001,
+        # covMatSameInitForAllFreqs=True,
+        # covMatSameInitForAllNodes=False
     )
 )
 p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
