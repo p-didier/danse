@@ -14,33 +14,33 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 @dataclass
 class AcousticScenarioParameters:
-    rd: np.ndarray = np.array([5, 5, 5])  # room dimensions [m]
-    fs: float = 16000.     # base sampling frequency [Hz]
-    t60: float = 0.        # reverberation time [s]
-    minDistToWalls: float = 0.33   # minimum distance between elements and room walls [m]
+    rd : np.ndarray = np.array([5, 5, 5])  # room dimensions [m]
+    fs : float = 16000.     # base sampling frequency [Hz]
+    t60 : float = 0.        # reverberation time [s]
+    minDistToWalls : float = 0.33   # minimum distance between elements and room walls [m]
     #    
-    referenceSensor: int = 0    # Index of the reference sensor at each node
-    interSensorDist: float = 0.1   # distance separating microphones
-    arrayGeometry: str = 'grid3d'   # microphone array geometry (only used if numSensorPerNode > 1)
-    # ^^^ possible values: 'linear', 'radius', 'grid3d'
+    referenceSensor : int = 0    # Index of the reference sensor at each node
+    interSensorDist : float = 0.1   # distance separating microphones
+    arrayGeometry : str = 'grid3d'   # microphone array geometry (only used if numSensorPerNode > 1)
+    # ^^^ possible values : 'linear', 'radius', 'grid3d'
     #
-    lenRIR: int = 2**10    # length of RIRs [samples]
-    sigDur: float = 5.     # signals duration [s]
+    lenRIR : int = 2**10    # length of RIRs [samples]
+    sigDur : float = 5.     # signals duration [s]
     #
-    nDesiredSources: int = 1   # number of desired sources
-    nNoiseSources: int = 1     # number of undesired (noise) sources
-    desiredSignalFile: list[str] = field(default_factory=list)  # list of paths to desired signal file(s)
-    noiseSignalFile: list[str] = field(default_factory=list)    # list of paths to noise signal file(s)
-    baseSNR: int = 5                        # [dB] SNR between dry desired signals and dry noise
+    nDesiredSources : int = 1   # number of desired sources
+    nNoiseSources : int = 1     # number of undesired (noise) sources
+    desiredSignalFile : list[str] = field(default_factory=list)  # list of paths to desired signal file(s)
+    noiseSignalFile : list[str] = field(default_factory=list)    # list of paths to noise signal file(s)
+    baseSNR : int = 5                        # [dB] SNR between dry desired signals and dry noise
+    # vvv VAD parameters vvv
+    VADenergyDecrease_dB : float = 35   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
+    VADenergyFactor = 10 ** (VADenergyDecrease_dB / 10)     # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
+    VADwinLength : float = 40e-3     # [s] VAD window length
     #
-    VADenergyFactor: float = 4000           # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
-    VADwinLength: float = 40e-3             # [s] VAD window length
+    nNodes : int = 0        # number of nodes in scenario
+    nSensorPerNode : list[int] = field(default_factory=list)    # number of sensors per node
     #
-    nNodes: int = 0        # number of nodes in scenario
-    nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node
-    #
-    loadFrom: str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))')
-
+    loadFrom : str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))')
 
 @dataclass
 class TopologyParameters:
