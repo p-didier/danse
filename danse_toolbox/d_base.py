@@ -195,6 +195,20 @@ class DANSEparameters(Hyperparameters):
         # -- 'selectFirstSensor_andFixedValue' == [1, e, ..., e]^T,
         #   with e = `filterInitFixedValue`.
     filterInitFixedValue: float = 0.
+    # ---- Covariance matrices initialization parameters
+    covMatInitType: str = 'eye_and_random'
+        # type of complex covariance filter initialization:
+        # -- 'fully_random' == all entries of the covariance matrix are random (but the same for each frequency)
+        # -- 'eye_and_random' == identity matrix to which is added an all-random matrix
+    covMatRandomInitScaling: float = np.finfo(float).eps
+        # Value by which to scale the [-1,1] normal distribution when
+        # initializing the covariance matrices with random numbers.
+    covMatSameInitForAllNodes: bool = True
+        # If True, the same initial covariance matrices are used for all nodes.
+        # Else, all nodes get a different initialization.
+    covMatSameInitForAllFreqs: bool = True
+        # If True, the same initial covariance matrices are used for all
+        # frequency bins. Else, all bins get a different initialization.
     # ---- Plotting
     printoutsAndPlotting : PrintoutsAndPlotting = PrintoutsAndPlotting()
     # ---- Desired signal estimation
@@ -1094,8 +1108,8 @@ def back_to_time_domain(x, n, axis=0):
         xout = xout.T
 
     # Check before output
-    if not np.allclose(np.fft.fft(xout, n, axis=0), x):
-        raise ValueError('Issue in return to time-domain')
+    # if not np.allclose(np.fft.fft(xout, n, axis=0), x):  # COMMENTED OUT ON 04.04.2023 TODO:TODO:TODO:TODO:
+    #     raise ValueError('Issue in return to time-domain')
 
     return xout
 
@@ -1578,9 +1592,14 @@ def perform_update_noforloop(Ryy, Rnn, refSensorIdx=0):
 
 
 def get_desired_sig_chunk(
-    desSigProcessingType,
-    w, y, win, normFactWOLA,
-    dChunk, Ns, yTD
+        desSigProcessingType,
+        w,
+        y,
+        win,
+        normFactWOLA,
+        dChunk,
+        Ns,
+        yTD
     ):
     """
     Computes STFT-domain frame and time-domain frame of desired

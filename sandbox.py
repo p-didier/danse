@@ -22,8 +22,8 @@ p = TestParameters(
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
-            # topologyType='fully-connected',
-            topologyType='user-defined',
+            topologyType='fully-connected',
+            # topologyType='user-defined',
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
@@ -108,18 +108,18 @@ p = TestParameters(
         #
         filterInitType='selectFirstSensor_andFixedValue',
         filterInitFixedValue=1,
-        # filterInitFixedValue=0,
+        # filterInitFixedValue=0.01,
         #
         # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
         computeCentralised=True,
         computeLocal=True,
         # noExternalFilterRelaxation=True,
         noExternalFilterRelaxation=False,
-        # performGEVD=False,
-        performGEVD=True,
+        performGEVD=False,
+        # performGEVD=True,
         # bypassUpdates=True  # /!\
-        t_expAvg50p=10,
-        # t_expAvg50p=3.2,
+        # t_expAvg50p=10,
+        t_expAvg50p=3.2,
         # t_expAvg50p=1,
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
