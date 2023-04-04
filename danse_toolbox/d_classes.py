@@ -136,6 +136,38 @@ class DANSEvariables(base.DANSEparameters):
                     wInit[:, refIdx] = 1
             return wInit
 
+        # Initialize covariance matrices slices
+        rng = np.random.default_rng(self.seed)
+
+        def _init_covmats(dims: tuple) -> np.ndarray:
+            """Helper function to initialize the covariance matrices."""
+            # Generate a basis random array for random initializations
+            randArray = 2 * rng.random(dims) - 1 +\
+                1j * (2 * rng.random(dims) - 1)
+            if self.covMatInitType == 'full_random':
+                # Scale the random array
+                fullSlice = self.covMatRandomInitScaling * randArray
+            elif self.covMatInitType == 'eye_and_random':
+                if len(dims) == 2:  # for single freq-bin slice
+                    eyePart = np.eye(dims[-1])
+                elif len(dims) == 3:  # for multiple bins
+                    eyePart = np.tile(np.eye(dims[-1]), (dims[0], 1, 1))
+                # Scale the random array and add an identity matrix
+                # to each slice.
+                fullSlice = eyePart + self.covMatRandomInitScaling * randArray
+            return fullSlice
+
+        # Covariance matrices initialization
+        if self.covMatSameInitForAllNodes:
+            if self.covMatSameInitForAllFreqs:
+                fullSlice = _init_covmats(
+                    (nSensorsTotal, nSensorsTotal)
+                )
+            else:
+                fullSlice = _init_covmats(
+                    (self.nPosFreqs, nSensorsTotal, nSensorsTotal)
+                )
+        
         for k in range(nNodes):
             nNeighbors = len(wasn[k].neighborsIdx)
             #
@@ -152,25 +184,42 @@ class DANSEvariables(base.DANSEparameters):
             # initiate phase shift factors as 0's (no phase shift)
             phaseShiftFactors.append(np.zeros(dimYTilde[k]))   
             #
-            sliceTilde = np.finfo(float).eps *\
-                (np.random.random((dimYTilde[k], dimYTilde[k])) +\
-                1j * np.random.random((dimYTilde[k], dimYTilde[k]))) 
-            Rnntilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
-            Ryytilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
-            # TODO: centralised and local covariance matrices should
-            # contain the same _local_ part as the 'tilde' covariance
-            # matrices... 
-            sliceCentr = np.finfo(float).eps *\
-                (np.random.random((nSensorsTotal, nSensorsTotal)) +\
-                1j * np.random.random((nSensorsTotal, nSensorsTotal))) 
-            Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
-            Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
-            sliceLocal = np.finfo(float).eps *\
-                (np.random.random((wasn[k].nSensors, wasn[k].nSensors)) +\
-                1j * np.random.random((wasn[k].nSensors, wasn[k].nSensors))) 
-            Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
-            Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
-            #
+            if not self.covMatSameInitForAllNodes:
+                if self.covMatSameInitForAllFreqs:
+                    fullSlice = _init_covmats(
+                        (nSensorsTotal, nSensorsTotal)
+                    )
+                else:
+                    fullSlice = _init_covmats(
+                        (self.nPosFreqs, nSensorsTotal, nSensorsTotal)
+                    )
+            
+            if self.covMatSameInitForAllFreqs:
+                sliceTilde = fullSlice[:dimYTilde[k], :dimYTilde[k]]
+                Rnntilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
+                Ryytilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
+                #
+                sliceCentr = copy.deepcopy(fullSlice)
+                Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+                Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+                #
+                sliceLocal = fullSlice[:wasn[k].nSensors, :wasn[k].nSensors]
+                Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
+                Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
+            else:
+                Rnntilde.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
+                Ryytilde.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
+                #
+                Rnncentr.append(fullSlice)
+                Ryycentr.append(fullSlice)
+                #
+                Rnnlocal.append(
+                    fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
+                )
+                Ryylocal.append(
+                    fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
+                )
+            
             SROsEstimates.append(np.zeros((self.nIter, nNeighbors)))
             SROsResiduals.append(np.zeros((self.nIter, nNeighbors)))
             #
