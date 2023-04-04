@@ -229,6 +229,9 @@ class DANSEparameters(Hyperparameters):
             self.broadcastLength = 1
         if self.estimateSROs not in ['Oracle', 'CohDrift', 'DXCPPhaT']:
             raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
+        # if 'seq' in self.nodeUpdating:
+        #     # Ensure no relaxation with sequential node-updating
+        #     self.noExternalFilterRelaxation = True
         if self.noExternalFilterRelaxation:
             # no differentiating between external and
             # internal filters (bypass-studies).
@@ -440,8 +443,9 @@ def initialize_events(
     else:   # fully connected WASN
         fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
-        trInstants = np.array([])  # no tree-formation instants
-        leafToRootOrderings = []
+        trInstantsArranged = [np.array([]) for _ in range(nNodes)]  # no tree-formation instants
+        leafToRootOrderings = None
+        wasnObjList = None
         # Expected DANSE update instants
         upInstants = [
             np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
@@ -638,7 +642,9 @@ def build_events_matrix(
     reversedEventsCodingDict = dict(
         [(eventsCodesDict[a][0], a) for a in eventsCodesDict]
     )
-    tiFlag = fuse_t != [] and len(fuse_t) == nNodes  # TI-DANSE flag
+    # TI-DANSE flag
+    tiFlag = any(np.array([len(ts) > 0 for ts in fuse_t])) and\
+        len(fuse_t) == nNodes  
 
     # Create event lists
     upInstants = _flatten_instants(nNodes, up_t, eventsCodesDict['up'][0])
@@ -1327,7 +1333,7 @@ def events_parser_ti_danse(
         if is_interactive():  # if we are running from a notebook
             # Print on the same line
             print(f"\r{fullTxt}", end="")
-        else:
+        elif nodesStr != '':
             # Print on the next line
             print(fullTxt)
         # Prepare next while-loop pass

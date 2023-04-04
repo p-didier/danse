@@ -873,7 +873,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
         else:
             # Simultaneous or asynchronous node-updating
-            if any(x not in self.nodeUpdating for x in ('sim', 'asy')):
+            if 'seq' not in self.nodeUpdating:
                 # Relaxed external filter update
                 self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
                     (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
@@ -887,7 +887,7 @@ class DANSEvariables(base.DANSEparameters):
                     if self.printout_externalFilterUpdate:    # inform user
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
-            elif 'seq' in self.nodeUpdating:
+            else:
                 self.wTildeExt[k] =\
                     self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
                     
@@ -2149,7 +2149,7 @@ class TIDANSEvariables(DANSEvariables):
             self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
         else:
             # Simultaneous or asynchronous node-updating
-            if any(x not in self.nodeUpdating for x in ('sim', 'asy')):
+            if 'seq' not in self.nodeUpdating:
                 # Relaxed external filter update
                 self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
                     (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
@@ -2163,5 +2163,5 @@ class TIDANSEvariables(DANSEvariables):
                     if self.printout_externalFilterUpdate:    # inform user
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
-            elif 'seq' in self.nodeUpdating:
+            else:
                 self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]

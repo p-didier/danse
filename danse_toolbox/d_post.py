@@ -671,72 +671,79 @@ def metrics_subplot(numNodes, ax, barWidth, data):
     ax.set_axisbelow(True)
     
     for idxNode in range(numNodes):
+        idxColShift = 0
         if idxNode == 0:    # only add legend labels to first node
             ax.bar(
-                idxNode + colShifts[0] * delta,
+                idxNode + colShifts[idxColShift] * delta,
                 data[f'Node{idxNode + 1}'].before,
                 width=barWidth / widthFact,
                 color='C0',
                 edgecolor='k',
                 label='Raw signal'
             )
-            ax.bar(
-                idxNode + colShifts[1] * delta,
-                data[f'Node{idxNode + 1}'].after,
-                width=barWidth / widthFact,
-                color='C1',
-                edgecolor='k',
-                label='DANSE est.'
-            )
-            if data['Node1'].afterCentr != 0.:
-                ax.bar(
-                    idxNode + colShifts[2] * delta,
-                    data[f'Node{idxNode + 1}'].afterCentr,
-                    width=barWidth / widthFact,
-                    color='C2',
-                    edgecolor='k',
-                    label='Centr. est.'
-                )
+            idxColShift += 1
             if data['Node1'].afterLocal != 0.:
                 ax.bar(
-                    idxNode + colShifts[3] *  delta,
+                    idxNode + colShifts[idxColShift] *  delta,
                     data[f'Node{idxNode + 1}'].afterLocal,
                     width=barWidth / widthFact,
                     color='C3',
                     edgecolor='k',
                     label='Local est.'
                 )
+                idxColShift += 1
+            if data['Node1'].afterCentr != 0.:
+                ax.bar(
+                    idxNode + colShifts[idxColShift] * delta,
+                    data[f'Node{idxNode + 1}'].afterCentr,
+                    width=barWidth / widthFact,
+                    color='C2',
+                    edgecolor='k',
+                    label='Centr. est.'
+                )
+                idxColShift += 1
+            ax.bar(
+                idxNode + colShifts[idxColShift] * delta,
+                data[f'Node{idxNode + 1}'].after,
+                width=barWidth / widthFact,
+                color='C1',
+                edgecolor='k',
+                label='DANSE est.'
+            )
         else:
             ax.bar(
-                idxNode + colShifts[0] * delta,
+                idxNode + colShifts[idxColShift] * delta,
                 data[f'Node{idxNode + 1}'].before,
                 width=barWidth / widthFact,
                 color='C0',
                 edgecolor='k'
             )
-            ax.bar(
-                idxNode + colShifts[1] * delta,
-                data[f'Node{idxNode + 1}'].after,
-                width=barWidth / widthFact,
-                color='C1',
-                edgecolor='k'
-            )
-            if data['Node1'].afterCentr != 0.:
-                ax.bar(
-                    idxNode + colShifts[2] * delta,
-                    data[f'Node{idxNode + 1}'].afterCentr,
-                    width=barWidth / widthFact,
-                    color='C2',
-                    edgecolor='k',
-                )
+            idxColShift += 1
             if data['Node1'].afterLocal != 0.:
                 ax.bar(
-                    idxNode + colShifts[3] * delta,
+                    idxNode + colShifts[idxColShift] * delta,
                     data[f'Node{idxNode + 1}'].afterLocal,
                     width=barWidth / widthFact,
                     color='C3',
                     edgecolor='k',
                 )
+                idxColShift += 1
+            if data['Node1'].afterCentr != 0.:
+                ax.bar(
+                    idxNode + colShifts[idxColShift] * delta,
+                    data[f'Node{idxNode + 1}'].afterCentr,
+                    width=barWidth / widthFact,
+                    color='C2',
+                    edgecolor='k',
+                )
+                idxColShift += 1
+            ax.bar(
+                idxNode + colShifts[idxColShift] * delta,
+                data[f'Node{idxNode + 1}'].after,
+                width=barWidth / widthFact,
+                color='C1',
+                edgecolor='k'
+            )
 
             # Consider case where the metrics was not computed (e.g., PESQ with
             # SRO-affected sampling frequency).
