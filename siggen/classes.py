@@ -185,7 +185,7 @@ class WASN:
         # -'snr': signal-to-noise ratio estimate.
         # -'user-defined': user-defined estimate.
         # -anything else: invalid.
-    userDefinedRoot: int = 0    # index of user-defined root node
+    userDefinedRoot: int = None    # index of user-defined root node
         # ^ used iff `rootSelectionMeasure == 'user-defined'`.
     rootIdx: int = userDefinedRoot  # effective root node index
     leafToRootOrdering: list = field(default_factory=list)
@@ -213,8 +213,11 @@ class WASN:
             rootIdx = np.argmax(snrs)
             print(f'Node {rootIdx+1} was set as the root based on SNR estimates.')
         elif self.rootSelectionMeasure == 'user-defined':
-            rootIdx = self.userDefinedRoot
-            print(f'Node {rootIdx+1} was set as the root (user-defined).')
+            if self.userDefinedRoot is not None:
+                rootIdx = self.userDefinedRoot
+                print(f'Node {rootIdx+1} was set as the root (user-defined).')
+            else:
+                raise ValueError('The user-defined root was not provided.')
         else:
             raise ValueError(f"The measure used to select the tree's root ('{self.rootSelectionMeasure}') is invalid.")
 

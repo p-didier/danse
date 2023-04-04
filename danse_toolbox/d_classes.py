@@ -1723,6 +1723,7 @@ class TIDANSEvariables(DANSEvariables):
         self.etaMk_n = [np.array([]) for _ in range(self.nNodes)]
         #
         self.treeFormationCounter = 0  # counting the number of tree-formations
+        self.currentWasnTreeObj = None  # current tree WASN object
 
     def update_up_downstream_neighbors(
             self,
@@ -1741,6 +1742,7 @@ class TIDANSEvariables(DANSEvariables):
         self.downstreamNeighbors =\
             [node.downstreamNeighborsIdx for node in newWasnObj.wasn]
         self.treeFormationCounter += 1  # update counter too
+        self.currentWasnTreeObj = newWasnObj
         if plotit:
             ax.clear()
             newWasnObj.plot_me(ax, scatterSize=scatterSize)

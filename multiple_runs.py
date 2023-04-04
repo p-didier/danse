@@ -30,24 +30,24 @@ class GlobalTestParameters:
 
 params = GlobalTestParameters(
     sros=np.array([
-        [20, 40],
-        [50, 100],
-        [200, 400]
+        [0],
+        # [50, 100],
+        # [200, 400]
     ]),
     nodeUpdatings=np.array([
-        # 'seq',
+        'seq',
         'asy'
     ]),
     RTs=np.array([
-        # 0.0,
-        0.2
+        0.0,
+        # 0.2
     ]),
     nSensors=[
-        # [1, 1, 1],
+        [1, 1, 1],
         [1, 2, 3]
     ],
-    # gevdBool=[True, False],
-    gevdBool=[True],
+    gevdBool=[True, False],
+    # gevdBool=[True],
     # gevdBool=[False],
 )
 
@@ -74,7 +74,9 @@ def run_test_batch(params: GlobalTestParameters):
     
     for idxSROs in range(len(params.sros)):
         currSROs = np.concatenate((np.array([0.]), params.sros[idxSROs, :]))
-        if idxSROs == 0:
+        if (currSROs == 0).all():
+            strSROs = 'sync'
+        elif idxSROs == 0:
             strSROs = 'sSROs'
         elif idxSROs == 1:
             strSROs = 'mSROs'
@@ -99,7 +101,7 @@ def run_test_batch(params: GlobalTestParameters):
 
                         folderName = f'{strSROs}_{currNodeUpdating}_{strSensors}_{int(currRT * 1000)}msRT{strGEVD}'
                         print(f'CURRENT FOLDER: {folderName}')
-                        fullExportPath = f'{Path(__file__).parent}/out/20230331_forUOLcollab_update3/sro_testing/{folderName}',
+                        fullExportPath = f'{Path(__file__).parent}/out/20230404_tests/battery/{folderName}',
                         fullExportPath = fullExportPath[0]
                         if Path(fullExportPath).is_dir() and SKIP_EXISTING_FOLDERS:
                             print(f'The folder exists already --> skipping iteration (SKIP_EXISTING_FOLDERS==True)')
@@ -158,7 +160,7 @@ def run_test_batch(params: GlobalTestParameters):
                                 computeLocal=True,
                                 noExternalFilterRelaxation=False,
                                 performGEVD=currGEVDbool,  # =========================<<<<<
-                                t_expAvg50p=30,
+                                t_expAvg50p=10,
                                 timeBtwExternalFiltUpdates=1,
                                 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                                 printoutsAndPlotting=PrintoutsAndPlotting(

@@ -313,7 +313,7 @@ def initialize_events(
     timeInstants: np.ndarray,
     p: DANSEparameters,
     wasnObj=WASN
-    ):
+    ) -> tuple[list[DANSEeventInstant], np.ndarray, list[WASN]]:
     """
     Returns the matrix the columns of which to loop over in SRO-affected
     simultaneous DANSE. For each event instant, the matrix contains the instant
@@ -488,7 +488,8 @@ def initialize_events(
         fuse_t=fuInstants,
         re_t=reInstants,
         tr_t=trInstantsArranged,
-        leafToRootOrderings=leafToRootOrderings
+        leafToRootOrderings=leafToRootOrderings,
+        firstUpdatingNode=p.seqUpdateStartNodeIdx
     )
 
     return outputEvents, fs, wasnObjList
@@ -541,7 +542,8 @@ def build_events_matrix(
         fuse_t=[],
         re_t=[],
         tr_t=np.array([]),
-        leafToRootOrderings=[]
+        leafToRootOrderings=[],
+        firstUpdatingNode=0
     ):
     """
     Builds the DANSE events matrix from the update and broadcast instants.
@@ -569,6 +571,8 @@ def build_events_matrix(
         Leaves to root ordering of node indices, for each tree-formation
         instants (elements of `tr_t`).
         Nodes that live on the same tree depth are groupped in lists.
+    firstUpdatingNode : int
+        Index of the first updating node (only used if `'seq' in nodeUpdating`).
 
     Returns
     -------
@@ -677,8 +681,9 @@ def build_events_matrix(
     eventIdx = 0    # init while-loop
     nodesConcerned = []             # init
     evTypesConcerned = []        # init
-    lastUpNode = -1     # index of latest updating node
-    # ^^^ init. at -1 so that `lastUpNode + 1 == 0`
+    lastUpNode = firstUpdatingNode - 1     # index of latest updating node
+    # ^^^ init. at `firstUpdatingNode - 1` so that, first,
+    #       `lastUpNode + 1 == firstUpdatingNode`.
     treeFormationCounter = -1
     # ^^^ init. at -1 so that `treeFormationIdx + 1 == 0`
     lastTreeFormationInstant = None
@@ -727,15 +732,16 @@ def build_events_matrix(
         types = [reversedEventsCodingDict[ii] for ii in evTypesConcerned]
 
         # Address node-updating strategy
-        bypassUpdate = [False for _ in evTypesConcerned]  # default: no bypass
+        bypassUpdate = [None for _ in types]  # default: no bypass
         if 'up' in types and 'seq' in nodeUpdating:
             lastUpNodeUpdated = lastUpNode
-            for ii in range(len(evTypesConcerned)):
+            for ii in range(len(types)):
                 if types[ii] == 'up':
                     if nodesConcerned[ii] == np.mod(lastUpNode + 1, nNodes):
                         # Increment last updating node index
                         lastUpNodeUpdated = nodesConcerned[ii]
                         # break  # break `for`-loop
+                        bypassUpdate[ii] = False
                     else:
                         # Bypass update in other nodes
                         bypassUpdate[ii] = True
@@ -843,6 +849,7 @@ def sort_simultaneous_events(
                 idxCurrLevel = idxEv[nodes[idxEv] == treeLevel]
                 indices = np.concatenate((indices, idxCurrLevel))
             else:
+                treeLevel.sort()  # sort list in ascending node index order
                 for k in treeLevel: # consider each node in the level
                     idxCurrLevel = idxEv[nodes[idxEv] == k]
                     indices = np.concatenate((indices, idxCurrLevel))

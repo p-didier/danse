@@ -148,13 +148,6 @@ def tidanse(
     doi: 10.1109/TSIPN.2016.2623095.
     """
 
-    # # Prune WASN to tree
-    # wasnTreeObj = base.prune_wasn_to_tree(
-    #     wasnObj,
-    #     algorithm=p.treeFormationAlgorithm,
-    #     plotit=False
-    # )
-
     # Initialize TI-DANSE variables
     tidv = TIDANSEvariables(p, wasnObj.wasn)
 
@@ -180,13 +173,12 @@ def tidanse(
         fig.set_size_inches(4.5, 4.5)
         ax = fig.add_subplot(projection='3d')
         plt.show(block=False)
-
         scatterSize = np.amax(fig.get_size_inches()) * 50
     else:
         scatterSize, ax = None, None
 
     # Loop over event instants
-    for currEvents in eventInstants:
+    for instantIdx, currEvents in enumerate(eventInstants):
 
         # Parse event matrix and inform user (if asked)
         if tidv.printout_eventsParser:
@@ -202,7 +194,7 @@ def tidanse(
             # Node index
             k = currEvents.nodes[idxEventCurrInstant]
             # Bypass update boolean
-            bpUp = currEvents.bypassUpdate[idxEventCurrInstant]
+            bypassUpdate = currEvents.bypassUpdate[idxEventCurrInstant]
 
             if evType == 'fu':
                 # Fuse local signals
@@ -216,7 +208,15 @@ def tidanse(
                 tidv.ti_relay_innetwork_sum_upstream(k)
             elif evType == 'up':
                 # Update DANSE filter coefficients and estimate target
-                tidv.ti_update_and_estimate(k, currEvents.t, fs[k], bpUp)
+                tidv.ti_update_and_estimate(
+                    k,
+                    currEvents.t,
+                    fs[k],
+                    bypassUpdate
+                )
+                if k == tidv.currentWasnTreeObj.rootIdx and\
+                    bypassUpdate:
+                    raise ValueError()
             elif evType == 'tr':
                 # New tree formation: update up-/downstream neighbors lists
                 tidv.update_up_downstream_neighbors(
