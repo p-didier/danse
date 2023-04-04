@@ -65,14 +65,20 @@ def build_room(p: classes.WASNparameters):
         room.add_microphone_array(sensorsCoords.T)
 
     # Add desired sources
-    desiredSignalsRaw = np.zeros((int(p.sigDur * p.fs), p.nDesiredSources))
+    desiredNumSamples = int(p.sigDur * p.fs)
+    desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
     for ii in range(p.nDesiredSources):
         # Load sound file
         y, fsOriginal = librosa.load(p.desiredSignalFile[ii])
         # Resample
         y = resampy.resample(y, fsOriginal, p.fs)
-        # Truncate
-        y = y[:int(p.sigDur * p.fs)]
+        # Adjust length
+        if len(y) > desiredNumSamples:
+            y = y[:desiredNumSamples]
+        elif len(y) < desiredNumSamples:
+            while len(y) < desiredNumSamples:
+                y = np.concatenate((y, y))  # loop
+                y = y[:desiredNumSamples]
         # Whiten
         y = (y - np.mean(y)) / np.std(y)  # whiten
         desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
@@ -84,14 +90,19 @@ def build_room(p: classes.WASNparameters):
         room.add_soundsource(ssrc)
 
     # Add noise sources
-    noiseSignalsRaw = np.zeros((int(p.sigDur * p.fs), p.nNoiseSources))
+    noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
     for ii in range(p.nNoiseSources):
         # Load sound file
         y, fsOriginal = librosa.load(p.noiseSignalFile[ii])
         # Resample
         y = resampy.resample(y, fsOriginal, p.fs)
-        # Truncate
-        y = y[:int(p.sigDur * p.fs)]
+        # Adjust length
+        if len(y) > desiredNumSamples:
+            y = y[:desiredNumSamples]
+        elif len(y) < desiredNumSamples:
+            while len(y) < desiredNumSamples:
+                y = np.concatenate((y, y))  # loop
+                y = y[:desiredNumSamples]
         # Whiten and apply gain
         y = (y - np.mean(y)) / np.std(y)    # whiten
         y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR

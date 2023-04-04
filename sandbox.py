@@ -45,7 +45,7 @@ p = TestParameters(
             #     [1, 1],  # Node 2
             # ])
         ),
-        sigDur=15,
+        sigDur=45,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.0,
@@ -118,8 +118,8 @@ p = TestParameters(
         performGEVD=False,
         # performGEVD=True,
         # bypassUpdates=True  # /!\
-        # t_expAvg50p=10,
-        t_expAvg50p=3,
+        t_expAvg50p=5,
+        # t_expAvg50p=30,
         # t_expAvg50p=1,
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
