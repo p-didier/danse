@@ -225,13 +225,20 @@ class WASN:
         self.wasn[rootIdx].nodeType = 'root'
         self.rootIdx = rootIdx
     
-    def get_metrics_start_time(self):
+    def get_metrics_start_time(self, minNoSpeechDurEndUterrance: float):
         """Infers a good start time for the computation of speech enhancement
         metrics based on the speech signal used (after 1 speech utterance -->
-        whenever the VAD has gone up and down)."""
-
+        whenever the VAD has gone up and down).
+        
+        Parameters
+        ----------
+        minNoSpeechDurEndUterrance : float
+            Minimum duration of no speech at the end of a speech utterance [s].
+        """
+        # Get VADs
         VADs = [node.vad for node in self.wasn]
 
+        # Check that the VADs are for single-sources only
         if VADs[0].shape[-1] > 1:
             raise ValueError('NYI: multiple-sources VAD case.')  # TODO:
 
@@ -240,11 +247,20 @@ class WASN:
             allIndices = np.arange(1, len(VADs[k]))
             vadDiffVect = np.diff(np.squeeze(VADs[k]), axis=0)
             vadChangesIndices = allIndices[vadDiffVect != 0]
-            secondVADchange = vadChangesIndices[1]
+            # Find the correct start time instant
+            idxVADstartMetrics = 1
+            vadToNoSpeech = vadChangesIndices[idxVADstartMetrics]
+            nextVADtoSpeech = vadChangesIndices[idxVADstartMetrics + 1]
+            while nextVADtoSpeech - vadToNoSpeech <\
+                minNoSpeechDurEndUterrance * self.wasn[k].fs:
+                idxVADstartMetrics += 2  # go to next VAD change to no-speech
+                # Update
+                vadToNoSpeech = vadChangesIndices[idxVADstartMetrics]  
+                nextVADtoSpeech = vadChangesIndices[idxVADstartMetrics + 1]
             # Check that the VAD at the second change instant is back to 0
-            if VADs[k][secondVADchange][0] != 0:
+            if VADs[k][vadToNoSpeech][0] != 0:
                 raise ValueError('Unexpected outcome: is the VAD starting ON?')
-            self.wasn[k].metricStartTime = secondVADchange / self.wasn[k].fs
+            self.wasn[k].metricStartTime = vadToNoSpeech / self.wasn[k].fs
 
     def orientate(self):
         """Orientate the tree-topology from leaves towards root."""

@@ -229,8 +229,8 @@ class DANSEparameters(Hyperparameters):
     dynMetrics: DynamicMetricsParameters = DynamicMetricsParameters()
     gammafwSNRseg: float = 0.2  # gamma exponent for fwSNRseg
     frameLenfwSNRseg: float = 0.03  # [s] time window duration for fwSNRseg
-    minFiltUpdatesForMetrics: int = 10   # minimum number of DANSE
-        # updates before start of speech enhancement metrics computation
+    minNoSpeechDurEndUterrance: float = 0.2  # [s] min. duration of silence
+        # at the end of an utterance (200 ms by default).
     # ---- TI-DANSE specific
     treeFormationAlgorithm: str = 'prim'    # algorithm to prune ad-hoc WASN
         # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
