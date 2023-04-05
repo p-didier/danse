@@ -19,6 +19,7 @@ p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230404_tests/test',
     seed=SEED,
     wasnParams=WASNparameters(
+        VADenergyDecrease_dB=40,
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
@@ -45,7 +46,7 @@ p = TestParameters(
             #     [1, 1],  # Node 2
             # ])
         ),
-        sigDur=10,
+        sigDur=15,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.0,
@@ -119,8 +120,8 @@ p = TestParameters(
         # performGEVD=True,
         # bypassUpdates=True  # /!\
         # t_expAvg50p=2,
-        # t_expAvg50p=10,
-        t_expAvg50p=3,
+        t_expAvg50p=10,
+        # t_expAvg50p=3,
         # t_expAvg50p=1,
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

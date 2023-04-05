@@ -34,7 +34,6 @@ class AcousticScenarioParameters:
     baseSNR : int = 5                        # [dB] SNR between dry desired signals and dry noise
     # vvv VAD parameters vvv
     VADenergyDecrease_dB : float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
-    VADenergyFactor = 10 ** (VADenergyDecrease_dB / 10)     # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
     VADwinLength : float = 40e-3     # [s] VAD window length
     #
     nNodes : int = 0        # number of nodes in scenario
@@ -130,8 +129,8 @@ class WASNparameters(AcousticScenarioParameters):
                 (1 + np.array(self.SROperNode[:-1]) * 1e-6)
         if self.nNodes != len(self.nSensorPerNode):
             raise ValueError(f'The length of the list containing the numbers of sensor per node ({len(self.nSensorPerNode)}) does not match the number of nodes ({self.nNodes}).')
-
-
+        # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
+        self.VADenergyFactor = 10 ** (self.VADenergyDecrease_dB / 10)
 
 @dataclass
 class Node:
