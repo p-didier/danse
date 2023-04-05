@@ -393,7 +393,7 @@ class DANSEvariables(base.DANSEparameters):
         self.nLocalMic = [node.data.shape[-1] for node in wasn]
         self.numUpdatesRyy = np.zeros(nNodes, dtype=int)
         self.numUpdatesRnn = np.zeros(nNodes, dtype=int)
-        self.oVADframes = np.zeros(self.nIter)
+        self.oVADframes = [np.zeros(self.nIter) for _ in range(nNodes)]
         self.centrVADframes = np.full(self.nIter, fill_value=None)
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
@@ -692,8 +692,6 @@ class DANSEvariables(base.DANSEparameters):
             # If covariance matrices estimates are full-rank, update filters
             self.perform_update(k)
             # ^^^ depends on outcome of `check_covariance_matrices()`.
-            # if self.tStartForMetrics[k] is None:
-            self.evaluate_tstart_for_metrics_computation(k, tCurr)
         else:
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
@@ -740,9 +738,9 @@ class DANSEvariables(base.DANSEparameters):
             # set the frame-wise VAD to 1.
             return sum(VADinFrame == 0) <= len(VADinFrame) // 2
             
-        self.oVADframes[self.i[k]] = _compute_vad_curr_nodes(k)
+        self.oVADframes[k][self.i[k]] = _compute_vad_curr_nodes(k)
         # Count number of spatial covariance matrices updates
-        if self.oVADframes[self.i[k]]:
+        if self.oVADframes[k][self.i[k]]:
             self.numUpdatesRyy[k] += 1
         else:
             self.numUpdatesRnn[k] += 1
@@ -752,37 +750,6 @@ class DANSEvariables(base.DANSEparameters):
             self.centrVADframes[self.i[k]] = np.array([
                 _compute_vad_curr_nodes(k) for k in range(self.nNodes)
             ]).all()
-            
-    def evaluate_tstart_for_metrics_computation(self, k, t):
-        """
-        Evaluates the start instants for metrics computations.
-
-        Parameters
-        ----------
-        k : int
-            Node index.
-        t : float
-            Current time instant [s].
-        """ 
-        
-        def _eval(s, nUps):
-            """Helper function."""
-            tstart = None
-            if nUps >= s.minFiltUpdatesForMetrics:
-                if s.compensateSROs and s.estimateSROs == 'CohDrift':
-                    # Make sure SRO compensation has started
-                    if nUps > s.cohDrift.startAfterNups:
-                        tstart = t
-                else:
-                    tstart = t
-            return tstart
-        
-        if self.tStartForMetrics[k] is None:
-            self.tStartForMetrics[k] = _eval(self, self.nInternalFilterUps[k])
-        if self.computeCentralised and self.tStartForMetricsCentr[k] is None:
-            self.tStartForMetricsCentr[k] = _eval(self, self.nCentrFilterUps[k])
-        if self.computeLocal and self.tStartForMetricsLocal[k] is None:
-            self.tStartForMetricsLocal[k] = _eval(self, self.nLocalFilterUps[k])
 
 
     def check_covariance_matrices(self, k):
@@ -1322,7 +1289,7 @@ class DANSEvariables(base.DANSEparameters):
             self.Ryytilde[k],
             self.Rnntilde[k],
             yyH,
-            vad=self.oVADframes[self.i[k]]
+            vad=self.oVADframes[k][self.i[k]]
         )  # update
 
         self.yyH[k][self.i[k], :, :, :] = yyH  # saving for SRO estimation...
@@ -1335,7 +1302,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.Ryylocal[k],
                 self.Rnnlocal[k],
                 yyH,
-                vad=self.oVADframes[self.i[k]]
+                vad=self.oVADframes[k][self.i[k]]
             )  # update local
         if self.computeCentralised:
             y = self.yHatCentr[k][:, self.i[k], :]  # concise renaming
@@ -2014,8 +1981,6 @@ class TIDANSEvariables(DANSEvariables):
         if not bypassUpdateEventMat:
             self.perform_update(k)
             # ^^^ depends on outcome of `check_covariance_matrices()`.
-            # if self.tStartForMetrics[k] is None:
-            self.evaluate_tstart_for_metrics_computation(k, tCurr)
         else:
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\

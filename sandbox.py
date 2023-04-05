@@ -22,8 +22,8 @@ p = TestParameters(
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
-            topologyType='fully-connected',
-            # topologyType='user-defined',
+            # topologyType='fully-connected',
+            topologyType='user-defined',
             commDistance=4.,  # [m]
             seed=SEED,
             # plotTopo=True,
@@ -45,7 +45,7 @@ p = TestParameters(
             #     [1, 1],  # Node 2
             # ])
         ),
-        sigDur=45,
+        sigDur=10,
         rd=np.array([5, 5, 5]),
         fs=16000,
         t60=0.0,
@@ -90,8 +90,8 @@ p = TestParameters(
     danseParams=DANSEparameters(
         DFTsize=1024,
         WOLAovlp=.5,  # [*100 -> %]
-        nodeUpdating='seq',
-        # nodeUpdating='asy',
+        # nodeUpdating='seq',
+        nodeUpdating='asy',
         # broadcastType='fewSamples',
         broadcastType='wholeChunk',
         #
@@ -118,8 +118,9 @@ p = TestParameters(
         performGEVD=False,
         # performGEVD=True,
         # bypassUpdates=True  # /!\
-        t_expAvg50p=5,
-        # t_expAvg50p=30,
+        # t_expAvg50p=2,
+        # t_expAvg50p=10,
+        t_expAvg50p=3,
         # t_expAvg50p=1,
         timeBtwExternalFiltUpdates=1,
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -150,7 +151,8 @@ def main(p: TestParameters):
         vad,
         wetSpeeches,
         wetNoises,
-        p.wasnParams
+        p.wasnParams,
+        p.danseParams.minNoSpeechDurEndUterrance
     )
 
     # pp.plot_asc(
@@ -234,8 +236,7 @@ def postprocess(
 
     if runit:
         # Export convergence plot
-        # out.plot_convergence(wasn)
-        # out.plot_convergence(p.exportFolder)
+        out.plot_convergence(p.exportFolder)
 
         # Export .wav files
         out.export_sounds(wasnObj.wasn, p.exportFolder)

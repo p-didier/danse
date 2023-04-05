@@ -91,52 +91,14 @@ class DANSEoutputs(DANSEparameters):
         if self.computeCentralised:
             self.filtersCentr = dv.wCentr
         # Other useful things
-        # self.tStartForMetrics = dv.tStartForMetrics
-        # self.tStartForMetricsCentr = dv.tStartForMetricsCentr
-        # self.tStartForMetricsLocal = dv.tStartForMetricsLocal
         self.beta = dv.expAvgBeta
+        self.vadFrames = dv.oVADframes
 
         # Show initialised status
         self.initialised = True
 
         return self
-    
-    # def get_filtered(self, y, w):
-    #     """
-    #     Filters speech- or noise-only signals.
 
-    #     Parameters
-    #     ----------
-    #     y : [K x 1] list of [Nf x Nt x M[k]] np.ndarray[complex]
-    #         Signals available at node `k` in the STFT domain.
-    #         `K`: number of nodes.
-    #         `Nf`: number of frequency bins.
-    #         `Nt`: number of time frames.
-    #         `M[k]`: number of available channels at node `k` (`M[k]` >= `C[k]`).
-    #     w : [K x 1] list of [Nf x Nt x M[k]] np.ndarray[complex]
-    #         Corresponding filters in the STFT domain.
-    #     """
-
-    #     # TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: TODO: 
-    #     # Compute desired signal chunk estimate using WOLA
-    #     for k in range(len(y)):
-    #         for ii in range(y[k].shape[1]):
-    #             dhatCurr = np.einsum(
-    #                 'ij,ij->i',
-    #                 w[k][:, ii, :].conj(),
-    #                 y[k][:, ii, :]
-    #             )
-    #             # Transform back to time domain (WOLA processing)
-    #             dChunCurr = self.normFactWOLA * self.winWOLAsynthesis *\
-    #                 back_to_time_domain(dhatCurr, len(self.winWOLAsynthesis))
-    #             # Overlap and add construction of output time-domain signal
-    #             if len(dChunk) < len(self.winWOLAsynthesis):
-    #                 dChunk += np.real_if_close(dChunCurr[-len(dChunk):])
-    #             else:
-    #                 dChunk += np.real_if_close(dChunCurr)
-    #             stop = 1
-
-    
     def check_init(self):
         """Check if object is correctly initialised."""
         if not self.initialised:
@@ -200,6 +162,7 @@ class DANSEoutputs(DANSEparameters):
             self.nNodes
         ), dtype=complex)
         for k in range(self.nNodes):
+            np.seterr(divide = 'ignore')  # ignore division by zero
             diffFiltersReal = 20 * np.log10(np.mean(np.abs(
                 np.real(self.filters[k][:, :, self.referenceSensor].T) - \
                 np.real(self.filtersCentr[k][:, :, self.referenceSensor].T)
@@ -208,11 +171,32 @@ class DANSEoutputs(DANSEparameters):
                 np.imag(self.filters[k][:, :, self.referenceSensor].T) - \
                 np.imag(self.filtersCentr[k][:, :, self.referenceSensor].T)
             ), axis=1))
+            np.seterr(divide = 'warn')  # reset to default
 
-            fig, axes = plt.subplots(1,1)
-            fig.set_size_inches(5.5, 3.5)
-            axes.plot(diffFiltersReal, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Re(\\tilde{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i]) - Re(\\hat{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
-            axes.plot(diffFiltersImag, label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Im(\\tilde{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i]) - Im(\\hat{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$')
+            fig, axes = plt.subplots(1, 1)
+            fig.set_size_inches(5.5 * 1.5, 3.5 * 1.5)
+            #
+            # Plot the VAD itself
+            scaling = 0.5 * np.amax(np.concatenate(
+                (diffFiltersReal, diffFiltersImag)
+            ))  # scaling for VAD plot
+            axes.plot(
+                self.vadFrames[k] * scaling,
+                color='0.5',
+                label='VAD',
+                zorder=0
+            )
+            #
+            axes.plot(
+                diffFiltersReal,
+                label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Re(\\tilde{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i]) - Re(\\hat{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$',
+                zorder=1
+            )
+            axes.plot(
+                diffFiltersImag,
+                label=f'$20\\log_{{10}}(E_{{\\nu}}\\{{|Im(\\tilde{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i]) - Im(\\hat{{w}}_{{{k+1}{k+1},{self.referenceSensor+1}}}[\\nu,i])|\\}})$',
+                zorder=2
+            )
             #
             axes.set_title(f'DANSE convergence towards centr. MWF estimate: node {k+1}')
             axes.set_xlim([0, len(diffFiltersReal)])
@@ -230,9 +214,22 @@ class DANSEoutputs(DANSEparameters):
                     , 2
                 )
             )
+            # Instantiate a second axes that shares the same x-axis for the
+            # VAD plot (y axis on the right).
+            axes3 = axes.twinx()
+            axes3.set_ylim(axes.get_ylim())
+            axes3.set_yticks([0, scaling])
+            axes3.set_yticklabels(
+                ['Speech\nAbsent', 'Speech\nPresent'],
+                rotation=90,
+                va='center'
+            )
+            #
             axes.set_xlabel('Time [s]', loc='left')
+            axes.set_ylabel('[dB]')
             axes.legend()
             axes.grid()
+            axes.set_axisbelow(True)  # grid below the plot
             #
             plt.tight_layout()
             plt.show(block=False)

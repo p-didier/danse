@@ -33,7 +33,7 @@ class AcousticScenarioParameters:
     noiseSignalFile : list[str] = field(default_factory=list)    # list of paths to noise signal file(s)
     baseSNR : int = 5                        # [dB] SNR between dry desired signals and dry noise
     # vvv VAD parameters vvv
-    VADenergyDecrease_dB : float = 40   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
+    VADenergyDecrease_dB : float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
     VADenergyFactor = 10 ** (VADenergyDecrease_dB / 10)     # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
     VADwinLength : float = 40e-3     # [s] VAD window length
     #
