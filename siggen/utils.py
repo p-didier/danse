@@ -52,24 +52,13 @@ def build_room(p: classes.WASNparameters):
         materials=pra.Material(e_absorption),
     )
 
-    for k in range(p.nNodes):
-        # Generate node and sensors
-        r = np.random.uniform(size=(3,)) * (p.rd - 2 * p.minDistToWalls)\
-            + p.minDistToWalls # node centre coordinates
-        sensorsCoords = generate_array_pos(
-            r,
-            p.nSensorPerNode[k],
-            p.arrayGeometry,
-            p.interSensorDist
-        )
-        room.add_microphone_array(sensorsCoords.T)
-
-    # Add desired sources
+    # Desired number of samples
     desiredNumSamples = int(p.sigDur * p.fs)
-    desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
-    for ii in range(p.nDesiredSources):
-        # Load sound file
-        y, fsOriginal = librosa.load(p.desiredSignalFile[ii])
+
+    def _get_source_signal(file):
+        """Helper function to load and process source signal."""
+        # Load
+        y, fsOriginal = librosa.load(file)
         # Resample
         y = resampy.resample(y, fsOriginal, p.fs)
         # Adjust length
@@ -81,38 +70,169 @@ def build_room(p: classes.WASNparameters):
                 y = y[:desiredNumSamples]
         # Whiten
         y = (y - np.mean(y)) / np.std(y)  # whiten
-        desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
-        ssrc = pra.soundsource.SoundSource(
-            position=np.random.uniform(size=(3,)) *\
-                (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
-            signal=y
-        )
-        room.add_soundsource(ssrc)
+        return y
+    
+    if p.layoutType == 'random':
+        for k in range(p.nNodes):
+            # Generate node and sensors
+            r = np.random.uniform(size=(3,)) * (p.rd - 2 * p.minDistToWalls)\
+                + p.minDistToWalls # node centre coordinates
+            sensorsCoords = generate_array_pos(
+                r,
+                p.nSensorPerNode[k],
+                p.arrayGeometry,
+                p.interSensorDist
+            )
+            room.add_microphone_array(sensorsCoords.T)
 
-    # Add noise sources
-    noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
-    for ii in range(p.nNoiseSources):
-        # Load sound file
-        y, fsOriginal = librosa.load(p.noiseSignalFile[ii])
-        # Resample
-        y = resampy.resample(y, fsOriginal, p.fs)
-        # Adjust length
-        if len(y) > desiredNumSamples:
-            y = y[:desiredNumSamples]
-        elif len(y) < desiredNumSamples:
-            while len(y) < desiredNumSamples:
-                y = np.concatenate((y, y))  # loop
-                y = y[:desiredNumSamples]
-        # Whiten and apply gain
-        y = (y - np.mean(y)) / np.std(y)    # whiten
-        y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
-        noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
-        ssrc = pra.soundsource.SoundSource(
-            position=np.random.uniform(size=(3,)) *\
-                (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
-            signal=y
+        # Add desired sources
+        desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
+        for ii in range(p.nDesiredSources):
+            # Load sound file
+            y = _get_source_signal(p.desiredSignalFile[ii])
+            desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
+            ssrc = pra.soundsource.SoundSource(
+                position=np.random.uniform(size=(3,)) *\
+                    (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
+                signal=desiredSignalsRaw[:, ii]
+            )
+            room.add_soundsource(ssrc)
+
+        # Add noise sources
+        noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
+        for ii in range(p.nNoiseSources):
+            # Load sound file
+            y = _get_source_signal(p.noiseSignalFile[ii])
+            y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
+            noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
+            ssrc = pra.soundsource.SoundSource(
+                position=np.random.uniform(size=(3,)) *\
+                    (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
+                signal=noiseSignalsRaw[:, ii]
+            )
+            room.add_soundsource(ssrc)
+        #
+    elif p.layoutType == 'random_spinning_top':  # Spinning top layout
+        # Generate a random line for the sources
+        azimuth = np.random.uniform(0, np.pi / 2)  # azimuth angle of the line
+        elevation = np.random.uniform(0, np.pi / 2)  # elevation angle of the line
+        maxR = np.sqrt(np.sum(p.rd ** 2))  # room diagonal length
+
+        def _random_point_on_line(az, el):
+            """Helper function to generate a random point on a line."""
+            r = np.random.uniform(p.minDistToWalls, maxR - p.minDistToWalls)
+            x = r * np.cos(az) * np.sin(el)
+            y = r * np.sin(az) * np.sin(el)
+            z = r * np.cos(el)
+            return x, y, z
+
+        # Generate speech sources along the line
+        desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
+        for ii in range(p.nDesiredSources):
+            # Generate random point on the line
+            x, y, z = _random_point_on_line(azimuth, elevation)
+            # Add source
+            sourceSig = _get_source_signal(p.desiredSignalFile[ii])
+            desiredSignalsRaw[:, ii] = sourceSig  # save (for VAD computation)
+            ssrc = pra.soundsource.SoundSource(
+                position=np.array([x, y, z]), # coordinates
+                signal=desiredSignalsRaw[:, ii]
+            )
+            room.add_soundsource(ssrc)
+
+        # Generate noise sources along the line
+        noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
+        for ii in range(p.nNoiseSources):
+            # Generate random point on the line
+            x, y, z = _random_point_on_line(azimuth, elevation)
+            # Add source
+            sourceSig = _get_source_signal(p.noiseSignalFile[ii])
+            sourceSig *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
+            noiseSignalsRaw[:, ii] = sourceSig  # save (for use in metrics computation)
+            ssrc = pra.soundsource.SoundSource(
+                position=np.array([x, y, z]), # coordinates
+                signal=noiseSignalsRaw[:, ii]
+            )
+            room.add_soundsource(ssrc)
+        
+        # Generate random circle center
+        cx, cy, cz = _random_point_on_line(azimuth, elevation)
+        # Compute maximal circle radius based on room dimension
+        refDistCenterCircle = np.sqrt(cx**2 + cy**2 + cz**2)
+        if refDistCenterCircle < maxR / 2:
+            circRmax = (refDistCenterCircle - p.minDistToWalls) / 2
+        else:
+            circRmax = (maxR - refDistCenterCircle - p.minDistToWalls) / 2
+        # Generate random circle radius
+        circR = np.random.uniform(
+            2 * p.interSensorDist * np.amax(p.nSensorPerNode),
+            circRmax
         )
-        room.add_soundsource(ssrc)
+
+        micArray = np.zeros((np.sum(p.nSensorPerNode), 3))
+        for k in range(p.nNodes):
+            #  Generate node and sensors on the perimeter of the circle
+            r = np.random.uniform(0, 2 * np.pi)
+            x = cx + circR * np.cos(r)
+            y = cy + circR * np.sin(r)
+            z = cz
+            idxSensor = int(np.sum(p.nSensorPerNode[:k]))
+            micArray[idxSensor:(idxSensor+p.nSensorPerNode[k]), :] = generate_array_pos(
+                np.array([x, y, z]),
+                p.nSensorPerNode[k],
+                p.arrayGeometry,
+                p.interSensorDist
+            )
+        # Rotate coordinates so that the circle is perpendicular to the source line
+        micArray = rotate_array(micArray, azimuth, elevation)
+        
+        room.add_microphone_array(micArray.T)
+
+    if 1:
+        # 3D plot
+        fig = plt.figure()
+        fig.set_size_inches(8.5, 3.5)
+        ax = fig.add_subplot(projection='3d')
+        ax.scatter(
+            room.mic_array.R[0, :],
+            room.mic_array.R[1, :],
+            room.mic_array.R[2, :],
+            color='red'
+        )
+        ax.scatter(
+            room.sources[0].position[0],
+            room.sources[0].position[1],
+            room.sources[0].position[2],
+            color='green'
+        )
+        ax.scatter(
+            room.sources[1].position[0],
+            room.sources[1].position[1],
+            room.sources[1].position[2],
+            color='blue'
+        )
+        # Plot sources line
+        if p.layoutType == 'random_spinning_top':
+            ax.plot(
+                [room.sources[0].position[0], room.sources[1].position[0]],
+                [room.sources[0].position[1], room.sources[1].position[1]],
+                [room.sources[0].position[2], room.sources[1].position[2]],
+                color='black'
+            )
+        # Plot circle center
+        ax.scatter(
+            cx, cy, cz,
+            color='blue'
+        )
+        
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_zlabel('z')
+        ax.set_xlim([0, p.rd[0]])
+        ax.set_ylim([0, p.rd[1]])
+        ax.set_zlim([0, p.rd[2]])
+        ax.set_title('Room layout')
+        plt.show()
 
     room.compute_rir()
     room.simulate()
@@ -748,3 +868,30 @@ def plot_topology(connectivityMatrix, nodeCoords, rd):
     plt.tight_layout()	
     
     return fig
+
+
+def rotate_array(array, azimuth, elevation):
+    """Rotate an array of coordinates around the z-axis by azimuth and
+    around the x-axis by elevation.  FIXME: This is not working properly.
+    """
+    # Compute array center
+    arrayCenterOriginal = np.mean(array, axis=0)
+    array -= arrayCenterOriginal
+    # Rotate around z-axis
+    array = np.dot(array, np.array([
+        [np.cos(azimuth), -np.sin(azimuth), 0],
+        [np.sin(azimuth), np.cos(azimuth), 0],
+        [0, 0, 1]
+    ]))
+    # Rotate around x-axis
+    array = np.dot(array, np.array([
+        [1, 0, 0],
+        [0, np.cos(elevation), -np.sin(elevation)],
+        [0, np.sin(elevation), np.cos(elevation)]
+    ]))
+    # Compute array center
+    arrayCenter = np.mean(array, axis=0)
+    # Recentre array
+    array = array - arrayCenter + arrayCenterOriginal
+    return array
+
