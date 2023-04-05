@@ -16,10 +16,10 @@ SEED = 12347
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 p = TestParameters(
-    exportFolder = f'{Path(__file__).parent}/out/20230404_tests/test',
+    exportFolder = f'{Path(__file__).parent}/out/20230405_tests/sros_sNodes/noSROs',
     seed=SEED,
     wasnParams=WASNparameters(
-        VADenergyDecrease_dB=40,
+        VADenergyDecrease_dB=35,  # [dB]
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
             # topologyType='ad-hoc',
@@ -84,7 +84,7 @@ p = TestParameters(
         # SROperNode=np.array([0, 50, -50, 100]),
         # SROperNode=np.array([0, 20, -20, 40]),
         # SROperNode=np.array([0, 0, 0, 0]),
-        # SROperNode=np.array([0, 100, 200]),
+        # SROperNode=np.array([0, 50, 100]),
         # SROperNode=np.array([0, 0]),
         SROperNode=np.array([0]),
     ),
@@ -156,13 +156,13 @@ def main(p: TestParameters):
         p.danseParams.minNoSpeechDurEndUterrance
     )
 
-    # pp.plot_asc(
-    #     room,
-    #     p.wasnParams,
-    #     p.exportFolder,
-    #     wasnObj.adjacencyMatrix,
-    #     [node.nodeType for node in wasnObj.wasn]
-    # )
+    pp.plot_asc(
+        room,
+        p.wasnParams,
+        p.exportFolder,
+        wasnObj.adjacencyMatrix,
+        [node.nodeType for node in wasnObj.wasn]
+    )
     # DANSE
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
 

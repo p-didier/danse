@@ -196,7 +196,7 @@ class DANSEparameters(Hyperparameters):
         #   with e = `filterInitFixedValue`.
     filterInitFixedValue: float = 0.
     # ---- Covariance matrices initialization parameters
-    covMatInitType: str = 'eye_and_random'
+    covMatInitType: str = 'fully_random'
         # type of complex covariance filter initialization:
         # -- 'fully_random' == all entries of the covariance matrix are random (but the same for each frequency)
         # -- 'eye_and_random' == identity matrix to which is added an all-random matrix

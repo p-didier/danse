@@ -18,7 +18,9 @@ SEED = 12347
 SIGNALS_PATH = f'{Path(__file__).parent}/testing/sigs'
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting
 SKIP_EXISTING_FOLDERS = True
-IMPOSED_YLIM_SNR = 22  # if None, use auto ylim
+IMPOSED_YLIM_SNR = 30  # if None, use auto ylim
+#
+OUT_FOLDER = '20230405_tests/battery/Mk3'  # export path relative to `danse/out`
 
 @dataclass
 class GlobalTestParameters:
@@ -30,25 +32,27 @@ class GlobalTestParameters:
 
 params = GlobalTestParameters(
     sros=np.array([
-        [0],
-        # [50, 100],
-        # [200, 400]
+        (np.array([0, 0]), 'sync'),
+        (np.array([20, 40]), 'sSROs'),
+        (np.array([50, 100]), 'mSROs'),
+        (np.array([200, 400]), 'lSROs')
     ]),
     nodeUpdatings=np.array([
-        'seq',
+        # 'seq',
         'asy'
     ]),
     RTs=np.array([
-        0.0,
-        # 0.2
+        # 0.0,
+        0.2
     ]),
     nSensors=[
-        [1, 1, 1],
-        [1, 2, 3]
+        # [1, 1, 1],
+        # [1, 2, 3],
+        [3, 3, 3],
     ],
-    gevdBool=[True, False],
+    # gevdBool=[True, False],
     # gevdBool=[True],
-    # gevdBool=[False],
+    gevdBool=[False],
 )
 
 def main():
@@ -73,15 +77,8 @@ def run_test_batch(params: GlobalTestParameters):
     """
     
     for idxSROs in range(len(params.sros)):
-        currSROs = np.concatenate((np.array([0.]), params.sros[idxSROs, :]))
-        if (currSROs == 0).all():
-            strSROs = 'sync'
-        elif idxSROs == 0:
-            strSROs = 'sSROs'
-        elif idxSROs == 1:
-            strSROs = 'mSROs'
-        elif idxSROs == 2:
-            strSROs = 'lSROs'
+        currSROs = np.concatenate((np.array([0.]), params.sros[idxSROs][0]))
+        strSROs = params.sros[idxSROs][1]
         for idxNUs in range(len(params.nodeUpdatings)):
             currNodeUpdating = params.nodeUpdatings[idxNUs]
             for idxNSs in range(len(params.nSensors)):
@@ -101,7 +98,7 @@ def run_test_batch(params: GlobalTestParameters):
 
                         folderName = f'{strSROs}_{currNodeUpdating}_{strSensors}_{int(currRT * 1000)}msRT{strGEVD}'
                         print(f'CURRENT FOLDER: {folderName}')
-                        fullExportPath = f'{Path(__file__).parent}/out/20230404_tests/battery/{folderName}',
+                        fullExportPath = f'{Path(__file__).parent}/out/{OUT_FOLDER}/{folderName}',
                         fullExportPath = fullExportPath[0]
                         if Path(fullExportPath).is_dir() and SKIP_EXISTING_FOLDERS:
                             print(f'The folder exists already --> skipping iteration (SKIP_EXISTING_FOLDERS==True)')
@@ -113,6 +110,7 @@ def run_test_batch(params: GlobalTestParameters):
                             seed=SEED,
                             snrYlimMax=IMPOSED_YLIM_SNR,  # =========================<<<<<
                             wasnParams=WASNparameters(
+                                VADenergyDecrease_dB=35,  # [dB]
                                 topologyParams=TopologyParameters(
                                     topologyType='user-defined',
                                     commDistance=4.,  # [m]

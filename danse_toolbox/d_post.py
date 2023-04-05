@@ -232,7 +232,7 @@ class DANSEoutputs(DANSEparameters):
             axes.set_axisbelow(True)  # grid below the plot
             #
             plt.tight_layout()
-            plt.show(block=False)
+            # plt.show(block=False)
             # Export
             fig.savefig(f'{exportFolder}/converg_node{k+1}.png')
             fig.savefig(f'{exportFolder}/converg_node{k+1}.pdf')
