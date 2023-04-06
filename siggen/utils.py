@@ -170,9 +170,11 @@ def build_room(p: classes.WASNparameters):
         )
 
         micArray = np.zeros((np.sum(p.nSensorPerNode), 3))
+        # Generate array centers equally spaced on the circle
+        angleArrayCenters = np.arange(0, 2 * np.pi, 2 * np.pi / p.nNodes)
         for k in range(p.nNodes):
-            #  Generate node and sensors on the perimeter of the circle
-            r = np.random.uniform(0, 2 * np.pi)
+            # Generate node and sensors on the perimeter of the circle
+            r = angleArrayCenters[k]
             x = cx + circR * np.cos(r)
             y = cy + circR * np.sin(r)
             z = cz
@@ -184,55 +186,15 @@ def build_room(p: classes.WASNparameters):
                 p.interSensorDist
             )
         # Rotate coordinates so that the circle is perpendicular to the source line
-        micArray = rotate_array(micArray, azimuth, elevation)
+        micArray = rotate_array_yx(
+            micArray,
+            targetVector=np.array([cx, cy, cz])
+        )
         
         room.add_microphone_array(micArray.T)
 
-    if 1:
-        # 3D plot
-        fig = plt.figure()
-        fig.set_size_inches(8.5, 3.5)
-        ax = fig.add_subplot(projection='3d')
-        ax.scatter(
-            room.mic_array.R[0, :],
-            room.mic_array.R[1, :],
-            room.mic_array.R[2, :],
-            color='red'
-        )
-        ax.scatter(
-            room.sources[0].position[0],
-            room.sources[0].position[1],
-            room.sources[0].position[2],
-            color='green'
-        )
-        ax.scatter(
-            room.sources[1].position[0],
-            room.sources[1].position[1],
-            room.sources[1].position[2],
-            color='blue'
-        )
-        # Plot sources line
-        if p.layoutType == 'random_spinning_top':
-            ax.plot(
-                [room.sources[0].position[0], room.sources[1].position[0]],
-                [room.sources[0].position[1], room.sources[1].position[1]],
-                [room.sources[0].position[2], room.sources[1].position[2]],
-                color='black'
-            )
-        # Plot circle center
-        ax.scatter(
-            cx, cy, cz,
-            color='blue'
-        )
-        
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
-        ax.set_xlim([0, p.rd[0]])
-        ax.set_ylim([0, p.rd[1]])
-        ax.set_zlim([0, p.rd[2]])
-        ax.set_title('Room layout')
-        plt.show()
+    if 1:  # debug
+        plot_asc_3d(room, p, cx, cy, cz)
 
     room.compute_rir()
     room.simulate()
@@ -266,6 +228,53 @@ def build_room(p: classes.WASNparameters):
     )
 
     return room, vad, wetSpeeches, wetNoises
+
+def plot_asc_3d(room, p, cx, cy, cz):
+    """Plot room, nodes, and sources in 3D."""
+    # 3D plot
+    fig = plt.figure()
+    fig.set_size_inches(3.5, 3.5)
+    ax = fig.add_subplot(projection='3d')
+    ax.scatter(
+        room.mic_array.R[0, :],
+        room.mic_array.R[1, :],
+        room.mic_array.R[2, :],
+        color='red'
+    )
+    ax.scatter(
+        room.sources[0].position[0],
+        room.sources[0].position[1],
+        room.sources[0].position[2],
+        color='green'
+    )
+    ax.scatter(
+        room.sources[1].position[0],
+        room.sources[1].position[1],
+        room.sources[1].position[2],
+        color='blue'
+    )
+    # Plot sources line
+    if p.layoutType == 'random_spinning_top':
+        ax.plot(
+            [room.sources[0].position[0], room.sources[1].position[0]],
+            [room.sources[0].position[1], room.sources[1].position[1]],
+            [room.sources[0].position[2], room.sources[1].position[2]],
+            color='black'
+        )
+    # Plot circle center
+    ax.scatter(
+        cx, cy, cz,
+        color='yellow'
+    )
+    
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    ax.set_xlim([0, p.rd[0]])
+    ax.set_ylim([0, p.rd[1]])
+    ax.set_zlim([0, p.rd[2]])
+    ax.set_title('Room layout')
+    plt.show()
 
 
 def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
@@ -870,13 +879,14 @@ def plot_topology(connectivityMatrix, nodeCoords, rd):
     return fig
 
 
-def rotate_array(array, azimuth, elevation):
+def rotate_array(array, azimuth, elevation, arrayCenter=None):
     """Rotate an array of coordinates around the z-axis by azimuth and
-    around the x-axis by elevation.  FIXME: This is not working properly.
-    """
-    # Compute array center
-    arrayCenterOriginal = np.mean(array, axis=0)
-    array -= arrayCenterOriginal
+    around the x-axis by elevation."""
+    if arrayCenter is None:
+        # Compute array center
+        arrayCenter = np.mean(array, axis=0)
+    # Reset array center
+    array = array - arrayCenter
     # Rotate around z-axis
     array = np.dot(array, np.array([
         [np.cos(azimuth), -np.sin(azimuth), 0],
@@ -889,9 +899,82 @@ def rotate_array(array, azimuth, elevation):
         [0, np.cos(elevation), -np.sin(elevation)],
         [0, np.sin(elevation), np.cos(elevation)]
     ]))
-    # Compute array center
-    arrayCenter = np.mean(array, axis=0)
     # Recentre array
-    array = array - arrayCenter + arrayCenterOriginal
+    array = array + arrayCenter
     return array
 
+
+# def rotate_array_yx(array, arrayCenter=None):
+#     """Rotate an array of coordinates around the y-axis by azimuth and
+#     around the x-axis by elevation.
+#     Inspired by https://stackoverflow.com/a/9423864.
+#     """
+#     if arrayCenter is None:
+#         # Compute array center
+#         arrayCenter = np.mean(array, axis=0)
+#     # Reset array center
+#     array = array - arrayCenter
+    
+#     # Compute rotation angle
+#     m = np.array([0, 0, 1])  # vector normal to my current plane
+#     n = arrayCenter  # vector normal to my target plane
+#     angle = np.dot(m, n) / (np.linalg.norm(m) * np.linalg.norm(n))
+#     # Compute rotation axis
+#     axis = np.cross(m, n) / np.linalg.norm(np.cross(m, n))
+
+#     # Compute rotation matrix
+#     rotMat = np.array([
+#         [
+#             angle + axis[0]**2 * (1 - angle),
+#             axis[0] * axis[1] * (1 - angle) - axis[2] * np.sqrt(1 - angle**2),
+#             axis[0] * axis[2] * (1 - angle) + axis[1] * np.sqrt(1 - angle**2)
+#         ],
+#         [
+#             axis[1] * axis[0] * (1 - angle) + axis[2] * np.sqrt(1 - angle**2),
+#             angle + axis[1]**2 * (1 - angle),
+#             axis[1] * axis[2] * (1 - angle) - axis[0] * np.sqrt(1 - angle**2)
+#         ],
+#         [
+#             axis[2] * axis[0] * (1 - angle) - axis[1] * np.sqrt(1 - angle**2),
+#             axis[2] * axis[1] * (1 - angle) + axis[0] * np.sqrt(1 - angle**2),
+#             angle + axis[2]**2 * (1 - angle)
+#         ]
+#     ])
+
+#     # Apply rotation matrix
+#     array = np.dot(array, rotMat)
+
+#     # Recentre array
+#     array = array + arrayCenter
+#     return array
+
+def rotate_array_yx(array, targetVector=None):
+    """
+    Inspired by https://math.stackexchange.com/a/476311.
+    """
+    if targetVector is None:
+        # Compute array center
+        targetVector = np.mean(array, axis=0)
+    # Reset array center
+    array = array - targetVector
+    
+    # Compute rotation matrix
+    a = np.array([0, 0, 1])  # vector normal to my current plane
+    b = targetVector / np.linalg.norm(targetVector)  # vector normal to my target plane
+    v = np.cross(a, b)
+    s = np.linalg.norm(v)
+    c = np.dot(a, b)
+    identityMat = np.eye(3)
+    vx = np.array([
+        [0, -v[2], v[1]],
+        [v[2], 0, -v[0]],
+        [-v[1], v[0], 0]
+    ])
+    rotMat = identityMat + vx + np.dot(vx, vx) * (1 - c) / s**2
+
+    # Apply rotation matrix
+    array = np.dot(rotMat, array.T).T
+
+    # Recentre array
+    array = array + targetVector
+    return array
