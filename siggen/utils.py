@@ -879,78 +879,24 @@ def plot_topology(connectivityMatrix, nodeCoords, rd):
     return fig
 
 
-def rotate_array(array, azimuth, elevation, arrayCenter=None):
-    """Rotate an array of coordinates around the z-axis by azimuth and
-    around the x-axis by elevation."""
-    if arrayCenter is None:
-        # Compute array center
-        arrayCenter = np.mean(array, axis=0)
-    # Reset array center
-    array = array - arrayCenter
-    # Rotate around z-axis
-    array = np.dot(array, np.array([
-        [np.cos(azimuth), -np.sin(azimuth), 0],
-        [np.sin(azimuth), np.cos(azimuth), 0],
-        [0, 0, 1]
-    ]))
-    # Rotate around x-axis
-    array = np.dot(array, np.array([
-        [1, 0, 0],
-        [0, np.cos(elevation), -np.sin(elevation)],
-        [0, np.sin(elevation), np.cos(elevation)]
-    ]))
-    # Recentre array
-    array = array + arrayCenter
-    return array
-
-
-# def rotate_array_yx(array, arrayCenter=None):
-#     """Rotate an array of coordinates around the y-axis by azimuth and
-#     around the x-axis by elevation.
-#     Inspired by https://stackoverflow.com/a/9423864.
-#     """
-#     if arrayCenter is None:
-#         # Compute array center
-#         arrayCenter = np.mean(array, axis=0)
-#     # Reset array center
-#     array = array - arrayCenter
-    
-#     # Compute rotation angle
-#     m = np.array([0, 0, 1])  # vector normal to my current plane
-#     n = arrayCenter  # vector normal to my target plane
-#     angle = np.dot(m, n) / (np.linalg.norm(m) * np.linalg.norm(n))
-#     # Compute rotation axis
-#     axis = np.cross(m, n) / np.linalg.norm(np.cross(m, n))
-
-#     # Compute rotation matrix
-#     rotMat = np.array([
-#         [
-#             angle + axis[0]**2 * (1 - angle),
-#             axis[0] * axis[1] * (1 - angle) - axis[2] * np.sqrt(1 - angle**2),
-#             axis[0] * axis[2] * (1 - angle) + axis[1] * np.sqrt(1 - angle**2)
-#         ],
-#         [
-#             axis[1] * axis[0] * (1 - angle) + axis[2] * np.sqrt(1 - angle**2),
-#             angle + axis[1]**2 * (1 - angle),
-#             axis[1] * axis[2] * (1 - angle) - axis[0] * np.sqrt(1 - angle**2)
-#         ],
-#         [
-#             axis[2] * axis[0] * (1 - angle) - axis[1] * np.sqrt(1 - angle**2),
-#             axis[2] * axis[1] * (1 - angle) + axis[0] * np.sqrt(1 - angle**2),
-#             angle + axis[2]**2 * (1 - angle)
-#         ]
-#     ])
-
-#     # Apply rotation matrix
-#     array = np.dot(array, rotMat)
-
-#     # Recentre array
-#     array = array + arrayCenter
-#     return array
-
 def rotate_array_yx(array, targetVector=None):
     """
+    Rotates an array of 3-D coordinates so that its normal vector is aligned
+    with a target vector.
+
     Inspired by https://math.stackexchange.com/a/476311.
+
+    Parameters
+    ----------
+    array : [N x 3] np.ndarray (float)
+        Array of 3-D coordinates to be rotated.
+    targetVector : [3 x 1] np.ndarray (float)
+        Target vector to which the array's normal vector should be aligned.
+
+    Returns
+    -------
+    array : [N x 3] np.ndarray (float)
+        Rotated array of 3-D coordinates.
     """
     if targetVector is None:
         # Compute array center
