@@ -12,7 +12,7 @@ from danse_toolbox.d_utils import wipe_folder
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
 SIGNALS_PATH = f'{Path(__file__).parent}/testing/sigs'
-SEED = 12348
+SEED = 12347
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 p = TestParameters(
@@ -160,15 +160,15 @@ def main(p: TestParameters):
         p.danseParams.minNoSpeechDurEndUterrance
     )
 
-    fig = pp.plot_asc(
-        room,
-        p.wasnParams,
-        p.exportFolder,
-        wasnObj.adjacencyMatrix,
-        [node.nodeType for node in wasnObj.wasn],
-        plot3Dview=True
-    )
-    fig.savefig('out.png')
+    # fig = pp.plot_asc(
+    #     room,
+    #     p.wasnParams,
+    #     p.exportFolder,
+    #     wasnObj.adjacencyMatrix,
+    #     [node.nodeType for node in wasnObj.wasn],
+    #     plot3Dview=True
+    # )
+    # fig.savefig('out.png')
     # DANSE
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
 

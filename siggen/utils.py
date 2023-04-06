@@ -122,14 +122,12 @@ def build_room(p: classes.WASNparameters):
             maxR = np.sqrt(np.sum(p.rd ** 2))  # room diagonal length
         elif 'vert' in p.layoutType:
             # Set a vertical line for the sources
-            # azimuthLine = 0
-            # elevationLine = np.pi / 2
             azimuthLine = np.pi / 2
             elevationLine = 0
             maxR = p.rd[0]  # room width
 
         # Generate a random line offset with respect to the room floor
-        circRmin = p.interSensorDist * np.amax(p.nSensorPerNode)  # minimum nodes circle radius
+        circRmin = 2 * p.interSensorDist * np.amax(p.nSensorPerNode)  # minimum nodes circle radius
         xOffset = np.random.uniform(
             p.minDistToWalls + circRmin, p.rd[0] - circRmin - p.minDistToWalls
         )
@@ -274,7 +272,7 @@ def build_room(p: classes.WASNparameters):
         
         room.add_microphone_array(micArray.T)
 
-    if 1:  # debug
+    if 0:  # debug
         fig = plt.figure()
         fig.set_size_inches(3.5, 3.5)
         ax = fig.add_subplot(projection='3d')
