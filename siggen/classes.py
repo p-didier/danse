@@ -25,7 +25,10 @@ class AcousticScenarioParameters:
         #  - "random_spinning_top": random spinning top layout
         #       Description: the spinning top layout is a 3D layout where the
         #       nodes are arranged in a circle around the line along which
-        #       the source are placed.
+        #       the source are placed. In this case, the line's orientation
+        #       is random.
+        #  - "vert_spinning_top": vertical spinning top layout
+        #       Description: same as above, but with a vertical source line.
     #    
     referenceSensor: int = 0    # Index of the reference sensor at each node
     interSensorDist: float = 0.1   # distance separating microphones

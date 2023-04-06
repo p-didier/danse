@@ -113,14 +113,54 @@ def build_room(p: classes.WASNparameters):
             )
             room.add_soundsource(ssrc)
         #
-    elif p.layoutType == 'random_spinning_top':  # Spinning top layout
-        # Generate a random line for the sources
-        azimuthLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
-        elevationLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
-        maxR = np.sqrt(np.sum(p.rd ** 2))  # room diagonal length
+    elif 'spinning_top' in p.layoutType:  # Spinning top layout
 
-        def _random_point_on_line(az, el):
-            """Helper function to generate a random point on a line."""
+        if 'random' in p.layoutType:
+            # Generate a random line for the sources
+            azimuthLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
+            elevationLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
+            maxR = np.sqrt(np.sum(p.rd ** 2))  # room diagonal length
+        elif 'vert' in p.layoutType:
+            # Set a vertical line for the sources
+            # azimuthLine = 0
+            # elevationLine = np.pi / 2
+            azimuthLine = np.pi / 2
+            elevationLine = 0
+            maxR = p.rd[0]  # room width
+
+        # Generate a random line offset with respect to the room floor
+        circRmin = p.interSensorDist * np.amax(p.nSensorPerNode)  # minimum nodes circle radius
+        xOffset = np.random.uniform(
+            p.minDistToWalls + circRmin, p.rd[0] - circRmin - p.minDistToWalls
+        )
+        yOffset = np.random.uniform(
+            p.minDistToWalls + circRmin, p.rd[1] - circRmin - p.minDistToWalls
+        )
+
+        def _random_point_on_line(az, el, xOffset=0, yOffset=0):
+            """
+            Helper function to generate a random point on a line.
+            
+            Parameters
+            ----------
+            az : float
+                Azimuth angle of the line.
+            el : float
+                Elevation angle of the line.
+            xOffset : float, optional
+                Offset on the x axis.
+            yOffset : float, optional
+                Offset on the y axis.
+
+            Returns
+            -------
+            x : float
+                x coordinate of the point.
+            y : float
+                y coordinate of the point.
+            z : float
+                z coordinate of the point.
+            """
             # Ensure the points are in the room
             cond1, cond2, cond3 = True, True, True
             x, y, z = -1, -1, -1
@@ -131,6 +171,8 @@ def build_room(p: classes.WASNparameters):
                 )
                 x = r * np.cos(az) * np.sin(el)
                 y = r * np.sin(az) * np.sin(el)
+                x += xOffset
+                y += yOffset
                 z = r * np.cos(el)
                 # Update conditions
                 cond1 = x > p.rd[0] - p.minDistToWalls or x < p.minDistToWalls
@@ -142,7 +184,7 @@ def build_room(p: classes.WASNparameters):
         desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
         for ii in range(p.nDesiredSources):
             # Generate random point on the line
-            x, y, z = _random_point_on_line(azimuthLine, elevationLine)
+            x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
             # Add source
             sourceSig = _get_source_signal(p.desiredSignalFile[ii])
             desiredSignalsRaw[:, ii] = sourceSig  # save (for VAD computation)
@@ -156,7 +198,7 @@ def build_room(p: classes.WASNparameters):
         noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
         for ii in range(p.nNoiseSources):
             # Generate random point on the line
-            x, y, z = _random_point_on_line(azimuthLine, elevationLine)
+            x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
             # Add source
             sourceSig = _get_source_signal(p.noiseSignalFile[ii])
             sourceSig *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
@@ -171,21 +213,29 @@ def build_room(p: classes.WASNparameters):
         # Generate node and sensor positions
         validNodePos = False
         attemptsCount = 0
-        maxNumAttempts = 99
+        maxNumAttempts = 999  # <-- arbitrary... [PD06.04.2023]
         while not validNodePos:
             # Generate random circle center
-            cx, cy, cz = _random_point_on_line(azimuthLine, elevationLine)
+            cx, cy, cz = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
             # Compute maximal circle radius based on room dimension
-            refDistCenterCircle = np.sqrt(np.sum(np.array([cx, cy, cz]) ** 2))
+            if 'random' in p.layoutType:
+                refDistCenterCircle = np.sqrt(
+                    np.sum(np.array([cx, cy, cz]) ** 2)
+                )  # distance from circle center to room origin
+            elif 'vert' in p.layoutType:
+                refDistCenterCircle = np.sqrt(
+                    np.sum(np.array([cx, cy, 0]) ** 2)
+                )  # distance from circle center to room origin
+            
             if refDistCenterCircle < maxR / 2:
                 circRmax = (refDistCenterCircle - p.minDistToWalls) / 3  # <-- a little arbitrary... [PD06.04.2023]
             else:
                 circRmax = (maxR - refDistCenterCircle - p.minDistToWalls) / 3
             # Generate random circle radius
-            circR = np.random.uniform(
-                2 * p.interSensorDist * np.amax(p.nSensorPerNode),
-                circRmax
-            )
+            if circRmax < circRmin:
+                circR = circRmin
+            else:
+                circR = np.random.uniform(circRmin, circRmax)
 
             micArray = np.zeros((np.sum(p.nSensorPerNode), 3))
             # Generate array centers equally spaced on the circle
@@ -207,10 +257,11 @@ def build_room(p: classes.WASNparameters):
                 )
             # Rotate coordinates so that the circle is perpendicular
             # to the source line.
-            micArray = rotate_array_yx(
-                micArray,
-                targetVector=np.array([cx, cy, cz])
-            )
+            if 'random' in p.layoutType:
+                micArray = rotate_array_yx(
+                    micArray,
+                    targetVector=np.array([cx, cy, cz])
+                )
             # Check that all microphones are in the room
             if np.any(micArray > p.rd - p.minDistToWalls) or\
                 np.any(micArray < p.minDistToWalls):
@@ -223,7 +274,7 @@ def build_room(p: classes.WASNparameters):
         
         room.add_microphone_array(micArray.T)
 
-    if 0:  # debug
+    if 1:  # debug
         fig = plt.figure()
         fig.set_size_inches(3.5, 3.5)
         ax = fig.add_subplot(projection='3d')

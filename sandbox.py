@@ -12,14 +12,15 @@ from danse_toolbox.d_utils import wipe_folder
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
 SIGNALS_PATH = f'{Path(__file__).parent}/testing/sigs'
-SEED = 12349
+SEED = 12348
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 p = TestParameters(
     exportFolder = f'{Path(__file__).parent}/out/20230405_tests/sros_sNodes/noSROs',
     seed=SEED,
     wasnParams=WASNparameters(
-        layoutType='random_spinning_top',
+        # layoutType='random_spinning_top',
+        layoutType='vert_spinning_top',
         VADenergyDecrease_dB=35,  # [dB]
         # generateRandomWASNwithSeed=420,
         topologyParams=TopologyParameters(  # topology-related parameters
