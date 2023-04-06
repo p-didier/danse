@@ -17,6 +17,7 @@ import danse_toolbox.dataclass_methods as met
 from siggen.classes import Node, WASNparameters
 from danse_toolbox.d_base import DANSEparameters, back_to_time_domain, get_stft
 from danse_toolbox.d_classes import DANSEvariables
+from siggen.utils import plot_asc_3d
 
 @dataclass
 class ConvergenceData:
@@ -839,6 +840,7 @@ def plot_asc(
     usedAdjacencyMatrix=np.array([]),
     nodeTypes=[],
     originalAdjacencyMatrix=np.array([]),
+    plot3Dview=False,
     ):
     """
     Plots an acoustic scenario nicely.
@@ -858,6 +860,8 @@ def plot_asc(
     originalAdjacencyMatrix : [K x K] np.ndarray (int [or float]: 0 [0.] or 1 [1.])
         Adjacency matrix set in the original test parameters
         (e.g., before pruning to a tree topology).
+    plot3Dview : bool
+        Whether to plot a 3D view of the acoustic scenario.
     """
 
     def _plot_connections(sensorCoords):
@@ -903,9 +907,14 @@ def plot_asc(
             nodeRadius = copy.copy(curr)
 
     fig = plt.figure()
-    fig.set_size_inches(6.5, 3.5)
     #
-    ax = fig.add_subplot(1, 2, 1)
+    if plot3Dview:
+        nCols = 3
+        fig.set_size_inches(7.5, 2.5)
+    else:
+        fig.set_size_inches(6.5, 3.5)
+        nCols = 2
+    ax = fig.add_subplot(1, nCols, 1)
     plot_side_room(
         ax,
         p.rd[:2],
@@ -923,7 +932,7 @@ def plot_asc(
         _plot_connections(sensorCoords=asc.mic_array.R[:2, :])
     ax.set(xlabel='$x$ [m]', ylabel='$y$ [m]', title='Top view')
     #
-    ax = fig.add_subplot(1, 2, 2)
+    ax = fig.add_subplot(1, nCols, 2)
     plot_side_room(
         ax,
         p.rd[-2:],
@@ -940,6 +949,10 @@ def plot_asc(
         # Add topology lines
         _plot_connections(sensorCoords=asc.mic_array.R[-2:, :])
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
+    #
+    if plot3Dview:
+        ax = fig.add_subplot(1, nCols, 3, projection='3d')
+        plot_asc_3d(ax, asc, p)  # plot room in 3d
 
     plt.tight_layout()
 
@@ -1024,7 +1037,8 @@ def plot_side_room(
                 r[m,0],
                 r[m,1],
                 s=scatsize,
-                c=f'C{k}',
+                # c=f'C{k}',
+                c='black',
                 edgecolors='black',
                 marker='o'
             )
@@ -1036,7 +1050,8 @@ def plot_side_room(
         circ = plt.Circle(
             (np.mean(r[micsIdx,0]), np.mean(r[micsIdx,1])),
             radius * 2,
-            color=f'C{k}',
+            # color=f'C{k}',
+            color='black',
             fill=False
         )
         circHandles.append(circ)

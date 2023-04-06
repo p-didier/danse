@@ -114,23 +114,34 @@ def build_room(p: classes.WASNparameters):
         #
     elif p.layoutType == 'random_spinning_top':  # Spinning top layout
         # Generate a random line for the sources
-        azimuth = np.random.uniform(0, np.pi / 2)  # azimuth angle of the line
-        elevation = np.random.uniform(0, np.pi / 2)  # elevation angle of the line
+        azimuthLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
+        elevationLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
         maxR = np.sqrt(np.sum(p.rd ** 2))  # room diagonal length
 
         def _random_point_on_line(az, el):
             """Helper function to generate a random point on a line."""
-            r = np.random.uniform(p.minDistToWalls, maxR - p.minDistToWalls)
-            x = r * np.cos(az) * np.sin(el)
-            y = r * np.sin(az) * np.sin(el)
-            z = r * np.cos(el)
+            # Ensure the points are in the room
+            cond1, cond2, cond3 = True, True, True
+            x, y, z = -1, -1, -1
+            while cond1 or cond2 or cond3:
+                r = np.random.uniform(
+                    p.minDistToWalls,
+                    maxR - p.minDistToWalls
+                )
+                x = r * np.cos(az) * np.sin(el)
+                y = r * np.sin(az) * np.sin(el)
+                z = r * np.cos(el)
+                # Update conditions
+                cond1 = x > p.rd[0] - p.minDistToWalls or x < p.minDistToWalls
+                cond2 = y > p.rd[1] - p.minDistToWalls or y < p.minDistToWalls
+                cond3 = z > p.rd[2] - p.minDistToWalls or z < p.minDistToWalls
             return x, y, z
 
         # Generate speech sources along the line
         desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
         for ii in range(p.nDesiredSources):
             # Generate random point on the line
-            x, y, z = _random_point_on_line(azimuth, elevation)
+            x, y, z = _random_point_on_line(azimuthLine, elevationLine)
             # Add source
             sourceSig = _get_source_signal(p.desiredSignalFile[ii])
             desiredSignalsRaw[:, ii] = sourceSig  # save (for VAD computation)
@@ -144,11 +155,12 @@ def build_room(p: classes.WASNparameters):
         noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
         for ii in range(p.nNoiseSources):
             # Generate random point on the line
-            x, y, z = _random_point_on_line(azimuth, elevation)
+            x, y, z = _random_point_on_line(azimuthLine, elevationLine)
             # Add source
             sourceSig = _get_source_signal(p.noiseSignalFile[ii])
             sourceSig *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
-            noiseSignalsRaw[:, ii] = sourceSig  # save (for use in metrics computation)
+            noiseSignalsRaw[:, ii] = sourceSig
+            # ^^^ (for use in metrics computation)
             ssrc = pra.soundsource.SoundSource(
                 position=np.array([x, y, z]), # coordinates
                 signal=noiseSignalsRaw[:, ii]
@@ -156,45 +168,63 @@ def build_room(p: classes.WASNparameters):
             room.add_soundsource(ssrc)
         
         # Generate random circle center
-        cx, cy, cz = _random_point_on_line(azimuth, elevation)
-        # Compute maximal circle radius based on room dimension
-        refDistCenterCircle = np.sqrt(cx**2 + cy**2 + cz**2)
-        if refDistCenterCircle < maxR / 2:
-            circRmax = (refDistCenterCircle - p.minDistToWalls) / 2
-        else:
-            circRmax = (maxR - refDistCenterCircle - p.minDistToWalls) / 2
-        # Generate random circle radius
-        circR = np.random.uniform(
-            2 * p.interSensorDist * np.amax(p.nSensorPerNode),
-            circRmax
-        )
-
-        micArray = np.zeros((np.sum(p.nSensorPerNode), 3))
-        # Generate array centers equally spaced on the circle
-        angleArrayCenters = np.arange(0, 2 * np.pi, 2 * np.pi / p.nNodes)
-        for k in range(p.nNodes):
-            # Generate node and sensors on the perimeter of the circle
-            r = angleArrayCenters[k]
-            x = cx + circR * np.cos(r)
-            y = cy + circR * np.sin(r)
-            z = cz
-            idxSensor = int(np.sum(p.nSensorPerNode[:k]))
-            micArray[idxSensor:(idxSensor+p.nSensorPerNode[k]), :] = generate_array_pos(
-                np.array([x, y, z]),
-                p.nSensorPerNode[k],
-                p.arrayGeometry,
-                p.interSensorDist
+        validNodePos = False
+        attemptsCount = 0
+        maxNumAttempts = 99
+        while not validNodePos:
+            cx, cy, cz = _random_point_on_line(azimuthLine, elevationLine)
+            # Compute maximal circle radius based on room dimension
+            refDistCenterCircle = np.sqrt(np.sum(np.array([cx, cy, cz]) ** 2))
+            if refDistCenterCircle < maxR / 2:
+                circRmax = (refDistCenterCircle - p.minDistToWalls) / 3  # <-- a little arbitrary
+            else:
+                circRmax = (maxR - refDistCenterCircle - p.minDistToWalls) / 3
+            # Generate random circle radius
+            circR = np.random.uniform(
+                2 * p.interSensorDist * np.amax(p.nSensorPerNode),
+                circRmax
             )
-        # Rotate coordinates so that the circle is perpendicular to the source line
-        micArray = rotate_array_yx(
-            micArray,
-            targetVector=np.array([cx, cy, cz])
-        )
+
+            micArray = np.zeros((np.sum(p.nSensorPerNode), 3))
+            # Generate array centers equally spaced on the circle
+            angleArrayCenters = np.arange(0, 2 * np.pi, 2 * np.pi / p.nNodes)
+            for k in range(p.nNodes):
+                # Generate node and sensors on the perimeter of the circle
+                r = angleArrayCenters[k]
+                x = cx + circR * np.cos(r)
+                y = cy + circR * np.sin(r)
+                z = cz
+                idxSensor = int(np.sum(p.nSensorPerNode[:k]))
+                micArray[idxSensor:(idxSensor + p.nSensorPerNode[k]), :] =\
+                    generate_array_pos(
+                    np.array([x, y, z]),
+                    p.nSensorPerNode[k],
+                    p.arrayGeometry,
+                    p.interSensorDist
+                )
+            # Rotate coordinates so that the circle is perpendicular
+            # to the source line.
+            micArray = rotate_array_yx(
+                micArray,
+                targetVector=np.array([cx, cy, cz])
+            )
+            # Check that all microphones are in the room
+            if np.any(micArray > p.rd - p.minDistToWalls) or\
+                np.any(micArray < p.minDistToWalls):
+                validNodePos = False
+                attemptsCount += 1
+                if attemptsCount > maxNumAttempts:
+                    raise ValueError("Could not find valid node positions.")
+            else:
+                validNodePos = True
         
         room.add_microphone_array(micArray.T)
 
-    if 1:  # debug
-        plot_asc_3d(room, p, cx, cy, cz)
+    if 0:  # debug
+        fig = plt.figure()
+        fig.set_size_inches(3.5, 3.5)
+        ax = fig.add_subplot(projection='3d')
+        plot_asc_3d(ax, room, p, cx, cy, cz, plotSourcesLine=True)
 
     room.compute_rir()
     room.simulate()
@@ -229,51 +259,77 @@ def build_room(p: classes.WASNparameters):
 
     return room, vad, wetSpeeches, wetNoises
 
-def plot_asc_3d(room, p, cx, cy, cz):
-    """Plot room, nodes, and sources in 3D."""
-    # 3D plot
-    fig = plt.figure()
-    fig.set_size_inches(3.5, 3.5)
-    ax = fig.add_subplot(projection='3d')
+def plot_asc_3d(
+        ax,
+        room,
+        p: classes.WASNparameters,
+        cx=None,
+        cy=None,
+        cz=None,
+        plotSourcesLine=False
+    ):
+    """Plot room, nodes, and sources in 3D.
+    
+    Parameters
+    ----------
+    ax : matplotlib.axes._subplots.Axes3DSubplot
+        3D axes object.
+    room : pyroomacoustics.Room
+        Room object.
+    p : Parameters
+        Parameters object.
+    cx, cy, cz : float
+        Circle center coordinates.
+    plotSourcesLine : bool
+        If True, plot the line along which the sources are generated.
+    """
+    # Plot nodes
     ax.scatter(
         room.mic_array.R[0, :],
         room.mic_array.R[1, :],
         room.mic_array.R[2, :],
-        color='red'
+        color='black'
     )
-    ax.scatter(
-        room.sources[0].position[0],
-        room.sources[0].position[1],
-        room.sources[0].position[2],
-        color='green'
-    )
-    ax.scatter(
-        room.sources[1].position[0],
-        room.sources[1].position[1],
-        room.sources[1].position[2],
-        color='blue'
-    )
-    # Plot sources line
-    if p.layoutType == 'random_spinning_top':
+    # Plot desired sources
+    for ii in range(p.nDesiredSources):
+        ax.scatter(
+            room.sources[ii].position[0],
+            room.sources[ii].position[1],
+            room.sources[ii].position[2],
+            color='green',
+            marker='d'  # thin diamond marker
+        )
+    # Plot noise sources
+    for ii in range(p.nNoiseSources):
+        ax.scatter(
+            room.sources[p.nDesiredSources + ii].position[0],
+            room.sources[p.nDesiredSources + ii].position[1],
+            room.sources[p.nDesiredSources + ii].position[2],
+            color='red',
+            marker='P'  # big plus-sign marker
+        )
+    if p.layoutType == 'random_spinning_top' and plotSourcesLine:
+        # Plot sources line
         ax.plot(
             [room.sources[0].position[0], room.sources[1].position[0]],
             [room.sources[0].position[1], room.sources[1].position[1]],
             [room.sources[0].position[2], room.sources[1].position[2]],
             color='black'
         )
-    # Plot circle center
-    ax.scatter(
-        cx, cy, cz,
-        color='yellow'
-    )
+    if cx is not None and cy is not None and cz is not None and plotSourcesLine:
+        # Plot circle center
+        ax.scatter(
+            cx, cy, cz,
+            color='yellow'
+        )
     
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('z')
+    ax.set_xlabel('$x$ [m]')
+    ax.set_ylabel('$y$ [m]')
+    ax.set_zlabel('$z$ [m]')
     ax.set_xlim([0, p.rd[0]])
     ax.set_ylim([0, p.rd[1]])
     ax.set_zlim([0, p.rd[2]])
-    ax.set_title('Room layout')
+    ax.set_title('Room layout (3D)')
     plt.show()
 
 

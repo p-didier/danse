@@ -17,7 +17,7 @@ class AcousticScenarioParameters:
     rd: np.ndarray = np.array([5, 5, 5])  # room dimensions [m]
     fs: float = 16000.     # base sampling frequency [Hz]
     t60: float = 0.        # reverberation time [s]
-    minDistToWalls: float = 0.33   # minimum distance between elements and room walls [m]
+    minDistToWalls: float = 0.5   # minimum distance between elements and room walls [m]
     layoutType: str = 'random'
         # type of acoustic scenario layout
         # ^^^ valid values:
