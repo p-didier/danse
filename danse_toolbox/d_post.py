@@ -915,7 +915,7 @@ def plot_asc(
     #
     if plot3Dview:
         nCols = 3
-        fig.set_size_inches(7.5, 2.5)
+        fig.set_size_inches(9.5, 3.5)
     else:
         fig.set_size_inches(6.5, 3.5)
         nCols = 2
@@ -961,9 +961,12 @@ def plot_asc(
 
     plt.tight_layout()
 
-    # Export
     if folder != '':
-        fig.savefig(f'{folder}/asc.png')
+        # Make sure folder exists
+        if not Path(folder).exists():
+            Path(folder).mkdir(parents=True, exist_ok=True)
+        # Export
+        fig.savefig(f'{folder}/asc.png', dpi=300)
         fig.savefig(f'{folder}/asc.pdf')
         
     return fig
