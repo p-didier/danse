@@ -1,62 +1,8 @@
 seed: 12347  # random generator seed
-sros: [[20, 40], [50, 100], [200, 400]]
 t60: 0.2  # T60 rev. time [s]
 nSensorPerNode: [1, 2, 3]  # number of sensor per node
 nodeUpdating: 'asy'  # type of node-updating scheme
-performGEVD: False  # if true, perform a GEVD
+performGEVD: True  # if true, perform a GEVD
 sigDur: 15
-
-# dataset_dir: ???
-# n_samples: ???
-
-# mics:
-#   n_mics: 4
-#   mic_coordinates: null
-#   mic_type: benchmark # single | circular | benchmark ... (see mic_array_geometries.py for all available)
-#   n_array: 2 # Only used when mic_type != single
-#   radius_in_meters: [0.02, 0.07] #0.045 # Used when mic_type == "circular"
-#   phi: [0, 6.28] # Used when mic_type == "circular". Angle the first microphone in the array makes with the x axis, in radians
-#   mic_delay_ranges: null
-#   mic_gain_ranges: null
-#   mic_sampling_rate_offsets: null #[-2, 2] microphones 1 and 2 will have an offset of this number of samples
-#   snr_in_db: 30 # Sensor noise
-
-# # Source config
-
-# sources:
-#   source_coordinates: null # source coordinates will be generated randomly, or a vector of three floats may be provided as a fixed position.
-#   speech_signals_dir: /Users/ezajlerg/datasets/third_party/vctk/no_silence
-#   n_sources: 2
-#   moving: True
-#   n_trajectory_points: 156
-
-# # Interferer's config
-# n_interferers: 0 # Number of directional noise sources
-# interferers_snr_range: [-5, 30] 
-
-# # Room & reverb config
-# room_dims: [[3, 8], [3, 8], [3, 3]] # Ranges of the width, length and height room dimensions.
-# use_reflectivity_biased_sampling: True # If "reflectivity_biased_sampling",
-#                                               # the absorption coeffs. of the surfaces will be generated
-#                                               # as described in https://asa.scitation.org/doi/10.1121/10.0005888.
-#                                               # To use a fixed rt60 range, this must be set to null
-# anechoic: False
-# rt60: [0.2, 0.6] # reverberation time range in seconds. If room_surfaces is provided, this is not used.
-
-# # Misc config
-# base_sampling_rate: 16000
-# signal_duration_in_seconds: 1
-# min_wall_distance: 0 # The positions where microphones and sources will be placed at must be placed at a minimum distance from the walls.
-# min_mic_source_dist: 0.5 # Each source and microphone pair will be separated by at least 'min_mic_source_dist' meters
-# mask_delay: true # Trim the beginning of the signals to mask the null samples introduced by adding the delay
-# ism_order: 17 # Number of reflections to simulate using the image source model. 17 is the same as used in 
-#               # https://ieeexplore.ieee.org/document/9306409
-# n_jobs: 1 # Number of parallel jobs. Suggestion: set to number of cores in the machine
-# random_seed: 0
-
-# default_device_height: 1 # If provided, each device (microphones and sources) will have this height value
-# anechoic_dataset_dir: null # If provided, two datasets will be generated, where one is anechoic. This is used for tasks such as dereverberation
-
-# metadata_format: json # csv | yaml | json
-
-# acoustic_simulator: pyroomacoustics # gpuRIR | pyroomacoustics
+topologyType: 'fully-connected'
+# topologyType: 'user-defined'
