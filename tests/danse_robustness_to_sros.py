@@ -6,7 +6,7 @@
 import sys
 import yaml
 import numpy as np
-import pandas as pd
+import pickle, gzip
 from pathlib import Path
 from danse_toolbox.d_classes import *
 from .sandbox import main as main_sandbox
@@ -15,16 +15,34 @@ from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsA
 
 PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230406.yaml'
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
+N_SRO_TESTS = 10
+MAX_SRO_PPM = 500
+EXPORT_FIGURES = True
+OUT_FOLDER = '20230406_tests/sros_effect'  # export path relative to `danse/out`
+SKIP_ALREADY_RUN = True  # skip tests that have already been run
+
 
 def main():
     """Main function (called by default when running script)."""
     cfg = read_config(filePath=PATH_TO_CONFIG_FILE)
+
+    # Get SROs
+    cfg['sros'] = [np.array([ii / 2, ii]) * MAX_SRO_PPM / N_SRO_TESTS for\
+        ii in np.arange(0, N_SRO_TESTS)]
 
     # Run tests
     res = run_test_batch(cfg)
 
     # Post-process results
     fig = post_process_results(res)
+    if EXPORT_FIGURES:
+        fig.savefig(
+            f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_effect.png',
+            dpi=300
+        )
+        fig.savefig(
+            f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_effect.pdf'
+        )
     plt.show()
     stop = 1
 
@@ -73,14 +91,24 @@ def run_test_batch(cfg: dict):
     allVals = []
     for ii, sros in enumerate(cfg['sros']):
         # Set up SRO parameter
-        currSROs = np.concatenate((np.array([0.]), np.array(sros)))
-        print(f'Running SRO test {ii+1}/{len(cfg["sros"])}: {currSROs} PPM.')
-        # Set up test parameters
-        testParams = setup_test_parameters(cfg, currSROs)
-        # Run test
-        res = main_sandbox(p=testParams, bypassPostprocess=True)
-        # Extract single test results
-        vals = extract_single_test_results(res)
+        currSROs = np.concatenate((np.array([0.]), sros))
+        pickleFilePath = f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/backupvals/vals_{ii+1}.pkl.gz'
+        if SKIP_ALREADY_RUN and Path(pickleFilePath).exists():
+            print(f'>>> Skipping SRO test {ii+1} / {len(cfg["sros"])}: {currSROs} PPM\n')
+            # Load results
+            vals = pickle.load(gzip.open(pickleFilePath, 'r'))
+        else:
+            print(f'\n\n>>> Running SRO test {ii+1} / {len(cfg["sros"])}: {currSROs} PPM\n')
+            # Set up test parameters
+            testParams = setup_test_parameters(cfg, currSROs)
+            # Run test
+            res = main_sandbox(p=testParams, bypassPostprocess=True)
+            # Extract single test results
+            vals = extract_single_test_results(res)
+            # Save results
+            if not Path(pickleFilePath).parent.exists():
+                Path(pickleFilePath).parent.mkdir(parents=True)
+            pickle.dump(vals, gzip.open(pickleFilePath, 'wb'))
         allVals.append(vals)
 
     return allVals
@@ -102,9 +130,24 @@ def extract_single_test_results(res: DANSEoutputs):
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
+
+    def _process_values(values):
+        """Processes the values from a Metrics object, transforming
+        them into a dict (for easy export as CSV through Pandas)."""
+        dictList = []
+        for ii, val in enumerate(values):
+            subDict = dict([
+                ('raw', val.before),
+                ('local', val.afterLocal),
+                ('danse', val.after),
+                ('centr', val.afterCentr),
+            ])
+            dictList.append((f'Node{ii + 1}', subDict))
+        return dict(dictList)
+    
     vals = dict([
-        ('snr', res.metrics.snr),
-        ('estoi', res.metrics.stoi),
+        ('snr', _process_values(res.metrics.snr.values())),
+        ('estoi', _process_values(res.metrics.stoi.values())),
         ('sros', res.SROgroundTruth)
     ])
     return vals
@@ -131,6 +174,7 @@ def setup_test_parameters(cfg: dict, currSROs: np.ndarray) -> TestParameters:
 
     # Create test parameters
     testParams = TestParameters(
+        bypassExport=True,  # <-- BYPASSING FIGURES AND SOUNDS EXPORT
         exportFolder='',  # <-- no export folder
         seed=cfg['seed'],
         wasnParams=WASNparameters(
@@ -212,19 +256,65 @@ def post_process_results(res: list[dict]):
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
-    # Convert to dataframe
-    df = pd.DataFrame(res)
-    # Compute mean and standard deviation
-    df_mean = df.groupby('sros').mean()
-    df_std = df.groupby('sros').std()
+
+    # Get useful variables
+    nNodes = len(res[0]['snr'])
+    # Extract local and raw results (same for all SROs)
+    localResSNR = np.zeros(nNodes)
+    localResSTOI = np.zeros(nNodes)
+    rawResSNR = np.zeros(nNodes)
+    rawResSTOI = np.zeros(nNodes)
+    for k in range(nNodes):
+        localResSNR[k] = res[0]['snr'][f'Node{k+1}']['local']
+        localResSTOI[k] = res[0]['estoi'][f'Node{k+1}']['local']
+        rawResSNR[k] = res[0]['snr'][f'Node{k+1}']['raw']
+        rawResSTOI[k] = res[0]['estoi'][f'Node{k+1}']['raw']
+
+    # Build arrays for DANSE and centralized results
+    danseResSNR = np.zeros((len(res), nNodes))
+    danseResSTOI = np.zeros((len(res), nNodes))
+    centralResSNR = np.zeros((len(res), nNodes))
+    centralResSTOI = np.zeros((len(res), nNodes))
+    for ii in range(len(res)):
+        for k in range(nNodes):
+            danseResSNR[ii, k] = res[ii]['snr'][f'Node{k+1}']['danse']
+            danseResSTOI[ii, k] = res[ii]['estoi'][f'Node{k+1}']['danse']
+            centralResSNR[ii, k] = res[ii]['snr'][f'Node{k+1}']['centr']
+            centralResSTOI[ii, k] = res[ii]['estoi'][f'Node{k+1}']['centr']
+    
     # Plot
-    fig, ax = plt.subplots()
-    ax.errorbar(df_mean.index, df_mean['snr'], yerr=df_std['snr'], label='SNR')
-    ax.errorbar(df_mean.index, df_mean['estoi'], yerr=df_std['estoi'], label='ESTOI')
-    ax.set_xlabel('SRO [PPM]')
-    ax.set_ylabel('Speech enhancement metrics')
-    ax.legend()
-    # plt.show()
+    for k in range(nNodes):
+        fig, axes = plt.subplots(1, 2)
+        fig.set_size_inches(6.5, 2)
+        axes[0].plot(danseResSNR[:, k], color='C1', marker='o', label='DANSE')
+        axes[0].plot(centralResSNR[:, k], color='C2', marker='s', label='Centralized')
+        axes[0].hlines(localResSNR[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
+        axes[0].hlines(rawResSNR[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
+        axes[0].set_xlabel('SROs [PPM]')
+        axes[0].set_ylabel('SNR [dB]')
+        axes[0].set_xticks(np.arange(len(res)))
+        axes[0].set_xticklabels(
+            [str(res[ii]['sros'][1:]) for ii in range(len(res))],
+            rotation=30
+        )
+        axes[0].legend()
+        axes[0].grid()
+        # plt.show()
+        axes[1].plot(danseResSTOI[:, k], color='C1', marker='o', label='DANSE')
+        axes[1].plot(centralResSTOI[:, k], color='C2', marker='s', label='Centralized')
+        axes[1].hlines(localResSTOI[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
+        axes[1].hlines(rawResSTOI[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
+        axes[1].set_xlabel('SROs [PPM]')
+        axes[1].set_ylabel('eSTOI')
+        axes[1].set_xticks(np.arange(len(res)))
+        axes[1].set_xticklabels(
+            [str(res[ii]['sros'][1:]) for ii in range(len(res))],
+            rotation=30
+        )
+        axes[1].legend()
+        axes[1].grid()
+        axes[1].set_ylim([0, 1])  # eSTOI limits
+        fig.tight_layout()
 
     return fig
 
