@@ -146,7 +146,21 @@ p = TestParameters(
 )
 p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
 
-def main(p: TestParameters):
+def main(p: TestParameters, bypassPostprocess: bool=False) -> pp.DANSEoutputs:
+    """Main function.
+    
+    Parameters:
+    -----------
+    p: TestParameters
+        Test parameters.
+    bypassPostprocess: bool
+        If `True`, bypasses post-processing.
+
+    Returns:
+    --------
+    out: DANSEoutputs
+        Output object containing all necessary info from DANSE run.
+    """
 
     # Build room
     room, vad, wetSpeeches, wetNoises = sig_ut.build_room(p.wasnParams)
@@ -174,7 +188,12 @@ def main(p: TestParameters):
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
 
     # Post-process results (save, export, plot...)
-    postprocess(out, wasnObjUpdated, room, p)
+    if not bypassPostprocess:
+        postprocess(out, wasnObjUpdated, room, p)
+    else:
+        print('Post-processing bypassed.')
+
+    return out, wasnObjUpdated
 
 
 def danse_it_up(

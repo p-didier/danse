@@ -9,8 +9,8 @@ import sys
 import numpy as np
 from pathlib import Path
 from dataclasses import dataclass, field
-from sandbox import TestParameters
-from sandbox import main as main_sandbox
+from .sandbox import TestParameters
+from .sandbox import main as main_sandbox
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
