@@ -1013,7 +1013,7 @@ def plot_side_room(
             s=2*scatsize,
             c='lime',
             marker='d',
-            edgecolor='k'
+            edgecolor='black'
         )
     # Noise sources
     for m in range(rn.shape[0]):
@@ -1023,7 +1023,7 @@ def plot_side_room(
             s=2*scatsize,
             c='red',
             marker='P',
-            edgecolor='k'
+            edgecolor='black'
         )
     # Nodes and sensors
     flagIncludeNodeTypes = 'root' in nodeTypes
@@ -1064,7 +1064,8 @@ def plot_side_room(
             np.mean(r[micsIdx, 0]) + 1.5 * radius,
             np.mean(r[micsIdx, 1]) + 1.5 * radius,
             myText,
-            c=f'C{k}'
+            # c=f'C{k}'
+            c='black',
         )
         ax.add_patch(circ)
     ax.grid()

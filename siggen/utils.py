@@ -81,7 +81,8 @@ def build_room(p: classes.WASNparameters):
                 r,
                 p.nSensorPerNode[k],
                 p.arrayGeometry,
-                p.interSensorDist
+                p.interSensorDist,
+                applyRandomRot=True
             )
             room.add_microphone_array(sensorsCoords.T)
 
@@ -167,16 +168,17 @@ def build_room(p: classes.WASNparameters):
             )
             room.add_soundsource(ssrc)
         
-        # Generate random circle center
+        # Generate node and sensor positions
         validNodePos = False
         attemptsCount = 0
         maxNumAttempts = 99
         while not validNodePos:
+            # Generate random circle center
             cx, cy, cz = _random_point_on_line(azimuthLine, elevationLine)
             # Compute maximal circle radius based on room dimension
             refDistCenterCircle = np.sqrt(np.sum(np.array([cx, cy, cz]) ** 2))
             if refDistCenterCircle < maxR / 2:
-                circRmax = (refDistCenterCircle - p.minDistToWalls) / 3  # <-- a little arbitrary
+                circRmax = (refDistCenterCircle - p.minDistToWalls) / 3  # <-- a little arbitrary... [PD06.04.2023]
             else:
                 circRmax = (maxR - refDistCenterCircle - p.minDistToWalls) / 3
             # Generate random circle radius
@@ -200,7 +202,8 @@ def build_room(p: classes.WASNparameters):
                     np.array([x, y, z]),
                     p.nSensorPerNode[k],
                     p.arrayGeometry,
-                    p.interSensorDist
+                    p.interSensorDist,
+                    applyRandomRot=True
                 )
             # Rotate coordinates so that the circle is perpendicular
             # to the source line.
@@ -284,12 +287,21 @@ def plot_asc_3d(
         If True, plot the line along which the sources are generated.
     """
     # Plot nodes
-    ax.scatter(
-        room.mic_array.R[0, :],
-        room.mic_array.R[1, :],
-        room.mic_array.R[2, :],
-        color='black'
-    )
+    for k in range(p.nNodes):
+        ax.scatter(
+            room.mic_array.R[0, p.sensorToNodeIndices == k],
+            room.mic_array.R[1, p.sensorToNodeIndices == k],
+            room.mic_array.R[2, p.sensorToNodeIndices == k],
+            color='black'
+        )
+        # Plot node labels
+        ax.text(
+            room.mic_array.R[0, p.sensorToNodeIndices == k][0],
+            room.mic_array.R[1, p.sensorToNodeIndices == k][0],
+            room.mic_array.R[2, p.sensorToNodeIndices == k][0],
+            str(k + 1),
+            color='black'
+        )
     # Plot desired sources
     for ii in range(p.nDesiredSources):
         ax.scatter(
@@ -401,18 +413,27 @@ def plot_mic_sigs(room: pra.room.ShoeBox, vad=None):
     plt.show()
 
 
-def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, force2D=False):
+def generate_array_pos(
+        nodeCoords,
+        Mk,
+        arrayGeom,
+        micSep,
+        force2D=False,
+        applyRandomRot=False
+    ):
     """
     Define node positions based on node position, number of nodes,
     and array type.
 
     Parameters
     ----------
-    nodeCoords : [J x 3] array of real floats.
+    nodeCoords : [J x 3] array of real floats
         Nodes coordinates in 3-D space [m].
     TODO:
-    force2D : bool.
+    force2D : bool
         If true, projects the sensor coordinates on the z=0 plane.
+    applyRandomRot : bool
+        If true, applies a random rotation to the sensors coordinates.
 
     Returns
     -------
@@ -481,6 +502,20 @@ def generate_array_pos(nodeCoords, Mk, arrayGeom, micSep, force2D=False):
     else:
         raise ValueError('No sensor array geometry defined for \
             array type "%s"' % arrayGeom)
+    
+    if applyRandomRot:
+        # Rotate in 3D through randomized rotation vector, while keeping
+        # the center of the array fixed.
+        rotvec = np.random.uniform(low=0, high=1, size=(3,))
+        if force2D:
+            rotvec[1:2] = 0
+        arrayCenter = np.mean(sensorCoords, axis=0)
+        sensorCoordsAfterRot = np.zeros_like(sensorCoords)
+        for ii in range(Mk):
+            myrot = rot.from_rotvec(np.pi/2 * rotvec)
+            sensorCoordsAfterRot[ii,:] =\
+                myrot.apply(sensorCoords[ii, :] - arrayCenter)
+        sensorCoords = sensorCoordsAfterRot + arrayCenter
 
     return sensorCoords
 

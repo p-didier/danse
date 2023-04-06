@@ -159,7 +159,7 @@ def main(p: TestParameters):
         p.danseParams.minNoSpeechDurEndUterrance
     )
 
-    pp.plot_asc(
+    fig = pp.plot_asc(
         room,
         p.wasnParams,
         p.exportFolder,
@@ -167,6 +167,7 @@ def main(p: TestParameters):
         [node.nodeType for node in wasnObj.wasn],
         plot3Dview=True
     )
+    fig.savefig('out.png')
     # DANSE
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
 
