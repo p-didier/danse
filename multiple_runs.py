@@ -18,9 +18,9 @@ SEED = 12347
 SIGNALS_PATH = f'{Path(__file__).parent}/testing/sigs'
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting
 SKIP_EXISTING_FOLDERS = True
-IMPOSED_YLIM_SNR = 30  # if None, use auto ylim
+IMPOSED_YLIM_SNR = 20  # if None, use auto ylim
 #
-OUT_FOLDER = '20230405_tests/battery/Mk3'  # export path relative to `danse/out`
+OUT_FOLDER = '20230406_tests/battery'  # export path relative to `danse/out`
 
 @dataclass
 class GlobalTestParameters:
@@ -47,8 +47,8 @@ params = GlobalTestParameters(
     ]),
     nSensors=[
         # [1, 1, 1],
-        # [1, 2, 3],
-        [3, 3, 3],
+        [1, 2, 3],
+        # [3, 3, 3],
     ],
     # gevdBool=[True, False],
     # gevdBool=[True],
@@ -110,6 +110,7 @@ def run_test_batch(params: GlobalTestParameters):
                             seed=SEED,
                             snrYlimMax=IMPOSED_YLIM_SNR,  # =========================<<<<<
                             wasnParams=WASNparameters(
+                                layoutType='vert_spinning_top',
                                 VADenergyDecrease_dB=35,  # [dB]
                                 topologyParams=TopologyParameters(
                                     topologyType='user-defined',

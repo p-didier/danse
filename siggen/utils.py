@@ -82,7 +82,7 @@ def build_room(p: classes.WASNparameters):
                 p.nSensorPerNode[k],
                 p.arrayGeometry,
                 p.interSensorDist,
-                applyRandomRot=True
+                applyRandomRot=False
             )
             room.add_microphone_array(sensorsCoords.T)
 
