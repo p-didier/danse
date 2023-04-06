@@ -19,6 +19,7 @@ class TestParameters:
     )
     danseParams: base.DANSEparameters = base.DANSEparameters()
     exportFolder: str = ''  # folder to export outputs
+    bypassExport: bool = False  # if True, bypass export
     #
     seed: int = 12345
     snrYlimMax : float = None  # SNR ylim max (if None, use auto lim)

@@ -4,5 +4,7 @@ nSensorPerNode: [1, 2, 3]  # number of sensor per node
 nodeUpdating: 'asy'  # type of node-updating scheme
 performGEVD: True  # if true, perform a GEVD
 sigDur: 15
-topologyType: 'fully-connected'
-# topologyType: 'user-defined'
+# topologyType: 'fully-connected'
+topologyType: 'user-defined'
+# layoutType: 'vert_spinning_top',
+layoutType: 'random_spinning_top',

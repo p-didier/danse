@@ -145,8 +145,12 @@ class DANSEoutputs(DANSEparameters):
             if figDynamic is not None:
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.png')
                 figDynamic.savefig(f'{exportFolder}/metrics_dyn.pdf')
+        else:
+            plt.close(figStatic)
+            if figDynamic is not None:
+                plt.close(figDynamic)
 
-    def plot_convergence(self, exportFolder):
+    def plot_convergence(self, exportFolder, bypassExport=False):
         """
         Shows convergence of DANSE.
         Created on 19.01.2023 (as a result of OJSP reviewers' suggestions).
@@ -233,10 +237,10 @@ class DANSEoutputs(DANSEparameters):
             axes.set_axisbelow(True)  # grid below the plot
             #
             plt.tight_layout()
-            # plt.show(block=False)
             # Export
-            fig.savefig(f'{exportFolder}/converg_node{k+1}.png')
-            fig.savefig(f'{exportFolder}/converg_node{k+1}.pdf')
+            if not bypassExport:
+                fig.savefig(f'{exportFolder}/converg_node{k+1}.png')
+                fig.savefig(f'{exportFolder}/converg_node{k+1}.pdf')
             # Aggregate for export
             DANSEfilters_all[:, :, k] =\
                 self.filters[k][:, :, self.referenceSensor].T
@@ -244,16 +248,17 @@ class DANSEoutputs(DANSEparameters):
                 self.filtersCentr[k][:, :, self.referenceSensor].T
         
         # Export for further post-processing
-        convData = ConvergenceData(
-            DANSEfilters=DANSEfilters_all,
-            DANSEfiltersCentr=DANSEfiltersCentr_all
-        )
-        pickle.dump(
-            convData,
-            gzip.open(
-                f'{exportFolder}/{type(convData).__name__}.pkl.gz', 'wb'
+        if not bypassExport:
+            convData = ConvergenceData(
+                DANSEfilters=DANSEfilters_all,
+                DANSEfiltersCentr=DANSEfiltersCentr_all
             )
-        )
+            pickle.dump(
+                convData,
+                gzip.open(
+                    f'{exportFolder}/{type(convData).__name__}.pkl.gz', 'wb'
+                )
+            )
 
         return None
 

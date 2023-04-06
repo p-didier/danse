@@ -20,7 +20,7 @@ MAX_SRO_PPM = 500
 EXPORT_FIGURES = True
 OUT_FOLDER = '20230406_tests/sros_effect/fc_danse_gevd'  # export path relative to `danse/out`
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
-SNR_PLOT_LIMITS = [-5, 20]
+SNR_PLOT_LIMITS = [-5, 40]
 
 def main():
     """Main function (called by default when running script)."""
@@ -45,7 +45,6 @@ def main():
                 f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_effect_node{k + 1}.pdf'
             )
     plt.show()
-    stop = 1
 
     return None
 
@@ -103,7 +102,10 @@ def run_test_batch(cfg: dict):
             # Set up test parameters
             testParams = setup_test_parameters(cfg, currSROs)
             # Run test
-            res = main_sandbox(p=testParams)
+            res = main_sandbox(
+                p=testParams,
+                plotASCearly=True if ii==0 else False  # only plot ASC for first test
+            )
             # Extract single test results
             vals = extract_single_test_results(res)
             # Save results
@@ -179,7 +181,7 @@ def setup_test_parameters(cfg: dict, currSROs: np.ndarray) -> TestParameters:
         exportFolder='',  # <-- no export folder
         seed=cfg['seed'],
         wasnParams=WASNparameters(
-            layoutType='vert_spinning_top',
+            layoutType=cfg['layoutType'],
             VADenergyDecrease_dB=35,  # [dB]
             topologyParams=TopologyParameters(
                 topologyType=cfg['topologyType'],
