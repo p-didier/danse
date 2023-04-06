@@ -18,9 +18,9 @@ SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
 N_SRO_TESTS = 10
 MAX_SRO_PPM = 500
 EXPORT_FIGURES = True
-OUT_FOLDER = '20230406_tests/sros_effect/fc_danse_gevd'  # export path relative to `danse/out`
+OUT_FOLDER = '20230406_tests/sros_effect/fc_danse_nogevd_randST'  # export path relative to `danse/out`
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
-SNR_PLOT_LIMITS = [-5, 40]
+SNR_PLOT_LIMITS = [-5, 25]
 
 def main():
     """Main function (called by default when running script)."""
@@ -100,7 +100,12 @@ def run_test_batch(cfg: dict):
         else:
             print(f'\n\n>>> Running SRO test {ii+1} / {len(cfg["sros"])}: {currSROs} PPM\n')
             # Set up test parameters
-            testParams = setup_test_parameters(cfg, currSROs)
+            testParams = setup_test_parameters(
+                cfg,
+                currSROs,
+                # Only export an early ASC figure for the first test
+                exportFolder=f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}' if ii==0 else ''
+            )
             # Run test
             res = main_sandbox(
                 p=testParams,
@@ -156,7 +161,7 @@ def extract_single_test_results(res: DANSEoutputs):
     return vals
 
 
-def setup_test_parameters(cfg: dict, currSROs: np.ndarray) -> TestParameters:
+def setup_test_parameters(cfg: dict, currSROs: np.ndarray, exportFolder: str='') -> TestParameters:
     """
     Sets up the test parameters.
     
@@ -178,7 +183,7 @@ def setup_test_parameters(cfg: dict, currSROs: np.ndarray) -> TestParameters:
     # Create test parameters
     testParams = TestParameters(
         bypassExport=True,  # <-- BYPASSING FIGURES AND SOUNDS EXPORT
-        exportFolder='',  # <-- no export folder
+        exportFolder=exportFolder,
         seed=cfg['seed'],
         wasnParams=WASNparameters(
             layoutType=cfg['layoutType'],

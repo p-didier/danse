@@ -391,7 +391,6 @@ def plot_asc_3d(
     ax.set_ylim([0, p.rd[1]])
     ax.set_zlim([0, p.rd[2]])
     ax.set_title('Room layout (3D)')
-    plt.show()
 
 
 def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
