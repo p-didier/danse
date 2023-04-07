@@ -26,7 +26,7 @@ def main():
     """Main function (called by default when running script)."""
     cfg = read_config(filePath=PATH_TO_CONFIG_FILE)
 
-    # Get SROs
+    # Get SROs - linearly spaced in PPM
     cfg['sros'] = [np.array([ii / 2, ii]) * MAX_SRO_PPM / N_SRO_TESTS for\
         ii in np.arange(0, N_SRO_TESTS)]
 

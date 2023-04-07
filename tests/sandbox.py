@@ -31,11 +31,11 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
     if p is None:
         p = TestParameters(
             bypassExport=False,
-            exportFolder=f'{Path(__file__).parent.parent}/out/20230406_tests/testsync_tau30s',
+            exportFolder=f'{Path(__file__).parent.parent}/out/20230407_tests/selfnoise30dB',
             seed=SEED,
             wasnParams=WASNparameters(
-                # layoutType='random_spinning_top',
-                layoutType='vert_spinning_top',
+                layoutType='random_spinning_top',
+                # layoutType='vert_spinning_top',
                 # layoutType='random',
                 VADenergyDecrease_dB=35,  # [dB]
                 # generateRandomWASNwithSeed=420,
@@ -84,7 +84,7 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
                 # nSensorPerNode=[1, 3, 2, 5],
                 # nSensorPerNode=[1, 1, 1, 1],
                 # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
-                selfnoiseSNR=99,
+                selfnoiseSNR=30,
                 desiredSignalFile=[f'{SIGNALS_PATH}/01_speech/{file}'\
                     for file in [
                         'speech1.wav',
@@ -139,8 +139,8 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
                 performGEVD=False,
                 # performGEVD=True,
                 # bypassUpdates=True  # /!\
-                # t_expAvg50p=10,
-                t_expAvg50p=30,
+                t_expAvg50p=10,
+                # t_expAvg50p=30,
                 # t_expAvg50p=3,
                 # t_expAvg50p=1,
                 timeBtwExternalFiltUpdates=1,
