@@ -33,23 +33,16 @@ class Metric:
         return self
 
 
+@dataclass
 class DynamicMetricsParameters:
     """Parameters for computing objective speech enhancement metrics
     dynamically as the signal comes in ("online" fashion)"""
-    def __init__(self,
-            chunkDuration=1.,
-            chunkOverlap=0.5,
-            dynamicSNR=False,
-            dynamicSTOI=False,
-            dynamicfwSNRseg=False,
-            dynamicPESQ=False):
-        self.chunkDuration = chunkDuration          # [s] duration of the signal chunk over which to compute the metrics
-        self.chunkOverlap = chunkOverlap            # [/100%] percentage overlap between consecutive signal chunks
-        # flags
-        self.dynamicSNR = dynamicSNR                # if True, compute SNR dynamically
-        self.dynamicSTOI = dynamicSTOI              # if True, compute STOI dynamically
-        self.dynamicfwSNRseg = dynamicfwSNRseg      # if True, compute fwSNRseg dynamically
-        self.dynamicPESQ = dynamicPESQ              # if True, compute PESQ dynamically
+    chunkDuration: float = 1. # [s] duration of the signal chunk over which to compute the metrics
+    chunkOverlap: float = 0.5    # [/100%] percentage overlap between consecutive signal chunks
+    dynamicSNR: bool = False        # if True, compute SNR dynamically
+    dynamicSTOI: bool = False       # if True, compute STOI dynamically
+    dynamicfwSNRseg: bool = False   # if True, compute fwSNRseg dynamically
+    dynamicPESQ: bool = False       # if True, compute PESQ dynamically
 
     def get_chunk_size(self, fs):
         self.chunkSize = int(np.floor(self.chunkDuration * fs))

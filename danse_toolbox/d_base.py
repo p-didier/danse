@@ -16,7 +16,7 @@ from scipy.signal._arraytools import zero_ext
 from siggen.classes import WASNparameters, Node, WASN
 from danse_toolbox.d_eval import DynamicMetricsParameters
 
-from itertools import cycle, islice, dropwhile
+from itertools import cycle, islice
 
 
 @dataclass
@@ -162,10 +162,10 @@ class DANSEparameters(Hyperparameters):
         # -- 'wholeChunk': chunks of compressed signals in time-domain,
         # -- 'fewSamples': T(z)-approximation of WOLA compression process.
         # broadcast L ≪ Ns samples at a time.
-    winWOLAanalysis: np.ndarray = np.sqrt(np.hanning(DFTsize))      # window
-    winWOLAsynthesis: np.ndarray = np.sqrt(np.hanning(DFTsize))     # window
-    normFactWOLA: float = sum(winWOLAanalysis)  # (I)FFT normalization factor
-    # ---- T(z)-approximation | Sample-wise broadcasts
+    winWOLAanalysisType: str = 'sqrthann'    # type of analysis window
+        # - 'sqrthann': sqrt(hann)
+    winWOLAsynthesisType: str = 'sqrthann'    # type of synthesis window
+        # - 'sqrthann': sqrt(hann)
     upTDfilterEvery: float = 1. # [s] duration of pause between two 
                                     # consecutive time-domain filter updates.
     # ---- SROs
@@ -241,6 +241,18 @@ class DANSEparameters(Hyperparameters):
         """Adapt some fields depending on the value of others, after 
         dataclass instance initialisation."""
         self.Ns = int(self.DFTsize * (1 - self.WOLAovlp))
+        # Create windows
+        if self.winWOLAanalysisType == 'sqrthann':
+            self.winWOLAanalysis = np.sqrt(np.hanning(self.DFTsize))      # window
+        else:
+            raise ValueError(f'Unknown analysis window type: {self.winWOLAanalysisType}')
+        if self.winWOLAsynthesisType == 'sqrthann':
+            self.winWOLAsynthesis = np.sqrt(np.hanning(self.DFTsize))
+        else:
+            raise ValueError(f'Unknown synthesis window type: {self.winWOLAsynthesisType}')
+        #
+        self.normFactWOLA: float = sum(self.winWOLAanalysis)  # (I)FFT normalization factor
+        # ---- T(z)-approximation | Sample-wise broadcasts
         if self.broadcastType == 'wholeChunk':
             self.broadcastLength = self.Ns
         elif self.broadcastType == 'fewSamples':

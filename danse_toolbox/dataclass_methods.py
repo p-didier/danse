@@ -1,12 +1,12 @@
-import copy
-import pickle, gzip
-from pathlib import Path
-from dataclasses import fields, replace, make_dataclass, is_dataclass
-from pathlib import PurePath
+import yaml
 import json, os
-import dataclass_wizard as dcw
 import numpy as np
+import pickle, gzip
+from copy import copy
+from pathlib import Path
 from io import TextIOWrapper
+import dataclass_wizard as dcw
+from dataclasses import fields, replace, make_dataclass, is_dataclass
 
 
 def save(self, foldername: str, exportType='pkl'):
@@ -86,6 +86,9 @@ def load(self, foldername: str, silent=False, dataType='pkl'):
     
     if not silent:
         print(f'<{type(self).__name__}> object data loaded from directory\n".../{shortPath}".')
+
+    if hasattr(p, '__post_init__'):
+        p.__post_init__()  # call the __post_init__ method if it exists
 
     return p
 
@@ -208,3 +211,137 @@ def shorten_path(file_path, length=3):
     -- from: https://stackoverflow.com/a/49758154
     """
     return Path(*Path(file_path).parts[-length:])
+
+
+def dump_to_yaml_template(myDataclass, path=None):
+    """Dumps a YAML template for a dataclass.
+    
+    Parameters
+    ----------
+    myDataclass : instance of a dataclass
+        The dataclass to dump a template for.
+    path : str
+        The path to the YAML file to be created.
+        If not provided, the file will be created in the current directory.
+    """
+
+    if path is None:
+        path = f'{type(myDataclass).__name__}__template.yaml'
+
+    def _convert_to_dict(cls):
+        """
+        Recursively converts a dataclass (and its nested dataclasses)
+        to a dictionary.
+        Difference with `dcw.asdict` is that this function does 
+        not alter the capitalization of the field names, and keeps
+        underscores in the field names.
+        """
+        outDict = {}
+        for key in fields(cls):
+            if is_dataclass(getattr(cls, key.name)):
+                outDict[key.name] = _convert_to_dict(getattr(cls, key.name))
+            elif type(getattr(cls, key.name)) is np.ndarray:
+                # Convert numpy arrays to lists before dumping to YAML
+                outDict[key.name] = getattr(cls, key.name).tolist()
+            else:
+                outDict[key.name] = getattr(cls, key.name)
+        return outDict
+
+    with open(path, 'w') as f:
+        myDataclassAsDict = _convert_to_dict(myDataclass)
+        yaml.dump(myDataclassAsDict, f, default_flow_style=False)
+    
+    print(f'YAML template for dataclass "{type(myDataclass).__name__}" dumped to "{path}".')
+
+
+def load_from_yaml(path, myDataclass):
+    """Loads data from a YAML file into a dataclass.
+    
+    Parameters
+    ----------
+    path : str
+        The path to the YAML file to be loaded.
+    myDataclass : instance of a dataclass
+        The dataclass to load the data into.
+
+    Returns
+    -------
+    myDataclass : instance of a dataclass
+        The dataclass with the data loaded into it.
+    """
+
+    with open(path, 'r') as f:
+        d = yaml.load(f, Loader=yaml.FullLoader)
+
+    def _interpret_lists(d):
+        """Interprets lists in the YAML file as lists of floats, not strings"""
+        for key in d:
+            if type(d[key]) is str and len(d[key]) >= 2:
+                if d[key][0] == '[' and d[key][-1] == ']':
+                    d[key] = d[key][1:-1].split('\n ')
+                    for ii in range(len(d[key])):
+                        d[key][ii] = [float(k) for k in d[key][ii][1:-1].split(' ')]
+            elif type(d[key]) is dict:
+                d[key] = _interpret_lists(d[key])
+        return d
+
+    # Detect lists
+    d = _interpret_lists(d)
+
+    def _deal_with_arrays(d, refDataclass):
+        """Transforms lists that should be numpy arrays into numpy arrays"""
+        for key in d:
+            if type(d[key]) is list:
+                refDict = {field.name: field.type for field in fields(refDataclass)}
+                if refDict[key] is np.ndarray:
+                    d[key] = np.array(d[key])
+            elif type(d[key]) is dict:
+                d[key] = _deal_with_arrays(d[key], getattr(refDataclass, key))
+        return d
+
+    # Deal with expected numpy arrays
+    d = _deal_with_arrays(d, myDataclass)
+
+    def _load_into_dataclass(d, myDataclass):
+        """Loads data from a dict into a dataclass"""
+        for key in d:
+            if type(d[key]) is dict:
+                setattr(
+                    myDataclass,
+                    key,
+                    _load_into_dataclass(d[key], getattr(myDataclass, key))
+                )
+            else:
+                setattr(myDataclass, key, d[key])
+        return myDataclass
+
+    # myDataclass = dcw.fromdict(myDataclass, d)
+    myDataclass = _load_into_dataclass(d, myDataclass)
+
+    # Re-initialize dataclass
+    if hasattr(myDataclass, '__post_init__'):
+        myDataclass.__post_init__()
+    # Re-initialize sub-dataclasses
+    for k, v in myDataclass.__dict__.items():
+        if is_dataclass(v) and hasattr(v, '__post_init__'):
+            v.__post_init__()
+
+    return myDataclass
+
+
+def dataclasses_equal(d1, d2):
+    """
+    Assesses whether two dataclasses (and their nested dataclasses) are equal.
+    """
+    for k, v in d1.__dict__.items():
+        if is_dataclass(v):
+            if not dataclasses_equal(v, getattr(d2, k)):
+                return False
+        elif isinstance(d2.__dict__[k], np.ndarray):
+            if not d2.__dict__[k].shape == v.shape:
+                return False
+            if not np.allclose(d2.__dict__[k], v):
+                return False
+        elif d2.__dict__[k] != v:
+            return False
+    return True

@@ -4,14 +4,12 @@ import random
 import numpy as np
 import scipy.linalg as sla
 from siggen.classes import *
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
 
 @dataclass
 class TestParameters:
-    selfnoiseSNR: int = -50 # [dB] microphone self-noise SNR
-    #
     referenceSensor: int = 0    # Index of the reference sensor at each node
     #
     wasnParams: WASNparameters = WASNparameters(
@@ -45,10 +43,16 @@ class TestParameters:
 
     def load(self, foldername, dataType='pkl'):
         """Loads dataclass to Pickle archive in folder `foldername`."""
-        return met.load(self, foldername, silent=True, dataType=dataType)
+        d = met.load(self, foldername, silent=True, dataType=dataType)
+        d.__post_init__()  # re-initialize
+        return d
 
     def is_fully_connected_wasn(self):
         return self.wasnParams.topologyParams.topologyType == 'fully-connected'
+    
+    def load_from_yaml(self, path):
+        """Loads dataclass from YAML file."""
+        return met.load_from_yaml(path, self)
 
 
 def check_if_fully_connected(wasn: list[Node]):

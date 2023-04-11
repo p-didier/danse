@@ -1,0 +1,41 @@
+
+selfnoiseSNR: -50 # [dB] microphone self-noise SNR
+#
+referenceSensor: 0    # Index of the reference sensor at each node
+#
+wasnParams:
+  generateRandomWASNwithSeed: 0
+  SROperNode: [0]
+  topologyParams:
+    topologyType: 'fully-connected'
+    commDistance: 0.    # maximum inter-node communication distance [m]
+    seed: 12345     # random-generator seed
+    plotTopo: False  # if True, plots a visualization of the topology
+    userDefinedTopo: []  # connectivity matrix
+  selfnoiseSNR: 50.   # self-noise SNR
+  rd: [5, 5, 5]  # room dimensions [m]
+  fs: 16000.     # base sampling frequency [Hz]
+  t60: 0.        # reverberation time [s]
+  minDistToWalls: 0.5   # minimum distance between elements and room walls [m]
+  layoutType: 'random'
+  referenceSensor: 0    # Index of the reference sensor at each node
+  interSensorDist: 0.1   # distance separating microphones
+  arrayGeometry: 'grid3d'   # microphone array geometry (only used if numSensorPerNode > 1)
+  lenRIR: 1024    # length of RIRs [samples]
+  sigDur: 5.     # signals duration [s]
+  nDesiredSources: 1   # number of desired sources
+  nNoiseSources: 1     # number of undesired (noise) sources
+  desiredSignalFile: []  # list of paths to desired signal file(s)
+  noiseSignalFile: []   # list of paths to noise signal file(s)
+  baseSNR: 5                        # [dB] SNR between dry desired signals and dry noise
+  VADenergyDecrease_dB: float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
+  VADwinLength: float = 40e-3     # [s] VAD window length
+  nNodes: int = 0        # number of nodes in scenario
+  nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node
+  loadFrom: str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))')
+danseParams: base.DANSEparameters = base.DANSEparameters()
+exportFolder: str = ''  # folder to export outputs
+bypassExport: bool = False  # if True, bypass export
+#
+seed: int = 12345
+snrYlimMax : float = None  # SNR ylim max (if None, use auto lim)

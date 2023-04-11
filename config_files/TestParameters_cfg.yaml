@@ -1,0 +1,113 @@
+bypassExport: false
+danseParams:
+  DFTsize: 1024
+  GEVDrank: 1
+  WOLAovlp: 0.5
+  alphaExternalFilters: 0.5
+  broadcastType: wholeChunk
+  bypassUpdates: false
+  cohDrift:
+    alpha: 0.95
+    alphaEps: 0.05
+    estEvery: 1
+    estimationMethod: gs
+    loop: open
+    segLength: 10
+    startAfterNups: 11
+  compensateSROs: false
+  computeCentralised: true
+  computeLocal: true
+  computeNoiseFree: false
+  covMatEyeInitScaling: 1.0
+  covMatInitType: fully_random
+  covMatRandomInitScaling: 2.220446049250313e-16
+  covMatSameInitForAllFreqs: true
+  covMatSameInitForAllNodes: true
+  desSigProcessingType: wola
+  dynMetrics:
+    chunkDuration: 1.0
+    chunkOverlap: 0.5
+    dynamicPESQ: false
+    dynamicSNR: false
+    dynamicSTOI: false
+    dynamicfwSNRseg: false
+  efficientSpSBC: true
+  estimateSROs: CohDrift
+  filterInitFixedValue: 1
+  filterInitType: selectFirstSensor_andFixedValue
+  frameLenfwSNRseg: 0.03
+  gammafwSNRseg: 0.2
+  minNoSpeechDurEndUterrance: 0.2
+  noExternalFilterRelaxation: false
+  nodeUpdating: asy
+  performGEVD: false
+  printout_eventsParser: true
+  printout_eventsParserNoBC: false
+  printout_externalFilterUpdate: true
+  printout_profiler: true
+  printoutsAndPlotting:
+    onlySNRandESTOIinPlots: true
+    showWASNs: false
+  seqUpdateStartNodeIdx: 1
+  t_expAvg50p: 10
+  timeBtwExternalFiltUpdates: 1
+  treeFormationAlgorithm: prim
+  upTDfilterEvery: 1.0
+  winWOLAanalysisType: sqrthann
+  winWOLAsynthesisType: sqrthann
+exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230407_tests/selfnoise30dB
+referenceSensor: 0
+seed: 12347
+snrYlimMax: null
+wasnParams:
+  SROperNode:
+  - 0
+  - 0
+  - 0
+  VADenergyDecrease_dB: 35
+  VADwinLength: 0.04
+  arrayGeometry: grid3d
+  baseSNR: 5
+  desiredSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
+  fs: 16000
+  generateRandomWASNwithSeed: 0
+  interSensorDist: 0.2
+  layoutType: random_spinning_top
+  lenRIR: 1024
+  loadFrom: ''
+  minDistToWalls: 0.5
+  nDesiredSources: 1
+  nNodes: 3
+  nNoiseSources: 1
+  nSensorPerNode:
+  - 1
+  - 2
+  - 3
+  noiseSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
+  rd:
+  - 5
+  - 5
+  - 5
+  referenceSensor: 0
+  selfnoiseSNR: 30
+  sigDur: 15
+  t60: 0.2
+  topologyParams:
+    commDistance: 4.0
+    plotTopo: false
+    seed: 12347
+    topologyType: fully-connected
+    userDefinedTopo:
+    - - 1
+      - 1
+      - 0
+    - - 1
+      - 1
+      - 1
+    - - 0
+      - 1
+      - 1

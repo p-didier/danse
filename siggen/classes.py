@@ -93,7 +93,7 @@ class WASNparameters(AcousticScenarioParameters):
         # parameters and generate a completely random WASN.
     SROperNode: np.ndarray = np.array([0])
     topologyParams: TopologyParameters = TopologyParameters()
-    selfnoiseSNR: float = 50   # self-noise SNR
+    selfnoiseSNR: float = 50.   # self-noise SNR
         # [signal: noise-free signal; noise: self-noise]
     
     def __post_init__(self):

@@ -9,11 +9,11 @@ import danse_toolbox.d_post as pp
 import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_utils import wipe_folder
-from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
+PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/TestParameters_cfg.yaml'
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
-SEED = 12347
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
+SEED = 12347
 
 def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
     """Main function.
@@ -29,136 +29,8 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         Output object containing all necessary info from DANSE run.
     """
     if p is None:
-        p = TestParameters(
-            bypassExport=False,
-            exportFolder=f'{Path(__file__).parent.parent}/out/20230407_tests/selfnoise30dB',
-            seed=SEED,
-            wasnParams=WASNparameters(
-                layoutType='random_spinning_top',
-                # layoutType='vert_spinning_top',
-                # layoutType='random',
-                VADenergyDecrease_dB=35,  # [dB]
-                # generateRandomWASNwithSeed=420,
-                topologyParams=TopologyParameters(  # topology-related parameters
-                    # topologyType='ad-hoc',
-                    topologyType='fully-connected',
-                    # topologyType='user-defined',
-                    commDistance=4.,  # [m]
-                    seed=SEED,
-                    # plotTopo=True,
-                    userDefinedTopo=np.array([
-                        [1, 1, 0],  # Node 1
-                        [1, 1, 1],  # Node 2
-                        [0, 1, 1],  # Node 3
-                    ]),
-                    # userDefinedTopo=np.array([
-                    #     [1, 1, 0, 0],  # Node 1
-                    #     [1, 1, 1, 0],  # Node 2
-                    #     [0, 1, 1, 1],  # Node 3
-                    #     [0, 0, 1, 1],  # Node 4
-                    # ]),
-                    # userDefinedTopo=np.ones((3, 3)),
-                    # userDefinedTopo=np.ones((4, 4)),  # 20.02.2023: replicating ICASSP paper's WASN structure
-                    # userDefinedTopo=np.array([
-                    #     [1, 1],  # Node 1
-                    #     [1, 1],  # Node 2
-                    # ])
-                ),
-                sigDur=15,
-                rd=np.array([5, 5, 5]),
-                fs=16000,
-                # t60=0.0,
-                t60=0.2,
-                interSensorDist=0.2,
-                # interSensorDist=0.1,
-                # nNodes=2,
-                nNodes=3,
-                # nNodes=4,
-                # nSensorPerNode=[1, 1],
-                # nSensorPerNode=[1, 1, 1],
-                # nSensorPerNode=[1, 2, 3, 4],
-                # nSensorPerNode=[1, 1, 1, 1],
-                nSensorPerNode=[1, 2, 3],
-                # nSensorPerNode=[1, 2, 3, 2],
-                # nSensorPerNode=[1, 3, 2],
-                # nSensorPerNode=[1, 3, 2, 5],
-                # nSensorPerNode=[1, 1, 1, 1],
-                # selfnoiseSNR=np.inf,  # if `== np.inf` --> no self-noise at all
-                selfnoiseSNR=30,
-                desiredSignalFile=[f'{SIGNALS_PATH}/01_speech/{file}'\
-                    for file in [
-                        'speech1.wav',
-                        'speech2.wav'
-                    ]],
-                # noiseSignalFile=[f'{SIGNALSPATH}/02_noise/{file}'\
-                #     for file in [
-                #         'whitenoise_signal_1.wav',
-                #         'whitenoise_signal_2.wav'
-                #     ]],
-                noiseSignalFile=[f'{SIGNALS_PATH}/02_noise/{file}'\
-                    for file in [
-                        'ssn/ssn_speech1.wav',
-                        'ssn/ssn_speech2.wav'
-                    ]],
-                # SROperNode=np.array([0, 200, -200, 400]),
-                # SROperNode=np.array([0, 50, -50, 100]),
-                # SROperNode=np.array([0, 20, -20, 40]),
-                # SROperNode=np.array([0, 0, 0, 0]),
-                # SROperNode=np.array([0, 50, 100]),
-                # SROperNode=np.array([0, 0]),
-                SROperNode=np.array([0]),
-            ),
-            danseParams=DANSEparameters(
-                DFTsize=1024,
-                WOLAovlp=.5,  # [*100 -> %]
-                # nodeUpdating='seq',
-                nodeUpdating='asy',
-                # broadcastType='fewSamples',
-                broadcastType='wholeChunk',
-                #
-                # vvvvvvvvv SRO-RELATED vvvvvvvvv
-                estimateSROs='CohDrift',
-                # estimateSROs='DXCPPhaT',
-                # compensateSROs=True,
-                compensateSROs=False,
-                cohDrift=CohDriftParameters(
-                    loop='open',
-                    alpha=0.95
-                ),
-                # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                #
-                filterInitType='selectFirstSensor_andFixedValue',
-                filterInitFixedValue=1,
-                # filterInitFixedValue=0.01,
-                #
-                # vvvvvvvv FOR TI-DANSE TESTING vvvvvvvv
-                computeCentralised=True,
-                computeLocal=True,
-                # noExternalFilterRelaxation=True,
-                noExternalFilterRelaxation=False,
-                performGEVD=False,
-                # performGEVD=True,
-                # bypassUpdates=True  # /!\
-                t_expAvg50p=10,
-                # t_expAvg50p=30,
-                # t_expAvg50p=3,
-                # t_expAvg50p=1,
-                timeBtwExternalFiltUpdates=1,
-                # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                printoutsAndPlotting=PrintoutsAndPlotting(
-                    showWASNs=False if BYPASS_DYNAMIC_PLOTS else True,
-                    onlySNRandESTOIinPlots=True
-                ),
-                # vvvv Covariance matrices initialization parameters
-                covMatInitType='fully_random',
-                # covMatInitType='eye_and_random',
-                # covMatInitType='batch_ground_truth',
-                # covMatEyeInitScaling=0.0001,
-                # covMatRandomInitScaling=0.00001,
-                # covMatSameInitForAllFreqs=True,
-                # covMatSameInitForAllNodes=False
-            )
-        )
+        # Load parameters from config file
+        p = TestParameters().load_from_yaml(PATH_TO_CONFIG_FILE)
         p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
 
     # Build room
@@ -316,4 +188,4 @@ def postprocess(
 
 
 if __name__ == '__main__':
-    sys.exit(main(p=p))
+    sys.exit(main())
