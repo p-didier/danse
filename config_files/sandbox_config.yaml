@@ -1,41 +1,95 @@
-
-selfnoiseSNR: -50 # [dB] microphone self-noise SNR
-#
-referenceSensor: 0    # Index of the reference sensor at each node
-#
+bypassExport: false
+danseParams:
+  DFTsize: 1024
+  GEVDrank: 1
+  WOLAovlp: 0.5
+  alphaExternalFilters: 0.5
+  broadcastType: wholeChunk
+  bypassUpdates: false
+  cohDrift:
+    alpha: 0.95
+    alphaEps: 0.05
+    estEvery: 1
+    estimationMethod: gs
+    loop: open
+    segLength: 10
+    startAfterNups: 11
+  compensateSROs: false
+  computeCentralised: true
+  computeLocal: true
+  computeNoiseFree: false
+  covMatEyeInitScaling: 1.0
+  covMatInitType: fully_random
+  covMatRandomInitScaling: 2.220446049250313e-16
+  covMatSameInitForAllFreqs: true
+  covMatSameInitForAllNodes: true
+  desSigProcessingType: wola
+  dynMetrics:
+    chunkDuration: 1.0
+    chunkOverlap: 0.5
+    dynamicPESQ: false
+    dynamicSNR: false
+    dynamicSTOI: false
+    dynamicfwSNRseg: false
+  efficientSpSBC: true
+  estimateSROs: CohDrift
+  filterInitFixedValue: 1
+  filterInitType: selectFirstSensor_andFixedValue
+  frameLenfwSNRseg: 0.03
+  gammafwSNRseg: 0.2
+  minNoSpeechDurEndUterrance: 0.2
+  noExternalFilterRelaxation: false
+  nodeUpdating: asy
+  performGEVD: false
+  printout_eventsParser: true
+  printout_eventsParserNoBC: false
+  printout_externalFilterUpdate: true
+  printout_profiler: true
+  printoutsAndPlotting:
+    onlySNRandESTOIinPlots: true
+    showWASNs: false
+  seqUpdateStartNodeIdx: 1
+  t_expAvg50p: 10
+  timeBtwExternalFiltUpdates: 1
+  treeFormationAlgorithm: prim
+  upTDfilterEvery: 1.0
+  winWOLAanalysisType: sqrthann
+  winWOLAsynthesisType: sqrthann
+exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230407_tests/selfnoise30dB
+referenceSensor: 0
+seed: 12347
+snrYlimMax: null
 wasnParams:
+  SROperNode: '[0, 0, 0]'
+  VADenergyDecrease_dB: 35
+  VADwinLength: 0.04
+  arrayGeometry: grid3d
+  baseSNR: 5
+  desiredSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
+  fs: 16000
   generateRandomWASNwithSeed: 0
-  SROperNode: [0]
+  interSensorDist: 0.2
+  layoutType: random_spinning_top
+  lenRIR: 1024
+  loadFrom: ''
+  minDistToWalls: 0.5
+  nDesiredSources: 1
+  nNodes: 3
+  nNoiseSources: 1
+  nSensorPerNode: '[1, 2, 3]'
+  noiseSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
+  rd: '[5, 5, 5]'
+  referenceSensor: 0
+  selfnoiseSNR: 30
+  sigDur: 15
+  t60: 0.2
   topologyParams:
-    topologyType: 'fully-connected'
-    commDistance: 0.    # maximum inter-node communication distance [m]
-    seed: 12345     # random-generator seed
-    plotTopo: False  # if True, plots a visualization of the topology
-    userDefinedTopo: []  # connectivity matrix
-  selfnoiseSNR: 50.   # self-noise SNR
-  rd: [5, 5, 5]  # room dimensions [m]
-  fs: 16000.     # base sampling frequency [Hz]
-  t60: 0.        # reverberation time [s]
-  minDistToWalls: 0.5   # minimum distance between elements and room walls [m]
-  layoutType: 'random'
-  referenceSensor: 0    # Index of the reference sensor at each node
-  interSensorDist: 0.1   # distance separating microphones
-  arrayGeometry: 'grid3d'   # microphone array geometry (only used if numSensorPerNode > 1)
-  lenRIR: 1024    # length of RIRs [samples]
-  sigDur: 5.     # signals duration [s]
-  nDesiredSources: 1   # number of desired sources
-  nNoiseSources: 1     # number of undesired (noise) sources
-  desiredSignalFile: []  # list of paths to desired signal file(s)
-  noiseSignalFile: []   # list of paths to noise signal file(s)
-  baseSNR: 5                        # [dB] SNR between dry desired signals and dry noise
-  VADenergyDecrease_dB: float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
-  VADwinLength: float = 40e-3     # [s] VAD window length
-  nNodes: int = 0        # number of nodes in scenario
-  nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node
-  loadFrom: str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))')
-danseParams: base.DANSEparameters = base.DANSEparameters()
-exportFolder: str = ''  # folder to export outputs
-bypassExport: bool = False  # if True, bypass export
-#
-seed: int = 12345
-snrYlimMax : float = None  # SNR ylim max (if None, use auto lim)
+    commDistance: 4.0
+    plotTopo: false
+    seed: 12347
+    topologyType: fully-connected
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'

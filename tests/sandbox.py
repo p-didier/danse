@@ -10,10 +10,8 @@ import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_utils import wipe_folder
 
-PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/TestParameters_cfg.yaml'
-SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
+PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sandbox_config.yaml'
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
-SEED = 12347
 
 def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
     """Main function.
@@ -34,9 +32,12 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
 
     # Build room
+    print('Building room...')
     room, vad, wetSpeeches, wetNoises = sig_ut.build_room(p.wasnParams)
+    print('Room built.')
 
     # Build WASN (asynchronicities, topology)
+    print('Building WASN...')
     wasnObj = sig_ut.build_wasn(
         room,
         vad,
@@ -45,6 +46,7 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         p.wasnParams,
         p.danseParams.minNoSpeechDurEndUterrance
     )
+    print('WASN built.')
 
     if plotASCearly:
         pp.plot_asc(
@@ -55,11 +57,16 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
             [node.nodeType for node in wasnObj.wasn],
             plot3Dview=True
         )
+    
     # DANSE
+    print('Running DANSE...')
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
+    print('DANSE run complete.')
 
     # Post-process results (save, export, plot...)
+    print('Post-processing...')
     outPostProc = postprocess(out, wasnObjUpdated, room, p)
+    print('Done.')
 
     return outPostProc
 
