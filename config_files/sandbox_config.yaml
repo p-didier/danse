@@ -1,5 +1,11 @@
+# Often-used
+
+#
 bypassExport: false
 danseParams:
+  # For debug
+  saveConditionNumber: true
+  #
   DFTsize: 1024
   GEVDrank: 1
   WOLAovlp: 0.5
@@ -60,7 +66,10 @@ referenceSensor: 0
 seed: 12347
 snrYlimMax: null
 wasnParams:
-  SROperNode: '[0, 0, 0]'
+  # Often used
+  sigDur: 5
+  #
+  SROperNode: '[0, 0, 0]'  # compact way to write lists
   VADenergyDecrease_dB: 35
   VADwinLength: 0.04
   arrayGeometry: grid3d
@@ -78,18 +87,17 @@ wasnParams:
   nDesiredSources: 1
   nNodes: 3
   nNoiseSources: 1
-  nSensorPerNode: '[1, 2, 3]'
+  nSensorPerNode: '[1, 2, 3]'  # compact way to write lists
   noiseSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
-  rd: '[5, 5, 5]'
+  rd: '[5, 5, 5]'  # compact way to write lists
   referenceSensor: 0
   selfnoiseSNR: 30
-  sigDur: 15
   t60: 0.2
   topologyParams:
     commDistance: 4.0
     plotTopo: false
     seed: 12347
     topologyType: fully-connected
-    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

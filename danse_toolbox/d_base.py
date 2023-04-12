@@ -182,7 +182,6 @@ class DANSEparameters(Hyperparameters):
     noExternalFilterRelaxation: bool = False  # if True, bypass external
         # filter updates.
     timeBtwExternalFiltUpdates: float = 1.  # [s] bw. external filter updates.
-    # ^ TODO: make that used only if the node-updating is sim/asy.
     alphaExternalFilters: float = .5    # exponential averaging constant
                                         # for external filter target update.
     t_expAvg50p: float = 2.     # [s] Time in the past at which the value is
@@ -234,8 +233,11 @@ class DANSEparameters(Hyperparameters):
     # ---- TI-DANSE specific
     treeFormationAlgorithm: str = 'prim'    # algorithm to prune ad-hoc WASN
         # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
-        # >> According to Paul Didier's testings from December 2022: 
-        #     'kruskal' and 'prim' are faster and more scalable than 'boruvka'.
+            # NB: according to Paul Didier's testings from December 2022,
+            # 'kruskal' and 'prim' are faster and more scalable than 'boruvka'.
+    # ---- Debugging
+    saveConditionNumber: bool = False   # if True, save condition numbers of
+        # relevant covariance matrices.
     
     def __post_init__(self):
         """Adapt some fields depending on the value of others, after 

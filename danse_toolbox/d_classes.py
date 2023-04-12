@@ -1,12 +1,17 @@
 import copy
-import time
 import random
 import numpy as np
 import scipy.linalg as sla
 from siggen.classes import *
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
+
+
+@dataclass
+class ConditionNumbers:
+    cn_RyyDANSE: np.ndarray = np.array([])  # condition number of the DANSE
+        # $\tilde{R}_{\mathbf{y}_k\mathbf{y}_k}$ matrices.
 
 @dataclass
 class TestParameters:

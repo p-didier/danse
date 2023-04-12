@@ -6,6 +6,7 @@ import gzip
 import time
 import copy
 import pickle
+import warnings
 import numpy as np
 from pathlib import Path
 from scipy.io import wavfile
@@ -15,8 +16,8 @@ from danse_toolbox.d_eval import *
 from dataclasses import dataclass, fields
 import danse_toolbox.dataclass_methods as met
 from siggen.classes import Node, WASNparameters
-from danse_toolbox.d_base import DANSEparameters, back_to_time_domain, get_stft
-from danse_toolbox.d_classes import DANSEvariables
+from danse_toolbox.d_base import DANSEparameters, get_stft
+from danse_toolbox.d_classes import DANSEvariables, ConditionNumbers
 from siggen.utils import plot_asc_3d
 
 @dataclass
@@ -91,6 +92,11 @@ class DANSEoutputs(DANSEparameters):
         self.filters = dv.wTilde
         if self.computeCentralised:
             self.filtersCentr = dv.wCentr
+        # Condition numbers
+        if self.saveConditionNumber:
+            self.condNumbers = ConditionNumbers(
+                cn_RyyDANSE=compute_condition_numbers(dv.Ryytilde, loopAxis=0),
+            )
         # Other useful things
         self.beta = dv.expAvgBeta
         self.vadFrames = dv.oVADframes
@@ -123,6 +129,16 @@ class DANSEoutputs(DANSEparameters):
     def export_sounds(self, wasn, exportFolder):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
+
+    def plot_cond(self, exportFolder=None):
+        """Plots a visualization of the condition numbers in DANSE."""
+        self.check_init()  # check if object is correctly initialised
+        fig = plot_cond_numbers(self.condNumbers)
+        if exportFolder is not None:
+            fig.savefig(f'{exportFolder}/cond_numbers.png')
+            fig.savefig(f'{exportFolder}/cond_numbers.pdf')
+        else:
+            plt.close(fig)
 
     def plot_perf(
             self,
@@ -1352,3 +1368,98 @@ def normalize_toint16(nparray):
     nparrayNormalized = (amplitude * nparray / \
         np.amax(nparray) * 0.5).astype(np.int16)  # 0.5 to avoid clipping
     return nparrayNormalized
+
+
+def compute_condition_numbers(array, loopAxis=None):
+    """Computes the condition number(s) of an array or list of arrays.
+    Parameters
+    ----------
+    array : 2D or 3D np.ndarray or list[2D or 3D np.ndarray]
+        Input matrices.
+    loopAxis : int, optional
+        Axis along which to loop in order to compute the condition numbers.
+        Only used if `array` is a 3D array or list of 3D arrays.
+
+    Returns
+    ----------
+    cond : float or np.ndarray[float]
+        Condition number(s) of (matrices in) `array`.
+    """
+
+    def _compute_condition_number_ndarray(A, loopAx=None):
+        """
+        Helper function that computes the condition number of a 2D or 3D
+        NumPy array `A` (along a given axis `ax` if `A` is 3D).
+        """
+        if isinstance(A, np.ndarray):
+            if A.ndim == 2:
+                cond = np.linalg.cond(A)
+            elif A.ndim == 3:
+                if loopAx is None:
+                    warnings.warn('Axis along which to compute the condition number is not specified. Returning NaN for the condition number.')
+                    return np.nan
+                cond = np.zeros(A.shape[loopAx])
+                for ii in range(A.shape[loopAx]):
+                    if loopAx == 0:
+                        cond[ii] = np.linalg.cond(A[ii, :, :])
+                    elif loopAx == 1:
+                        cond[ii] = np.linalg.cond(A[:, ii, :])
+                    elif loopAx == 2:
+                        cond[ii] = np.linalg.cond(A[:, :, ii])
+            else:
+                warnings.warn('Only 2D or 3D NumPy arrays are supported. Returning NaN for the condition number.')
+                cond = np.nan
+        else:
+            raise TypeError('Input must be a NumPy array.')
+        return cond
+
+    # Compute condition number(s)
+    if isinstance(array, np.ndarray):
+        cond = _compute_condition_number_ndarray(array, loopAx=loopAxis)
+    elif isinstance(array, list):
+        cond = np.zeros((len(array), array[0].shape[loopAxis]))
+        for ii in range(len(array)):
+            cond[ii, :] = _compute_condition_number_ndarray(array[ii], loopAx=loopAxis)
+    return cond
+
+
+def plot_cond_numbers(condNumbers: ConditionNumbers):
+    """
+    Plot condition numbers.
+
+    Parameters
+    ----------
+    condNumbers : ConditionNumbers dataclass
+        Condition numbers.
+
+    Returns
+    ----------
+    fig : matplotlib.figure.Figure
+        Figure handle.
+    ax : matplotlib.axes._subplots.AxesSubplot
+        Axes handle.
+    """
+
+    nPlots = len(fields(condNumbers))
+    fig, ax = plt.subplots(1, nPlots, figsize=(np.amin((3 * nPlots, 15)), 4))
+    if nPlots == 1:
+        ax = [ax]
+    for ii, field in enumerate(fields(condNumbers)):
+        currCNs = getattr(condNumbers, field.name)
+        for k in range(currCNs.shape[0]):
+            ax[ii].plot(currCNs[k, :], label='Node {}'.format(k + 1))
+        ax[ii].set(
+            xlabel='DANSE iteration (index $i$)',
+            ylabel='Condition number',
+            title=f'Condition number of "{field.name[3:]}"',
+        )
+        ax[ii].legend(loc='best')
+        ax[ii].grid(True)
+        ax[ii].set_yscale('log')
+        ax[ii].set_ylim([1, ax[ii].get_ylim()[1]])
+        ax[ii].autoscale(enable=True, axis='x', tight=True)
+        ax[ii].set_xlim([0, ax[ii].get_xlim()[1]])
+    
+    stop = 1
+    return fig, ax
+    

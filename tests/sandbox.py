@@ -28,8 +28,10 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
     """
     if p is None:
         # Load parameters from config file
+        print('Loading parameters...')
         p = TestParameters().load_from_yaml(PATH_TO_CONFIG_FILE)
         p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
+        print('Parameters loaded.')
 
     # Build room
     print('Building room...')
@@ -146,6 +148,9 @@ def postprocess(
 
     if runit:
         if not p.bypassExport:
+            # Export condition number plot
+            out.plot_cond(p.exportFolder)
+
             # Export convergence plot
             out.plot_convergence(p.exportFolder)
 
