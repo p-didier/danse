@@ -130,14 +130,19 @@ class DANSEoutputs(DANSEparameters):
     def plot_filter_norms(self, exportFolder=None):
         """Plots a visualization of the evolution of filter norms in DANSE."""
         self.check_init()  # check if object is correctly initialised
-        fig = plot_filter_norms(
+        figs = plot_filter_norms(
             self.filters,
             self.filtersCentr[0],  # all centralised filters are the same
             self.nSensorPerNode
         )
         if exportFolder is not None:
-            fig.savefig(f'{exportFolder}/filter_norms.png', dpi=300)
-            fig.savefig(f'{exportFolder}/filter_norms.pdf')
+            for k, fig in enumerate(figs):
+                if k < len(figs) - 1:
+                    fig.savefig(f'{exportFolder}/filtnorms_n{k + 1}.png', dpi=300)
+                    fig.savefig(f'{exportFolder}/filtnorms_n{k + 1}.pdf')
+                else:
+                    fig.savefig(f'{exportFolder}/filtnorms_c.png', dpi=300)
+                    fig.savefig(f'{exportFolder}/filtnorms_c.pdf')
         else:
             plt.close(fig)
 
@@ -1465,7 +1470,11 @@ def plot_cond_numbers(condNumbers: ConditionNumbers, nSensorPerNode: int=None):
     return fig
 
 
-def plot_filter_norms(filters, filtersCentre=None, nSensorsPerNode=None):
+def plot_filter_norms(
+        filters,
+        filtersCentre=None,
+        nSensorsPerNode=None
+    ) -> list[plt.Figure]:
     """
     Plot filter norms.
 
@@ -1495,15 +1504,15 @@ def plot_filter_norms(filters, filtersCentre=None, nSensorsPerNode=None):
         nSubplots += 1
     
     # Compute y-axis limits
-    maxNorm = np.amax([np.amax(np.log10(np.abs(np.mean(filt, axis=0)))) for filt in filters])
-    minNorm = np.amin([np.amin(np.log10(np.abs(np.mean(filt, axis=0)))) for filt in filters])
+    maxNorm = np.amax([np.amax(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters])
+    minNorm = np.amin([np.amin(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters])
 
     def _format_axes(myAx, ti, maxNorm, minNorm):
         """Format axes."""
         myAx.autoscale(enable=True, axis='x', tight=True)
         myAx.set(
             xlabel='STFT time frame index $i$',
-            ylabel='$\\log_{{10}}(|E_{{\\nu}}\\{w_{{k,m}}[\\nu, i]\\}|)$',
+            ylabel='$\\log_{{10}}(E_{{\\nu}}\\{|w_{{k,m}}[\\nu, i]|\\})$',
             title=ti,
             xticks=myAx.get_xticks(),
             xticklabels=np.round(np.linspace(
@@ -1524,9 +1533,9 @@ def plot_filter_norms(filters, filtersCentre=None, nSensorsPerNode=None):
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
         for m in range(filters[k].shape[2]):
             ax.plot(
-                np.log10(np.abs(
-                    np.mean(filters[k][:, :, m], axis=0)  # Mean over frequency bins
-                )),
+                np.log10(
+                    np.mean(np.abs(filters[k][:, :, m]), axis=0)  # Mean over frequency bins
+                ),
                 label=f'$m={m + 1}$ (local)' if m < nSensorsPerNode[k] else f'$m={m + 1}$',
                 linestyle='dashed' if m < nSensorsPerNode[k] else 'solid'
             )
@@ -1544,9 +1553,9 @@ def plot_filter_norms(filters, filtersCentre=None, nSensorsPerNode=None):
     fig, ax = plt.subplots(1, 1, figsize=(7, 5))
     for m in range(filtersCentre.shape[2]):
         ax.plot(
-            np.log10(np.abs(
-                np.mean(filtersCentre[:, :, m], axis=0)  # Mean over frequency bins
-            )),
+            np.log10(
+                np.mean(np.abs(filtersCentre[:, :, m]), axis=0)  # Mean over frequency bins
+            ),
             label=f'$m={m + 1}$ (centralized)',
         )
     # Set title
