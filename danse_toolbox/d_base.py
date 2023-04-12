@@ -238,6 +238,7 @@ class DANSEparameters(Hyperparameters):
     # ---- Debugging
     saveConditionNumber: bool = False   # if True, save condition numbers of
         # relevant covariance matrices.
+    saveConditionNumberEvery: int = 1    # [iter] bw. condition number saves.
     
     def __post_init__(self):
         """Adapt some fields depending on the value of others, after 

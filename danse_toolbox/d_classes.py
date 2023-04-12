@@ -1,5 +1,7 @@
 import copy
+import shutil
 import random
+import warnings
 import numpy as np
 import scipy.linalg as sla
 from siggen.classes import *
@@ -8,10 +10,129 @@ import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
 
 
+# @dataclass
+# class CondNum:
+#     """
+#     Class that stores the condition number(s) of a matrix or list of matrices.
+#     """
+#     cn: float = np.nan  # condition number
+#     t: float = np.nan   # time at which the condition number was computed
+
 @dataclass
 class ConditionNumbers:
-    cn_RyyDANSE: np.ndarray = np.array([])  # condition number of the DANSE
-        # $\tilde{R}_{\mathbf{y}_k\mathbf{y}_k}$ matrices.
+    cn_RyyDANSE: list = field(default_factory=list)  # condition number of
+        # the DANSE $\tilde{\mathbf{R}}_{\mathbf{y}_k\mathbf{y}_k}$ matrices.
+    iter_cn_RyyDANSE: list = field(default_factory=list)  # iter. at which the
+        # condition number of the DANSE
+        # $\tilde{\mathbf{R}}_{\mathbf{y}_k\mathbf{y}_k}$ matrices was computed.
+    cn_RyyLocal: list = field(default_factory=list)  # condition number of
+        # the local $\mathbf{R}_{\mathbf{y}_k\mathbf{y}_k}$ matrices.
+    iter_cn_RyyLocal: list = field(default_factory=list)  # iter. at which the
+        # condition number of the local
+        # $\mathbf{R}_{\mathbf{y}_k\mathbf{y}_k}$ matrices was computed.
+    cn_RyyCentr: list = field(default_factory=list)  # condition number of
+        # the centralised $\mathbf{R}_{\mathbf{y}\mathbf{y}}$ matrices.
+    iter_cn_RyyCentr: list = field(default_factory=list)  # iter. at which the
+        # condition number of the centralised
+        # $\mathbf{R}_{\mathbf{y}\mathbf{y}}$ matrices was computed.
+
+    def init(self, computeLocal, computeCentralised):
+        """Initializes the condition number variables."""
+        # Inform user about whether the condition numbers are computed
+        # for the different matrices.
+        self.cn_RyyDANSEcomputed = True  # always true
+        if computeLocal:
+            self.cn_RyyLocalComputed = True
+        else:
+            self.cn_RyyLocalComputed = False
+        if computeCentralised:
+            self.cn_RyyCentrComputed = True
+        else:
+            self.cn_RyyCentrComputed = False
+
+    def get_new_cond_number(self, k, covMat, iter, type='DANSE'):
+        """Computes and stores a new array of condition numbers
+        of a matrix or list of matrices."""
+
+        # Compute condition numbers
+        cns = compute_condition_numbers(covMat, loopAxis=0)
+
+        # Store condition numbers
+        if type == 'DANSE':
+            self.cn_RyyDANSE[k] = np.concatenate(
+                (self.cn_RyyDANSE[k], cns[:, np.newaxis]),
+                axis=1
+            )
+            self.iter_cn_RyyDANSE[k].append(iter)
+        #
+        elif type == 'local':
+            self.cn_RyyLocal[k] = np.concatenate(
+                (self.cn_RyyLocal[k], cns[:, np.newaxis]),
+                axis=1
+            )
+            self.iter_cn_RyyLocal[k].append(iter)
+        #
+        elif type == 'centralised':
+            self.cn_RyyCentr[k] = np.concatenate(
+                (self.cn_RyyCentr[k], cns[:, np.newaxis]),
+                axis=1
+            )
+            self.iter_cn_RyyCentr[k].append(iter)
+
+
+
+def compute_condition_numbers(array, loopAxis=None):
+    """Computes the condition number(s) of an array or list of arrays.
+    Parameters
+    ----------
+    array : 2D or 3D np.ndarray or list[2D or 3D np.ndarray]
+        Input matrices.
+    loopAxis : int, optional
+        Axis along which to loop in order to compute the condition numbers.
+        Only used if `array` is a 3D array or list of 3D arrays.
+
+    Returns
+    ----------
+    cond : float or np.ndarray[float]
+        Condition number(s) of (matrices in) `array`.
+    """
+
+    def _compute_condition_number_ndarray(A, loopAx=None):
+        """
+        Helper function that computes the condition number of a 2D or 3D
+        NumPy array `A` (along a given axis `ax` if `A` is 3D).
+        """
+        if isinstance(A, np.ndarray):
+            if A.ndim == 2:
+                cond = np.linalg.cond(A)
+            elif A.ndim == 3:
+                if loopAx is None:
+                    warnings.warn('Axis along which to compute the condition number is not specified. Returning NaN for the condition number.')
+                    return np.nan
+                cond = np.zeros(A.shape[loopAx])
+                for ii in range(A.shape[loopAx]):
+                    if loopAx == 0:
+                        cond[ii] = np.linalg.cond(A[ii, :, :])
+                    elif loopAx == 1:
+                        cond[ii] = np.linalg.cond(A[:, ii, :])
+                    elif loopAx == 2:
+                        cond[ii] = np.linalg.cond(A[:, :, ii])
+            else:
+                warnings.warn('Only 2D or 3D NumPy arrays are supported. Returning NaN for the condition number.')
+                cond = np.nan
+        else:
+            raise TypeError('Input must be a NumPy array.')
+        return cond
+
+    # Compute condition number(s)
+    if isinstance(array, np.ndarray):
+        cond = _compute_condition_number_ndarray(array, loopAx=loopAxis)
+    elif isinstance(array, list):
+        cond = np.zeros((len(array), array[0].shape[loopAxis]))
+        for ii in range(len(array)):
+            cond[ii, :] = _compute_condition_number_ndarray(array[ii], loopAx=loopAxis)
+    return cond
+
 
 @dataclass
 class TestParameters:
@@ -25,7 +146,9 @@ class TestParameters:
     bypassExport: bool = False  # if True, bypass export
     #
     seed: int = 12345
-    snrYlimMax : float = None  # SNR ylim max (if None, use auto lim)
+    snrYlimMax: float = None  # SNR ylim max (if None, use auto lim)
+    loadedFromYaml: bool = False  # if True, the parameters were loaded from a YAML file
+    originYaml: str = ''  # path to the YAML file from which the parameters were loaded
 
     def __post_init__(self):
         np.random.seed(self.seed)  # set random seed
@@ -57,7 +180,17 @@ class TestParameters:
     
     def load_from_yaml(self, path):
         """Loads dataclass from YAML file."""
+        self.loadedFromYaml = True  # flag to indicate that the object was loaded from YAML
+        self.originYaml = path  # path to YAML file
         return met.load_from_yaml(path, self)
+    
+    def save_yaml(self):
+        """Saves dataclass to YAML file."""
+        if self.loadedFromYaml:
+            # Copy YAML file to export folder
+            shutil.copy(self.originYaml, self.exportFolder)
+        else:
+            raise ValueError('Cannot save YAML file: the parameters were not loaded from a YAML file.')
 
 
 def check_if_fully_connected(wasn: list[Node]):
@@ -477,6 +610,24 @@ class DANSEvariables(base.DANSEparameters):
             tuple([x for x in self.cleanNoiseSignalsAtNodes]),
             axis=-1
         )
+
+        # For debugging purposes
+        initCNlist = [np.empty((self.nPosFreqs, 0)) for _ in range(nNodes)]
+        initIterCNlist = [[] for _ in range(nNodes)]
+        self.condNumbers = ConditionNumbers(
+            cn_RyyDANSE=copy.deepcopy(initCNlist),
+            iter_cn_RyyDANSE=copy.deepcopy(initIterCNlist),
+            cn_RyyLocal=copy.deepcopy(initCNlist),
+            iter_cn_RyyLocal=copy.deepcopy(initIterCNlist),
+            cn_RyyCentr=copy.deepcopy(initCNlist),
+            iter_cn_RyyCentr=copy.deepcopy(initIterCNlist),
+        )
+        # Inform about which condition numbers are to be computed
+        self.condNumbers.init(self.computeLocal, self.computeCentralised)
+        # Information about the last saved condition number
+        self.lastCondNumberSaveRyyTilde = [-1 for _ in range(nNodes)]
+        self.lastCondNumberSaveRyyLocal = [-1 for _ in range(nNodes)]
+        self.lastCondNumberSaveRyyCentr = [-1 for _ in range(nNodes)]
 
         return self
 
@@ -1301,10 +1452,22 @@ class DANSEvariables(base.DANSEparameters):
             yyH,
             vad=self.oVADframes[k][self.i[k]]
         )  # update
+        if self.saveConditionNumber and\
+            self.i[k] - self.lastCondNumberSaveRyyTilde[k] >=\
+                self.saveConditionNumberEvery:  # save condition number
+            # Inform user
+            print('Computing condition numbers (Ryy matrices)...')
+            self.condNumbers.get_new_cond_number(
+                k,
+                self.Ryytilde[k],
+                iter=self.i[k],
+                type='DANSE'
+            )
+            self.lastCondNumberSaveRyyTilde[k] = self.i[k]
 
-        self.yyH[k][self.i[k], :, :, :] = yyH  # saving for SRO estimation...
+        self.yyH[k][self.i[k], :, :, :] = yyH  # saving for SRO estimation
         
-        # Consider centralised / local estimation(s)
+        # Consider local estimates
         if self.computeLocal:
             y = self.yHatLocal[k][:, self.i[k], :]  # concise renaming
             yyH = np.einsum('ij,ik->ijk', y, y.conj())
@@ -1314,6 +1477,18 @@ class DANSEvariables(base.DANSEparameters):
                 yyH,
                 vad=self.oVADframes[k][self.i[k]]
             )  # update local
+            if self.saveConditionNumber and\
+                self.i[k] - self.lastCondNumberSaveRyyLocal[k] >=\
+                    self.saveConditionNumberEvery:  # save condition number
+                self.condNumbers.get_new_cond_number(
+                    k,
+                    self.Ryylocal[k],
+                    iter=self.i[k],
+                    type='local'
+                )
+                self.lastCondNumberSaveRyyLocal[k] = self.i[k]
+        
+        # Consider centralised estimates
         if self.computeCentralised:
             y = self.yHatCentr[k][:, self.i[k], :]  # concise renaming
             yyH = np.einsum('ij,ik->ijk', y, y.conj())
@@ -1323,6 +1498,16 @@ class DANSEvariables(base.DANSEparameters):
                 yyH,
                 vad=self.centrVADframes[self.i[k]]
             )  # update centralised
+            if self.saveConditionNumber and\
+                self.i[k] - self.lastCondNumberSaveRyyCentr[k] >=\
+                    self.saveConditionNumberEvery:  # save condition number
+                self.condNumbers.get_new_cond_number(
+                    k,
+                    self.Ryycentr[k],
+                    iter=self.i[k],
+                    type='centralised'
+                )
+                self.lastCondNumberSaveRyyCentr[k] = self.i[k]
 
     def perform_update(self, k):
         """
@@ -1345,7 +1530,7 @@ class DANSEvariables(base.DANSEparameters):
             ryd = np.matmul(Ryy - Rnn, Evect)
             # Update node-specific parameters of node k
             Ryyinv = np.linalg.inv(Ryy)
-            w = np.matmul(Ryyinv, ryd[:,:,np.newaxis])
+            w = np.matmul(Ryyinv, ryd[:, :, np.newaxis])
             return w[:, :, 0]  # get rid of singleton dimension
 
         def _update_w_gevd(Ryy, Rnn, refSensor):

@@ -12,8 +12,6 @@ from danse_toolbox.d_sros import *
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_post import DANSEoutputs
 
-import danse_toolbox.d_post as pp
-
 def danse(
     wasnObj: WASN,
     p: base.DANSEparameters

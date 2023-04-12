@@ -148,6 +148,9 @@ def postprocess(
 
     if runit:
         if not p.bypassExport:
+            # Export filter coefficients norm plot
+            out.plot_filter_norms(p.exportFolder)
+
             # Export condition number plot
             out.plot_cond(p.exportFolder)
 
@@ -194,7 +197,11 @@ def postprocess(
 
             # Save `DANSEoutputs` object after metrics computation
             out.save(foldername=p.exportFolder, light=True)
-            p.save()    # save `TestParameters` object
+            # Save `TestParameters` object
+            if p.loadedFromYaml:
+                p.save_yaml()   # save `TestParameters` object as YAML file
+            else:
+                p.save()    # save `TestParameters` object as Pickle archive
 
     return out
 

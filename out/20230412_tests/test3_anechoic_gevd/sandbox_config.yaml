@@ -1,5 +1,5 @@
 # Often-used
-exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230412_tests/test_filtNormPlot
+exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230412_tests/test3_anechoic_gevd
 seed: 12347
 #
 bypassExport: false
@@ -7,7 +7,7 @@ danseParams:
   # For debug
   saveConditionNumber: true
   saveConditionNumberEvery: 10
-  performGEVD: false
+  performGEVD: true
   #
   DFTsize: 1024
   GEVDrank: 1
@@ -67,7 +67,7 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Often used
-  sigDur: 5  # [s]
+  sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   layoutType: random_spinning_top
   t60: 0.0  # [s]

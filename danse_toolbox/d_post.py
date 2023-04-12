@@ -42,7 +42,6 @@ class DANSEoutputs(DANSEparameters):
         Selects useful output values from `DANSEvariables` object
         after DANSE processing.
         """
-
         # Inits
         self.TDdesiredSignals_est_c = None
         self.STFTDdesiredSignals_est_c = None
@@ -94,9 +93,7 @@ class DANSEoutputs(DANSEparameters):
             self.filtersCentr = dv.wCentr
         # Condition numbers
         if self.saveConditionNumber:
-            self.condNumbers = ConditionNumbers(
-                cn_RyyDANSE=compute_condition_numbers(dv.Ryytilde, loopAxis=0),
-            )
+            self.condNumbers = dv.condNumbers
         # Other useful things
         self.beta = dv.expAvgBeta
         self.vadFrames = dv.oVADframes
@@ -130,12 +127,26 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
 
+    def plot_filter_norms(self, exportFolder=None):
+        """Plots a visualization of the evolution of filter norms in DANSE."""
+        self.check_init()  # check if object is correctly initialised
+        fig = plot_filter_norms(
+            self.filters,
+            self.filtersCentr[0],  # all centralised filters are the same
+            self.nSensorPerNode
+        )
+        if exportFolder is not None:
+            fig.savefig(f'{exportFolder}/filter_norms.png', dpi=300)
+            fig.savefig(f'{exportFolder}/filter_norms.pdf')
+        else:
+            plt.close(fig)
+
     def plot_cond(self, exportFolder=None):
         """Plots a visualization of the condition numbers in DANSE."""
         self.check_init()  # check if object is correctly initialised
-        fig = plot_cond_numbers(self.condNumbers)
+        fig = plot_cond_numbers(self.condNumbers, self.nSensorPerNode)
         if exportFolder is not None:
-            fig.savefig(f'{exportFolder}/cond_numbers.png')
+            fig.savefig(f'{exportFolder}/cond_numbers.png', dpi=300)
             fig.savefig(f'{exportFolder}/cond_numbers.pdf')
         else:
             plt.close(fig)
@@ -1370,60 +1381,7 @@ def normalize_toint16(nparray):
     return nparrayNormalized
 
 
-def compute_condition_numbers(array, loopAxis=None):
-    """Computes the condition number(s) of an array or list of arrays.
-    Parameters
-    ----------
-    array : 2D or 3D np.ndarray or list[2D or 3D np.ndarray]
-        Input matrices.
-    loopAxis : int, optional
-        Axis along which to loop in order to compute the condition numbers.
-        Only used if `array` is a 3D array or list of 3D arrays.
-
-    Returns
-    ----------
-    cond : float or np.ndarray[float]
-        Condition number(s) of (matrices in) `array`.
-    """
-
-    def _compute_condition_number_ndarray(A, loopAx=None):
-        """
-        Helper function that computes the condition number of a 2D or 3D
-        NumPy array `A` (along a given axis `ax` if `A` is 3D).
-        """
-        if isinstance(A, np.ndarray):
-            if A.ndim == 2:
-                cond = np.linalg.cond(A)
-            elif A.ndim == 3:
-                if loopAx is None:
-                    warnings.warn('Axis along which to compute the condition number is not specified. Returning NaN for the condition number.')
-                    return np.nan
-                cond = np.zeros(A.shape[loopAx])
-                for ii in range(A.shape[loopAx]):
-                    if loopAx == 0:
-                        cond[ii] = np.linalg.cond(A[ii, :, :])
-                    elif loopAx == 1:
-                        cond[ii] = np.linalg.cond(A[:, ii, :])
-                    elif loopAx == 2:
-                        cond[ii] = np.linalg.cond(A[:, :, ii])
-            else:
-                warnings.warn('Only 2D or 3D NumPy arrays are supported. Returning NaN for the condition number.')
-                cond = np.nan
-        else:
-            raise TypeError('Input must be a NumPy array.')
-        return cond
-
-    # Compute condition number(s)
-    if isinstance(array, np.ndarray):
-        cond = _compute_condition_number_ndarray(array, loopAx=loopAxis)
-    elif isinstance(array, list):
-        cond = np.zeros((len(array), array[0].shape[loopAxis]))
-        for ii in range(len(array)):
-            cond[ii, :] = _compute_condition_number_ndarray(array[ii], loopAx=loopAxis)
-    return cond
-
-
-def plot_cond_numbers(condNumbers: ConditionNumbers):
+def plot_cond_numbers(condNumbers: ConditionNumbers, nSensorPerNode: int=None):
     """
     Plot condition numbers.
 
@@ -1431,35 +1389,171 @@ def plot_cond_numbers(condNumbers: ConditionNumbers):
     ----------
     condNumbers : ConditionNumbers dataclass
         Condition numbers.
+    nSensorPerNode : [K x 1] list[int]
+        Number of sensors per node (`K` nodes in WASN).
 
     Returns
     ----------
     fig : matplotlib.figure.Figure
         Figure handle.
-    ax : matplotlib.axes._subplots.AxesSubplot
-        Axes handle.
     """
 
-    nPlots = len(fields(condNumbers))
-    fig, ax = plt.subplots(1, nPlots, figsize=(np.amin((3 * nPlots, 15)), 4))
+    # Get number of nodes in WASN
+    nNodes = len(condNumbers.iter_cn_RyyDANSE)
+
+    # Gather condition numbers data and iteration numbers
+    nPlots = 1
+    dataCns = [condNumbers.cn_RyyDANSE]
+    dataIter = [condNumbers.iter_cn_RyyDANSE]
+    refs = ['Ryy DANSE ($\\tilde{\mathbf{R}}_{\mathbf{y}_k\mathbf{y}_k}$)']
+    if condNumbers.cn_RyyLocalComputed:
+        dataCns.append(condNumbers.cn_RyyLocal)
+        dataIter.append(condNumbers.iter_cn_RyyLocal)
+        nPlots += 1
+        refs.append('Ryy local ($\\mathbf{{R}}_{\mathbf{y}_k\mathbf{y}_k}$)')
+    if condNumbers.cn_RyyCentrComputed:
+        dataCns.append(condNumbers.cn_RyyCentr)
+        dataIter.append(condNumbers.iter_cn_RyyCentr)
+        refs.append('Ryy centralized ($\\mathbf{{R}}_{\mathbf{y}\mathbf{y}}$)')
+        nPlots += 1
+
+    # Plot condition numbers
+    scaleFact = 7.5
+    fig, ax = plt.subplots(nNodes,
+    nPlots, figsize=(
+        np.amin((scaleFact * nPlots, 20)),
+        np.amin((scaleFact * 0.5 * nNodes, 20))
+    ))
     if nPlots == 1:
-        ax = [ax]
-    for ii, field in enumerate(fields(condNumbers)):
-        currCNs = getattr(condNumbers, field.name)
-        for k in range(currCNs.shape[0]):
-            ax[ii].plot(currCNs[k, :], label='Node {}'.format(k + 1))
-        ax[ii].set(
-            xlabel='DANSE iteration (index $i$)',
-            ylabel='Condition number',
-            title=f'Condition number of "{field.name[3:]}"',
+        ax = ax[:, np.newaxis]
+    # Compute maximum colorbar value
+    maxCn = np.log10(np.amax([np.amax(np.abs(cn)) for cn in dataCns]))
+    for ii, currCNs in enumerate(dataCns):
+        for k in range(len(currCNs)):
+            mapp = ax[k, ii].pcolormesh(np.log10(currCNs[k]), vmin=0, vmax=maxCn)
+            # Format axes
+            ti = f'{refs[ii]}, node $k={k + 1}$'
+            if nSensorPerNode is not None:
+                ti += f' ({nSensorPerNode[k]} sensors)'
+            ax[k, ii].set(
+                xlabel='STFT time frame index $i$',
+                ylabel='Frequency bin index $\\nu$',
+                title=ti,
+                xticks=ax[k, ii].get_xticks(),
+                xticklabels=np.round(np.array(dataIter[ii][k])[np.linspace(
+                    start=0,
+                    stop=len(dataIter[ii][k]) - 1,
+                    num=len(ax[k, ii].get_xticks()),
+                    dtype=int
+                )], 2)
+            )
+            if ii != 0:
+                ax[k, ii].set(ylabel='')
+                ax[k, ii].set(yticklabels=[])
+            if k != nNodes - 1:
+                ax[k, ii].set(xticklabels=[])
+                ax[k, ii].set(xlabel='')
+            # Color bar
+            cb = plt.colorbar(mapp, ax=ax[k, ii])
+            cb.set_ticks(cb.get_ticks()[:-1])
+            cb.set_ticklabels([f'$10^{int(tick)}$' for tick in cb.get_ticks()])
+            if ii == nPlots - 1:
+                cb.set_label('CN (log-scale)')
+            ax[k, ii].autoscale(enable=True, axis='xy', tight=True)
+    fig.tight_layout()
+    
+    return fig
+
+
+def plot_filter_norms(filters, filtersCentre=None, nSensorsPerNode=None):
+    """
+    Plot filter norms.
+
+    Parameters
+    ----------
+    filters : [K x 1] list of [Nf x Nt x J] np.ndarray[complex]
+        DANSE filters per node.
+        `K` : Number of nodes.
+        `Nf` : Number of frequency bins.
+        `Nt` : Number of time frames.
+        `J` : Filter dimensions.
+    filtersCentre : [Nf x Nt x J] np.ndarray[complex]
+        Centralized DANSE filters.
+    nSensorPerNode : [K x 1] list[int]
+        Number of sensors per node.
+
+    Returns
+    ----------
+    fig : matplotlib.figure.Figure
+        Figure handle.
+    """
+
+    # Get number of nodes in WASN
+    nSubplots = len(filters)
+    nNodes = len(filters)
+    if filtersCentre is not None:
+        nSubplots += 1
+    
+    # Compute y-axis limits
+    maxNorm = np.amax([np.amax(np.log10(np.abs(np.mean(filt, axis=0)))) for filt in filters])
+    minNorm = np.amin([np.amin(np.log10(np.abs(np.mean(filt, axis=0)))) for filt in filters])
+
+    def _format_axes(myAx, ti, maxNorm, minNorm):
+        """Format axes."""
+        myAx.autoscale(enable=True, axis='x', tight=True)
+        myAx.set(
+            xlabel='STFT time frame index $i$',
+            ylabel='$\\log_{{10}}(|E_{{\\nu}}\\{w_{{k,m}}[\\nu, i]\\}|)$',
+            title=ti,
+            xticks=myAx.get_xticks(),
+            xticklabels=np.round(np.linspace(
+                start=0,
+                stop=filters[0].shape[1] - 1,
+                num=len(myAx.get_xticks()),
+                dtype=int
+            ), 2),
+            ylim=[minNorm, maxNorm]
         )
-        ax[ii].legend(loc='best')
-        ax[ii].grid(True)
-        ax[ii].set_yscale('log')
-        ax[ii].set_ylim([1, ax[ii].get_ylim()[1]])
-        ax[ii].autoscale(enable=True, axis='x', tight=True)
-        ax[ii].set_xlim([0, ax[ii].get_xlim()[1]])
+        myAx.legend(loc='upper right')
+        myAx.grid(True)
+
+    # Make one plot per node
+    figs = []
+    for k in range(nNodes):
+        # Plot filter norms
+        fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+        for m in range(filters[k].shape[2]):
+            ax.plot(
+                np.log10(np.abs(
+                    np.mean(filters[k][:, :, m], axis=0)  # Mean over frequency bins
+                )),
+                label=f'$m={m + 1}$ (local)' if m < nSensorsPerNode[k] else f'$m={m + 1}$',
+                linestyle='dashed' if m < nSensorsPerNode[k] else 'solid'
+            )
+        # Set title
+        ti = f'DANSE filters at node $k={k + 1}$'
+        if nSensorsPerNode is not None:
+            ti += f' ({nSensorsPerNode[k]} sensors)'
+        # Format axes
+        _format_axes(ax, ti, maxNorm, minNorm)
+        fig.tight_layout()
+        figs.append(fig)
+
     
-    stop = 1
-    return fig, ax
+    # Plot filter norms
+    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+    for m in range(filtersCentre.shape[2]):
+        ax.plot(
+            np.log10(np.abs(
+                np.mean(filtersCentre[:, :, m], axis=0)  # Mean over frequency bins
+            )),
+            label=f'$m={m + 1}$ (centralized)',
+        )
+    # Set title
+    ti = 'Centralized filters'
+    # Format axes
+    _format_axes(ax, ti, maxNorm, minNorm)
+    fig.tight_layout()
+    figs.append(fig)
     
+    return figs
