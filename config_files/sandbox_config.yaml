@@ -1,6 +1,6 @@
 # Often-used
-exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230412_tests/test_filtNormPlot
-seed: 12347
+exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230413_tests/Mk[3,3,3]_noSROs_randLayout
+seed: 12348
 #
 bypassExport: false
 danseParams:
@@ -10,6 +10,7 @@ danseParams:
   performGEVD: false
   #
   DFTsize: 1024
+  # DFTsize: 2048
   GEVDrank: 1
   WOLAovlp: 0.5
   alphaExternalFilters: 0.5
@@ -67,30 +68,38 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Often used
-  sigDur: 5  # [s]
+  sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
-  layoutType: random_spinning_top
-  t60: 0.0  # [s]
+  # layoutType: random_spinning_top
+  layoutType: random
+  t60: 0.2  # [s]
+  # t60: 0.0  # [s]
   SROperNode: '[0]'  # [PPM] - compact way to write lists/arrays (as a string)
   # SROperNode: '[0, 100, 200]'  # [PPM] - compact way to write lists/arrays (as a string)
+  # nSensorPerNode: '[1, 2, 3]'  # compact way to write lists/arrays (as a string)
+  # nSensorPerNode: '[1, 2, 3]'  # compact way to write lists/arrays (as a string)
+  nSensorPerNode: '[3, 3, 3]'  # compact way to write lists/arrays (as a string)
+  interSensorDist: 0.05
+  # interSensorDist: 0.1
+  # interSensorDist: 0.15
+  # interSensorDist: 0.2
+  # interSensorDist: 0.3
   #
   VADenergyDecrease_dB: 35
   VADwinLength: 0.04
   arrayGeometry: grid3d
-  baseSNR: 0
+  baseSNR: 5
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
   fs: 16000
   generateRandomWASNwithSeed: 0
-  interSensorDist: 0.2
   lenRIR: 1024
   loadFrom: ''
   minDistToWalls: 0.5
   nDesiredSources: 1
   nNodes: 3
   nNoiseSources: 1
-  nSensorPerNode: '[1, 2, 3]'  # compact way to write lists/arrays (as a string)
   noiseSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
@@ -102,5 +111,5 @@ wasnParams:
     #
     commDistance: 4.0
     plotTopo: false
-    seed: 12347
+    seed: 12348
     userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

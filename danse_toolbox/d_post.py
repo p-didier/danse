@@ -839,7 +839,7 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
             int(wasn[k].fs), data
         )
         #
-        data = normalize_toint16(wasn[k].cleanspeech)
+        data = normalize_toint16(wasn[k].cleanspeech[:, out.referenceSensor])
         wavfile.write(
             f'{folder}/wav/desired_N{k + 1}_Sref{out.referenceSensor + 1}.wav',
             int(wasn[k].fs), data
@@ -1551,13 +1551,23 @@ def plot_filter_norms(
     
     # Plot filter norms
     fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-    for m in range(filtersCentre.shape[2]):
+    nodeCount = 0
+    idxCurrNodeSensor = 0
+    for m in range(filtersCentre.shape[2]):        
         ax.plot(
             np.log10(
                 np.mean(np.abs(filtersCentre[:, :, m]), axis=0)  # Mean over frequency bins
             ),
-            label=f'$m={m + 1}$ (centralized)',
+            f'C{nodeCount}-',
+            alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
+            label=f'$m={m + 1}$ (Node {nodeCount + 1})',
         )
+        # Increment node count
+        if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
+            nodeCount += 1
+            idxCurrNodeSensor = 0  # Reset sensor count
+        else:
+            idxCurrNodeSensor += 1  # Increment sensor count
     # Set title
     ti = 'Centralized filters'
     # Format axes

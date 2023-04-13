@@ -1,4 +1,5 @@
 import os
+import time
 import copy
 import librosa
 import resampy
@@ -177,42 +178,47 @@ def build_room(p: classes.WASNparameters):
                 cond2 = y > p.rd[1] - p.minDistToWalls or y < p.minDistToWalls
                 cond3 = z > p.rd[2] - p.minDistToWalls or z < p.minDistToWalls
             return x, y, z
-
-        # Generate speech sources along the line
-        desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
-        for ii in range(p.nDesiredSources):
-            # Generate random point on the line
-            x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
-            # Add source
-            sourceSig = _get_source_signal(p.desiredSignalFile[ii])
-            desiredSignalsRaw[:, ii] = sourceSig  # save (for VAD computation)
-            ssrc = pra.soundsource.SoundSource(
-                position=np.array([x, y, z]), # coordinates
-                signal=desiredSignalsRaw[:, ii]
-            )
-            room.add_soundsource(ssrc)
-
-        # Generate noise sources along the line
-        noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
-        for ii in range(p.nNoiseSources):
-            # Generate random point on the line
-            x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
-            # Add source
-            sourceSig = _get_source_signal(p.noiseSignalFile[ii])
-            sourceSig *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
-            noiseSignalsRaw[:, ii] = sourceSig
-            # ^^^ (for use in metrics computation)
-            ssrc = pra.soundsource.SoundSource(
-                position=np.array([x, y, z]), # coordinates
-                signal=noiseSignalsRaw[:, ii]
-            )
-            room.add_soundsource(ssrc)
         
         # Generate node and sensor positions
         validNodePos = False
         attemptsCount = 0
         maxNumAttempts = 999  # <-- arbitrary... [PD06.04.2023]
         while not validNodePos:
+            print('Attempt number: ' + str(attemptsCount + 1))
+            # Generate a random line for the sources
+            azimuthLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
+            elevationLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
+            
+            # Generate speech sources along the line
+            desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
+            for ii in range(p.nDesiredSources):
+                # Generate random point on the line
+                x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
+                # Add source
+                sourceSig = _get_source_signal(p.desiredSignalFile[ii])
+                desiredSignalsRaw[:, ii] = sourceSig  # save (for VAD computation)
+                ssrc = pra.soundsource.SoundSource(
+                    position=np.array([x, y, z]), # coordinates
+                    signal=desiredSignalsRaw[:, ii]
+                )
+                room.add_soundsource(ssrc)
+
+            # Generate noise sources along the line
+            noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
+            for ii in range(p.nNoiseSources):
+                # Generate random point on the line
+                x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
+                # Add source
+                sourceSig = _get_source_signal(p.noiseSignalFile[ii])
+                sourceSig *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
+                noiseSignalsRaw[:, ii] = sourceSig
+                # ^^^ (for use in metrics computation)
+                ssrc = pra.soundsource.SoundSource(
+                    position=np.array([x, y, z]), # coordinates
+                    signal=noiseSignalsRaw[:, ii]
+                )
+                room.add_soundsource(ssrc)
+            
             # Generate random circle center
             cx, cy, cz = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
             # Compute maximal circle radius based on room dimension
@@ -251,7 +257,7 @@ def build_room(p: classes.WASNparameters):
                     p.nSensorPerNode[k],
                     p.arrayGeometry,
                     p.interSensorDist,
-                    applyRandomRot=True
+                    applyRandomRot=True,
                 )
             # Rotate coordinates so that the circle is perpendicular
             # to the source line.
@@ -265,6 +271,18 @@ def build_room(p: classes.WASNparameters):
                 np.any(micArray < p.minDistToWalls):
                 validNodePos = False
                 attemptsCount += 1
+                
+                if 0:  # debug
+                    fig = plt.figure()
+                    fig.set_size_inches(3.5, 3.5)
+                    ax = fig.add_subplot(projection='3d')
+                    # Temporarily add mics to room for plot
+                    room.add_microphone_array(micArray.T)
+                    plot_asc_3d(ax, room, p, cx, cy, cz, plotSourcesLine=True)
+                    # Delete mics from room after plot
+                    delattr(room, 'mic_array')
+                    plt.draw()
+                    time.sleep(0.1)
                 if attemptsCount > maxNumAttempts:
                     raise ValueError("Could not find valid node positions.")
             else:
@@ -272,11 +290,6 @@ def build_room(p: classes.WASNparameters):
         
         room.add_microphone_array(micArray.T)
 
-    if 0:  # debug
-        fig = plt.figure()
-        fig.set_size_inches(3.5, 3.5)
-        ax = fig.add_subplot(projection='3d')
-        plot_asc_3d(ax, room, p, cx, cy, cz, plotSourcesLine=True)
 
     room.compute_rir()
     room.simulate()
@@ -467,7 +480,7 @@ def generate_array_pos(
         arrayGeom,
         micSep,
         force2D=False,
-        applyRandomRot=False
+        applyRandomRot=False,
     ):
     """
     Define node positions based on node position, number of nodes,
@@ -477,7 +490,8 @@ def generate_array_pos(
     ----------
     nodeCoords : [J x 3] array of real floats
         Nodes coordinates in 3-D space [m].
-    TODO:
+    Mk : int
+        Number of microphones.
     force2D : bool
         If true, projects the sensor coordinates on the z=0 plane.
     applyRandomRot : bool
