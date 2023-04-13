@@ -29,6 +29,9 @@ class AcousticScenarioParameters:
         #       is random.
         #  - "vert_spinning_top": vertical spinning top layout
         #       Description: same as above, but with a vertical source line.
+    #
+    spinTop_randomWiggleAmount: float = 0.0  # [m] amount of random wiggle
+        # in the node positions (only for the spinning top layout).
     #    
     referenceSensor: int = 0    # Index of the reference sensor at each node
     interSensorDist: float = 0.1   # distance separating microphones

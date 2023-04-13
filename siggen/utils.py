@@ -250,6 +250,21 @@ def build_room(p: classes.WASNparameters):
                 x = cx + circR * np.cos(r)
                 y = cy + circR * np.sin(r)
                 z = cz
+                # If asked, add random wiggle to the array centers
+                if p.spinTop_randomWiggleAmount != 0:
+                    print('Adding random wiggle to array centers... (amount = +/-' + str(p.spinTop_randomWiggleAmount) + ' m)')
+                    x += np.random.uniform(
+                        -p.spinTop_randomWiggleAmount,
+                        p.spinTop_randomWiggleAmount
+                    )
+                    y += np.random.uniform(
+                        -p.spinTop_randomWiggleAmount,
+                        p.spinTop_randomWiggleAmount
+                    )
+                    z += np.random.uniform(
+                        -p.spinTop_randomWiggleAmount,
+                        p.spinTop_randomWiggleAmount
+                    )
                 idxSensor = int(np.sum(p.nSensorPerNode[:k]))
                 micArray[idxSensor:(idxSensor + p.nSensorPerNode[k]), :] =\
                     generate_array_pos(
@@ -258,7 +273,7 @@ def build_room(p: classes.WASNparameters):
                     p.arrayGeometry,
                     p.interSensorDist,
                     applyRandomRot=True,
-                )
+                    )
             # Rotate coordinates so that the circle is perpendicular
             # to the source line.
             if 'random' in p.layoutType:
@@ -266,6 +281,7 @@ def build_room(p: classes.WASNparameters):
                     micArray,
                     targetVector=np.array([cx, cy, cz])
                 )
+            
             # Check that all microphones are in the room
             if np.any(micArray > p.rd - p.minDistToWalls) or\
                 np.any(micArray < p.minDistToWalls):
