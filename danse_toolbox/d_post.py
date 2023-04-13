@@ -132,8 +132,9 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         figs = plot_filter_norms(
             self.filters,
-            self.filtersCentr[0],  # all centralised filters are the same
-            self.nSensorPerNode
+            self.filtersCentr,
+            self.nSensorPerNode,
+            refSensorIdx=self.referenceSensor
         )
         if exportFolder is not None:
             for k, fig in enumerate(figs):
@@ -1473,7 +1474,8 @@ def plot_cond_numbers(condNumbers: ConditionNumbers, nSensorPerNode: int=None):
 def plot_filter_norms(
         filters,
         filtersCentre=None,
-        nSensorsPerNode=None
+        nSensorsPerNode=None,
+        refSensorIdx=0
     ) -> list[plt.Figure]:
     """
     Plot filter norms.
@@ -1486,10 +1488,12 @@ def plot_filter_norms(
         `Nf` : Number of frequency bins.
         `Nt` : Number of time frames.
         `J` : Filter dimensions.
-    filtersCentre : [Nf x Nt x J] np.ndarray[complex]
-        Centralized DANSE filters.
+    filtersCentre : [K x 1] list of [Nf x Nt x J] np.ndarray[complex]
+        Centralized DANSE filters per node.
     nSensorPerNode : [K x 1] list[int]
         Number of sensors per node.
+    refSensorIdx : int
+        Index of reference sensor (same for all nodes).
 
     Returns
     ----------
@@ -1526,17 +1530,31 @@ def plot_filter_norms(
         myAx.legend(loc='upper right')
         myAx.grid(True)
 
+    # Useful sensor to node index reference
+    sensorToNodeIndices = [[ii for _ in range(Mk)] for ii, Mk in enumerate(nSensorsPerNode)]
+    # Flatten list
+    sensorToNodeIndices = [item for sublist in sensorToNodeIndices for item in sublist]
+
     # Make one plot per node
     figs = []
     for k in range(nNodes):
         # Plot filter norms
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+        neighborIndices = [ii for ii in np.arange(nNodes) if ii != k]
+        neighborCount = 0
         for m in range(filters[k].shape[2]):
+            # Get label for legend
+            lab = f'$m={m + 1}$'
+            if m < nSensorsPerNode[k]:
+                lab += ' (local)'
+            else:
+                lab += f' (Node $k={neighborIndices[neighborCount] + 1}$)'
+                neighborCount += 1
             ax.plot(
                 np.log10(
                     np.mean(np.abs(filters[k][:, :, m]), axis=0)  # Mean over frequency bins
                 ),
-                label=f'$m={m + 1}$ (local)' if m < nSensorsPerNode[k] else f'$m={m + 1}$',
+                label=lab,
                 linestyle='dashed' if m < nSensorsPerNode[k] else 'solid'
             )
         # Set title
@@ -1550,29 +1568,34 @@ def plot_filter_norms(
 
     
     # Plot filter norms
-    fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-    nodeCount = 0
-    idxCurrNodeSensor = 0
-    for m in range(filtersCentre.shape[2]):        
-        ax.plot(
-            np.log10(
-                np.mean(np.abs(filtersCentre[:, :, m]), axis=0)  # Mean over frequency bins
-            ),
-            f'C{nodeCount}-',
-            alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
-            label=f'$m={m + 1}$ (Node {nodeCount + 1})',
-        )
-        # Increment node count
-        if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
-            nodeCount += 1
-            idxCurrNodeSensor = 0  # Reset sensor count
-        else:
-            idxCurrNodeSensor += 1  # Increment sensor count
-    # Set title
-    ti = 'Centralized filters'
-    # Format axes
-    _format_axes(ax, ti, maxNorm, minNorm)
-    fig.tight_layout()
-    figs.append(fig)
+    for k in range(nNodes):
+        fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+        nodeCount = 0
+        idxCurrNodeSensor = 0
+        for m in range(filtersCentre[k].shape[2]):        
+            # Get label for legend
+            lab = f'$m={m + 1}$, Node {nodeCount + 1}'
+            if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
+                lab += ' (reference)'
+            ax.plot(
+                np.log10(
+                    np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0)  # Mean over frequency bins
+                ),
+                f'C{nodeCount}-',
+                alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
+                label=lab,
+            )
+            # Increment node count
+            if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
+                nodeCount += 1
+                idxCurrNodeSensor = 0  # Reset sensor count
+            else:
+                idxCurrNodeSensor += 1  # Increment sensor count
+        # Set title
+        ti = f'Centralized filters at node $k={k + 1}$'
+        # Format axes
+        _format_axes(ax, ti, maxNorm, minNorm)
+        fig.tight_layout()
+        figs.append(fig)
     
     return figs
