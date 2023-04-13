@@ -137,13 +137,9 @@ class DANSEoutputs(DANSEparameters):
             refSensorIdx=self.referenceSensor
         )
         if exportFolder is not None:
-            for k, fig in enumerate(figs):
-                if k < len(figs) - 1:
-                    fig.savefig(f'{exportFolder}/filtnorms_n{k + 1}.png', dpi=300)
-                    fig.savefig(f'{exportFolder}/filtnorms_n{k + 1}.pdf')
-                else:
-                    fig.savefig(f'{exportFolder}/filtnorms_c.png', dpi=300)
-                    fig.savefig(f'{exportFolder}/filtnorms_c.pdf')
+            for title, fig in figs.items():
+                fig.savefig(f'{exportFolder}/{title}.png', dpi=300)
+                fig.savefig(f'{exportFolder}/{title}.pdf')
         else:
             plt.close(fig)
 
@@ -1476,7 +1472,7 @@ def plot_filter_norms(
         filtersCentre=None,
         nSensorsPerNode=None,
         refSensorIdx=0
-    ) -> list[plt.Figure]:
+    ) -> dict:
     """
     Plot filter norms.
 
@@ -1497,8 +1493,8 @@ def plot_filter_norms(
 
     Returns
     ----------
-    fig : matplotlib.figure.Figure
-        Figure handle.
+    fig : dict of matplotlib.figure.Figure and strings
+        Figure handle and export name.
     """
 
     # Get number of nodes in WASN
@@ -1564,7 +1560,7 @@ def plot_filter_norms(
         # Format axes
         _format_axes(ax, ti, maxNorm, minNorm)
         fig.tight_layout()
-        figs.append(fig)
+        figs.append((f'filtnorms_n{k + 1}', fig))
 
     
     # Plot filter norms
@@ -1596,6 +1592,9 @@ def plot_filter_norms(
         # Format axes
         _format_axes(ax, ti, maxNorm, minNorm)
         fig.tight_layout()
-        figs.append(fig)
+        figs.append((f'filtnorms_c{k + 1}', fig))
+
+    # Transform to dict
+    figs = dict(figs)
     
     return figs
