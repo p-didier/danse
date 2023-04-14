@@ -238,14 +238,27 @@ class WASN:
         self.wasn[rootIdx].nodeType = 'root'
         self.rootIdx = rootIdx
     
-    def get_metrics_start_time(self, minNoSpeechDurEndUterrance: float):
+    def get_metrics_start_time(
+            self,
+            startComputeMetricsAt: str,
+            minNoSpeechDurEndUtterance: float
+        ):
         """Infers a good start time for the computation of speech enhancement
         metrics based on the speech signal used (after 1 speech utterance -->
         whenever the VAD has gone up and down).
         
         Parameters
         ----------
-        minNoSpeechDurEndUterrance : float
+        startComputeMetricsAt : str
+            Time at which to start computing metrics.
+                Valid values:
+                -- 'beginning_2nd_utterance': start computing metrics at the
+                beginning of the 2nd utterance.
+                -- 'beginning_1st_utterance': start computing metrics at the
+                beginning of the 1st utterance.
+                -- 'end_1st_utterance': start computing metrics at the end of the
+                1st utterance.
+        minNoSpeechDurEndUtterance : float
             Minimum duration of no speech at the end of a speech utterance [s].
         """
         # Get VADs
@@ -254,27 +267,68 @@ class WASN:
         # Check that the VADs are for single-sources only
         if VADs[0].shape[-1] > 1:
             raise ValueError('NYI: multiple-sources VAD case.')  # TODO:
+        
+        def _jump_over_short_changes(idx):
+            """Helper function: jump over short VAD changes."""
+            idxVadToNoSpeech = vadChangesIndices[idx]
+            # Next VAD change to speech
+            nextIdxVADtoSpeech = vadChangesIndices[idx + 1]
+            while nextIdxVADtoSpeech - idxVadToNoSpeech <\
+                minNoSpeechDurEndUtterance * self.wasn[k].fs:
+                idx += 2  # go to next VAD change to no-speech
+                # Update indices
+                idxVadToNoSpeech = vadChangesIndices[idx]  
+                nextIdxVADtoSpeech = vadChangesIndices[idx + 1]
+            return idx
 
         nNodes = len(VADs)
         for k in range(nNodes):
+            # Compute indices of VAD changes
             allIndices = np.arange(1, len(VADs[k]))
             vadDiffVect = np.diff(np.squeeze(VADs[k]), axis=0)
             vadChangesIndices = allIndices[vadDiffVect != 0]
-            # Find the correct start time instant
-            idxVADstartMetrics = 1
-            vadToNoSpeech = vadChangesIndices[idxVADstartMetrics]
-            nextVADtoSpeech = vadChangesIndices[idxVADstartMetrics + 1]
-            while nextVADtoSpeech - vadToNoSpeech <\
-                minNoSpeechDurEndUterrance * self.wasn[k].fs:
-                idxVADstartMetrics += 2  # go to next VAD change to no-speech
-                # Update
-                vadToNoSpeech = vadChangesIndices[idxVADstartMetrics]  
-                nextVADtoSpeech = vadChangesIndices[idxVADstartMetrics + 1]
-            # Check that the VAD at the second change instant is back to 0
-            if VADs[k][vadToNoSpeech][0] != 0:
-                raise ValueError('Unexpected outcome: is the VAD starting ON?')
-            self.wasn[k].metricStartTime = vadToNoSpeech / self.wasn[k].fs
 
+            # Get the initial VAD state
+            initialVADstate = VADs[k][0][0]  # 0 or 1 (no speech or speech)
+            
+            # Start at the first VAD change to no-speech
+            if initialVADstate == 0:  # if we start with no speech
+                # The first VAD change is to speech --> select the second.
+                idxVADstartMetrics = 1
+            elif initialVADstate == 1:  # if we start with speech
+                # The first VAD change is to no-speech --> select it.
+                idxVADstartMetrics = 0
+            
+            if startComputeMetricsAt == 'end_1st_utterance':
+                # Jump over short (less than `minNoSpeechDurEndUtterance`) 
+                # no-speech (VAD == 0) segments --> until reaching the 
+                # end of an actual utterance.
+                idxVADstartMetrics = _jump_over_short_changes(idxVADstartMetrics)
+                idxVadToNoSpeech = vadChangesIndices[idxVADstartMetrics]
+                
+                # Set the metrics computation start time [s]
+                self.wasn[k].metricStartTime = idxVadToNoSpeech / self.wasn[k].fs
+
+            elif startComputeMetricsAt == 'beginning_1st_utterance':
+                # Set the metrics computation start time [s]
+                if idxVADstartMetrics - 1 < 0:
+                    self.wasn[k].metricStartTime = 0
+                else:
+                    self.wasn[k].metricStartTime =\
+                        vadChangesIndices[idxVADstartMetrics - 1] / self.wasn[k].fs
+                
+            elif startComputeMetricsAt == 'beginning_2nd_utterance':
+                # Jump over short (less than `minNoSpeechDurEndUtterance`) 
+                # no-speech (VAD == 0) segments --> until reaching the 
+                # end of an actual utterance.
+                idxVADstartMetrics = _jump_over_short_changes(idxVADstartMetrics)
+                idxVadToSpeech = vadChangesIndices[idxVADstartMetrics + 1]
+
+                # Set the metrics computation start time [s]
+                self.wasn[k].metricStartTime = idxVadToSpeech / self.wasn[k].fs
+
+            
+                
     def orientate(self):
         """Orientate the tree-topology from leaves towards root."""
         # Base check

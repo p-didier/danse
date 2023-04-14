@@ -690,7 +690,8 @@ def build_wasn(
         wetSpeeches,
         wetNoises,
         p: classes.WASNparameters,
-        minNoSpeechDurEndUterrance: float
+        startComputeMetricsAt: str,
+        minNoSpeechDurEndUtterance: float
     ):
     """
     Build WASN from parameters (including asynchronicities and topology).
@@ -710,7 +711,16 @@ def build_wasn(
         Wet (RIR-affected) noise signal at each sensor of each node.
     p : `WASNparameters` object
         WASN parameters
-    minNoSpeechDurEndUterrance : float
+    startComputeMetricsAt : str
+        Time at which to start computing metrics.
+            Valid values:
+            -- 'beginning_2nd_utterance': start computing metrics at the
+            beginning of the 2nd utterance.
+            -- 'beginning_1st_utterance': start computing metrics at the
+            beginning of the 1st utterance.
+            -- 'end_1st_utterance': start computing metrics at the end of the
+            1st utterance.
+    minNoSpeechDurEndUtterance : float
         Minimum duration of silence at the end of an utterance [s].
 
     Returns
@@ -793,7 +803,8 @@ def build_wasn(
     # metrics based on the speech signal used (after 1 speech utterance -->
     # whenever the VAD has gone up and down).
     myWASN.get_metrics_start_time(
-        minNoSpeechDurEndUterrance=minNoSpeechDurEndUterrance
+        startComputeMetricsAt=startComputeMetricsAt,
+        minNoSpeechDurEndUtterance=minNoSpeechDurEndUtterance,
     )
 
     return myWASN
