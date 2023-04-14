@@ -7,7 +7,6 @@ import gzip
 import time
 import copy
 import pickle
-import warnings
 import numpy as np
 from pathlib import Path
 from scipy.io import wavfile
@@ -128,15 +127,16 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
 
-    def plot_filter_norms(self, exportFolder=None):
+    def plot_filter_norms(self, exportFolder=None, exportNormsAsPickle=False):
         """Plots a visualization of the evolution of filter norms in DANSE."""
         self.check_init()  # check if object is correctly initialised
-        figs = plot_filter_norms(
+        figs, dataFigs = plot_filter_norms(
             self.filters,
             self.filtersCentr,
             self.nSensorPerNode,
             refSensorIdx=self.referenceSensor
         )
+        # Export figures
         if exportFolder is not None:
             for title, fig in figs.items():
                 fullExportFolder = f'{exportFolder}/filtNorms'
@@ -146,6 +146,13 @@ class DANSEoutputs(DANSEparameters):
                 fig.savefig(f'{fullExportFolder}/{title}.pdf')
         else:
             plt.close(fig)
+        # Export data
+        if exportNormsAsPickle:
+            fullExportFolder = f'{exportFolder}/filtNorms'
+            if not os.path.exists(fullExportFolder):
+                os.makedirs(fullExportFolder)
+            with open(f'{fullExportFolder}/filtNorms.pkl', 'wb') as f:
+                pickle.dump(dataFigs, f)
 
     def plot_cond(self, exportFolder=None):
         """Plots a visualization of the condition numbers in DANSE."""
@@ -1500,8 +1507,10 @@ def plot_filter_norms(
 
     Returns
     ----------
-    fig : dict of matplotlib.figure.Figure and strings
+    `figs` : dict of matplotlib.figure.Figure and strings
         Figure handle and export name.
+    dataFigs : list[np.ndarray]
+        List of data corresponding to each figure in `figs`.
     """
 
     # Get number of nodes in WASN
@@ -1540,11 +1549,13 @@ def plot_filter_norms(
 
     # Make one plot per node
     figs = []
+    dataFigs = []
     for k in range(nNodes):
         # Plot filter norms
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
         neighborIndices = [ii for ii in np.arange(nNodes) if ii != k]
         neighborCount = 0
+        dataPlot = np.zeros_like(filters[k][0, :, :], dtype=float)
         for m in range(filters[k].shape[2]):
             # Get label for legend
             lab = f'$m={m + 1}$'
@@ -1553,10 +1564,12 @@ def plot_filter_norms(
             else:
                 lab += f' (Node $k={neighborIndices[neighborCount] + 1}$)'
                 neighborCount += 1
+            # Mean over frequency bins
+            dataPlot[:, m] = np.log10(
+                np.mean(np.abs(filters[k][:, :, m]), axis=0)
+            )
             ax.plot(
-                np.log10(
-                    np.mean(np.abs(filters[k][:, :, m]), axis=0)  # Mean over frequency bins
-                ),
+                dataPlot[:, m],
                 label=lab,
                 linestyle='dashed' if m < nSensorsPerNode[k] else 'solid'
             )
@@ -1568,6 +1581,7 @@ def plot_filter_norms(
         _format_axes(ax, ti, maxNorm, minNorm)
         fig.tight_layout()
         figs.append((f'filtnorms_n{k + 1}', fig))
+        dataFigs.append(dataPlot)  # Save data for later use
 
     
     # Plot filter norms
@@ -1575,15 +1589,18 @@ def plot_filter_norms(
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
         nodeCount = 0
         idxCurrNodeSensor = 0
+        dataFig = np.zeros_like(filtersCentre[k][0, :, :], dtype=float)
         for m in range(filtersCentre[k].shape[2]):        
             # Get label for legend
             lab = f'$m={m + 1}$, Node {nodeCount + 1}'
             if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
                 lab += ' (reference)'
+            # Mean over frequency bins
+            dataFig[:, m] = np.log10(
+                np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0)
+            )
             ax.plot(
-                np.log10(
-                    np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0)  # Mean over frequency bins
-                ),
+                dataFig[:, m],
                 f'C{nodeCount}-',
                 alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
                 label=lab,
@@ -1600,8 +1617,9 @@ def plot_filter_norms(
         _format_axes(ax, ti, maxNorm, minNorm)
         fig.tight_layout()
         figs.append((f'filtnorms_c{k + 1}', fig))
+        dataFigs.append(dataFig)  # Save data for later use
 
     # Transform to dict
     figs = dict(figs)
     
-    return figs
+    return figs, dataFigs

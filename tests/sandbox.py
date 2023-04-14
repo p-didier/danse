@@ -46,7 +46,8 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         wetSpeeches,
         wetNoises,
         p.wasnParams,
-        p.danseParams.minNoSpeechDurEndUterrance
+        p.danseParams.startComputeMetricsAt,
+        p.danseParams.minNoSpeechDurEndUtterance
     )
     print('WASN built.')
 
@@ -54,7 +55,7 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         pp.plot_asc(
             room,
             p.wasnParams,
-            p.exportFolder,
+            p.exportParams.exportFolder,
             wasnObj.adjacencyMatrix,
             [node.nodeType for node in wasnObj.wasn],
             plot3Dview=True
@@ -126,82 +127,95 @@ def postprocess(
 
     # Default booleans
     runit = True   # by default, run
-    if p.bypassExport:
+    if p.exportParams.bypassAllExports:
         print('Not exporting figures and sounds export (`bypassExport` is True).')
     else:
         # Check whether export folder exists
-        if Path(p.exportFolder).is_dir():
+        if Path(p.exportParams.exportFolder).is_dir():
             # Check whether the folder contains something
-            if Path(p.exportFolder).stat().st_size > 0:
-                inp = input(f'The folder\n"{p.exportFolder}"\ncontains data. Overwrite? [y/[n]]:  ')
+            if Path(p.exportParams.exportFolder).stat().st_size > 0:
+                inp = input(f'The folder\n"{p.exportParams.exportFolder}"\ncontains data. Overwrite? [y/[n]]:  ')
                 if inp not in ['y', 'Y']:
                     runit = False   # don't run
                     print('Aborting figures and sounds export.')
                 else:
                     print('Wiping folder before new figures and sounds exports.')
-                    wipe_folder(p.exportFolder)
+                    wipe_folder(p.exportParams.exportFolder)
         else:
-            print(f'Create export folder "{p.exportFolder}".')
+            print(f'Create export folder "{p.exportParams.exportFolder}".')
             # Create dir. with missing parents directories.
             # https://stackoverflow.com/a/50110841
-            Path(p.exportFolder).mkdir(parents=True)
+            Path(p.exportParams.exportFolder).mkdir(parents=True)
 
     if runit:
-        if not p.bypassExport:
+        if not p.exportParams.bypassAllExports:
             # Export filter coefficients norm plot
-            out.plot_filter_norms(p.exportFolder)
+            if p.exportParams.filterNormsPlot:
+                out.plot_filter_norms(
+                    p.exportParams.exportFolder,
+                    exportNormsAsPickle=p.exportParams.filterNorms  # boolean to export filter norms as pickle  
+                )
 
             # Export condition number plot
-            out.plot_cond(p.exportFolder)
+            if p.exportParams.conditionNumberPlot:
+                out.plot_cond(p.exportParams.exportFolder)
 
             # Export convergence plot
-            out.plot_convergence(p.exportFolder)
+            if p.exportParams.convergencePlot:
+                out.plot_convergence(p.exportParams.exportFolder)
 
             # Export .wav files
-            out.export_sounds(wasnObj.wasn, p.exportFolder)
+            if p.exportParams.wavFiles:
+                out.export_sounds(wasnObj.wasn, p.exportParams.exportFolder)
 
             # Plot (+ export) acoustic scenario (WASN)
-            pp.plot_asc(
-                asc=room,
-                p=p.wasnParams,
-                folder=p.exportFolder,
-                usedAdjacencyMatrix=wasnObj.adjacencyMatrix,
-                nodeTypes=[node.nodeType for node in wasnObj.wasn],
-                originalAdjacencyMatrix=p.wasnParams.topologyParams.userDefinedTopo
-            )
+            if p.exportParams.acousticScenarioPlot:
+                pp.plot_asc(
+                    asc=room,
+                    p=p.wasnParams,
+                    folder=p.exportParams.exportFolder,
+                    usedAdjacencyMatrix=wasnObj.adjacencyMatrix,
+                    nodeTypes=[node.nodeType for node in wasnObj.wasn],
+                    originalAdjacencyMatrix=p.wasnParams.topologyParams.userDefinedTopo
+                )
 
             # Plot SRO estimation performance
-            fig = out.plot_sro_perf(
-                Ns=p.danseParams.Ns,
-                fs=p.wasnParams.fs,
-                xaxistype='both'  # "both" == iterations [-] _and_ instants [s]
-            )
-            fig.savefig(f'{p.exportFolder}/sroEvolution.png')
-            fig.savefig(f'{p.exportFolder}/sroEvolution.pdf')
+            if p.exportParams.sroEstimPerfPlot:
+                fig = out.plot_sro_perf(
+                    Ns=p.danseParams.Ns,
+                    fs=p.wasnParams.fs,
+                    xaxistype='both'  # "both" == iterations [-] _and_ instants [s]
+                )
+                fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.png')
+                fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.pdf')
 
         # Compute performance metrics (+ export if needed)
-        if p.bypassExport:
-            exportFolder = None
-        else:
-            exportFolder = p.exportFolder
-        out.plot_perf(
-            wasnObj.wasn,
-            exportFolder,
-            p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots,
-            snrYlimMax=p.snrYlimMax,
-        )
+        if p.exportParams.metricsPlot:
+            if p.exportParams.bypassAllExports:
+                exportFolder = None
+            else:
+                exportFolder = p.exportParams.exportFolder
+                out.plot_perf(
+                    wasnObj.wasn,
+                    exportFolder,
+                    p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots,
+                    snrYlimMax=p.snrYlimMax,
+                )
 
-        if not p.bypassExport:
+        if not p.exportParams.bypassAllExports:
             # Plot signals at specific nodes (+ export)
-            out.plot_sigs(wasnObj.wasn, p.exportFolder)
+            if p.exportParams.waveformsAndSpectrograms:
+                out.plot_sigs(wasnObj.wasn, p.exportParams.exportFolder)
 
             # Save `DANSEoutputs` object after metrics computation
-            out.save(foldername=p.exportFolder, light=True)
+            if p.exportParams.danseOutputsFile:
+                out.save(foldername=p.exportParams.exportFolder, light=True)
             # Save `TestParameters` object
-            if p.loadedFromYaml:
-                p.save_yaml()   # save `TestParameters` object as YAML file
-            else:
-                p.save()    # save `TestParameters` object as Pickle archive
+            if p.exportParams.parametersFile:
+                if p.loadedFromYaml:
+                    p.save_yaml()   # save `TestParameters` object as YAML file
+                else:
+                    p.save()    # save `TestParameters` object as Pickle archive
 
     return out
 

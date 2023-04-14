@@ -148,6 +148,7 @@ class ExportParameters:
     # vvv Files (not plots)
     danseOutputsFile: bool = True  # if True, DANSE outputs are exported as a pickle file
     parametersFile: bool = True  # if True, parameters are exported as a pickle file or a YAML file
+    filterNorms: bool = True  # if True, filter norms are exported as a pickle file
     # vvv Global
     bypassAllExports: bool = False  # if True, all exports are bypassed
     exportFolder: str = ''  # folder to export outputs
@@ -208,7 +209,7 @@ class TestParameters:
         """Saves dataclass to YAML file."""
         if self.loadedFromYaml:
             # Copy YAML file to export folder
-            shutil.copy(self.originYaml, self.exportFolder)
+            shutil.copy(self.originYaml, self.exportParams.exportFolder)
         else:
             raise ValueError('Cannot save YAML file: the parameters were not loaded from a YAML file.')
 

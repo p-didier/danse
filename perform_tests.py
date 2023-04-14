@@ -7,11 +7,13 @@ import sys
 # import tests.multiple_runs
 import tests.sandbox
 import tests.danse_robustness_to_sros
+import tests.danse_robustness_to_sros_postproc
 import tests.write_yaml_template
 
 def main():
     # tests.danse_robustness_to_sros.main()
-    tests.sandbox.main()
+    tests.danse_robustness_to_sros_postproc.main()
+    # tests.sandbox.main()
     # tests.multiple_runs.main()
     # tests.write_yaml_template.main()
 

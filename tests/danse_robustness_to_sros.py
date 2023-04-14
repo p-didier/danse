@@ -18,7 +18,8 @@ PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_
 N_SRO_TESTS = 10    # number of SRO tests to run
 MAX_SRO_PPM = 500   # maximum SRO in PPM
 EXPORT_FIGURES = True
-OUT_FOLDER = '20230414_tests/sros_effect/test_newConfig'  # export path relative to `danse/out`
+OUT_FOLDER = '20230414_tests/sros_effect/FCasy_[1,2,3]_randLayout_beta5s'  # export path relative to `danse/out`
+# OUT_FOLDER = '20230414_tests/sros_effect/test_new2'  # export path relative to `danse/out`
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
 SNR_PLOT_LIMITS = [-5, 25]
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
@@ -43,15 +44,15 @@ def main():
     )
 
     if EXPORT_FIGURES:
+        basePath = f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}'
         for k, fig in enumerate(figs):
-            fig.savefig(
-                f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_effect_node{k + 1}.png',
-                dpi=300
-            )
-            fig.savefig(
-                f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_effect_node{k + 1}.pdf'
-            )
-    plt.show()
+            fig.savefig(f'{basePath}/sros_effect_node{k + 1}.png', dpi=300)
+            fig.savefig(f'{basePath}/sros_effect_node{k + 1}.pdf')
+        # Export srosToConsider object
+        with open(f'{basePath}/srosConsidered.pkl', 'wb') as f:
+            pickle.dump(srosToConsider, f)
+    
+    plt.show()  # show the post-processing figures
 
     return None
 
@@ -196,6 +197,8 @@ def run_test_batch(
             testParams.wasnParams.SROperNode = currSROs
             testParams.exportParams.exportFolder =\
                 f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_{ii+1}'
+            testParams.__post_init__()
+            testParams.danseParams.get_wasn_info(testParams.wasnParams)
             # Run test
             res = main_sandbox(p=testParams)
             # Extract single test results
@@ -205,6 +208,7 @@ def run_test_batch(
                 Path(pickleFilePath).parent.mkdir(parents=True)
             pickle.dump(vals, gzip.open(pickleFilePath, 'wb'))
         allVals.append(vals)
+        plt.close(fig='all')  # close all figures (avoid memory overload)
 
     return allVals, testParams
 
@@ -246,100 +250,6 @@ def extract_single_test_results(res: DANSEoutputs):
         ('sros', res.SROgroundTruth)
     ])
     return vals
-
-
-# def setup_test_parameters(cfg: dict, currSROs: np.ndarray, exportFolder: str='') -> TestParameters:
-#     """
-#     Sets up the test parameters.
-    
-#     Parameters
-#     ----------
-#     cfg : dict
-#         Configuration object.
-#     currSROs : np.ndarray
-#         Current SROs per node.
-    
-#     Returns
-#     ----------
-#     testParams : TestParameters
-#         Test parameters object.
-    
-#     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
-#     """
-
-#     if len(cfg) < 20:  # -- Cfg file type prior to 14.04.2023. Use old method.
-#         # Create test parameters
-#         testParams = TestParameters(
-#             bypassExport=True,  # <-- BYPASSING FIGURES AND SOUNDS EXPORT
-#             exportFolder=exportFolder,
-#             seed=cfg['seed'],
-#             wasnParams=WASNparameters(
-#                 layoutType=cfg['layoutType'],
-#                 VADenergyDecrease_dB=35,  # [dB]
-#                 topologyParams=TopologyParameters(
-#                     topologyType=cfg['topologyType'],
-#                     commDistance=4.,  # [m]
-#                     seed=cfg['seed'],
-#                     userDefinedTopo=np.array([
-#                         [1, 1, 0],  # Node 1
-#                         [1, 1, 1],  # Node 2
-#                         [0, 1, 1],  # Node 3
-#                     ]),
-#                 ),
-#                 sigDur=cfg['sigDur'],  # [s]
-#                 rd=np.array([5, 5, 5]),
-#                 fs=16000,
-#                 t60=cfg['t60'],  # ====<<<<<
-#                 interSensorDist=0.2,
-#                 nNodes=3,
-#                 nSensorPerNode=cfg['nSensorPerNode'],  # ====<<<<<
-#                 selfnoiseSNR=99,
-#                 desiredSignalFile=[f'{SIGNALS_PATH}/01_speech/{file}'\
-#                     for file in [
-#                         'speech1.wav',
-#                         'speech2.wav'
-#                     ]],
-#                 noiseSignalFile=[f'{SIGNALS_PATH}/02_noise/{file}'\
-#                     for file in [
-#                         'ssn/ssn_speech1.wav',
-#                         'ssn/ssn_speech2.wav'
-#                     ]],
-#                 SROperNode=currSROs,  # ====<<<<<
-#             ),
-#             danseParams=DANSEparameters(
-#                 DFTsize=1024,
-#                 WOLAovlp=.5,
-#                 nodeUpdating=cfg['nodeUpdating'],  # ====<<<<<
-#                 broadcastType='wholeChunk',
-#                 estimateSROs='CohDrift',
-#                 compensateSROs=False,
-#                 cohDrift=CohDriftParameters(
-#                     loop='open',
-#                     alpha=0.95
-#                 ),
-#                 filterInitType='selectFirstSensor_andFixedValue',
-#                 filterInitFixedValue=1,
-#                 computeCentralised=True,
-#                 computeLocal=True,
-#                 noExternalFilterRelaxation=False,
-#                 performGEVD=cfg['performGEVD'],  # ====<<<<<
-#                 t_expAvg50p=10,
-#                 timeBtwExternalFiltUpdates=1,
-#                 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#                 printoutsAndPlotting=PrintoutsAndPlotting(
-#                     showWASNs=False,
-#                     onlySNRandESTOIinPlots=True
-#                 )
-#             )
-#         )
-#     else:  # -- Cfg file type after 14.04.2023. Use new method.
-#         # Create test parameters
-#         testParams = TestParameters().load_from_yaml(cfg)
-
-#     # Complete parameters
-#     testParams.danseParams.get_wasn_info(testParams.wasnParams)
-
-#     return testParams
 
 
 def post_process_results(res: list[dict], nSensorPerNode: np.ndarray):
