@@ -2,6 +2,7 @@
 # visualizing DANSE outputs.
 #
 # ~created on 20.10.2022 by Paul Didier
+import os
 import gzip
 import time
 import copy
@@ -138,14 +139,17 @@ class DANSEoutputs(DANSEparameters):
         )
         if exportFolder is not None:
             for title, fig in figs.items():
-                fig.savefig(f'{exportFolder}/{title}.png', dpi=300)
-                fig.savefig(f'{exportFolder}/{title}.pdf')
+                fullExportFolder = f'{exportFolder}/filtNorms'
+                if not os.path.exists(fullExportFolder):
+                    os.makedirs(fullExportFolder)
+                fig.savefig(f'{fullExportFolder}/{title}.png', dpi=300)
+                fig.savefig(f'{fullExportFolder}/{title}.pdf')
         else:
             plt.close(fig)
 
     def plot_cond(self, exportFolder=None):
         """Plots a visualization of the condition numbers in DANSE."""
-        self.check_init()  # check if object is correctly initialised
+        self.check_init()  # check if object is correctly initialised        
         fig = plot_cond_numbers(self.condNumbers, self.nSensorPerNode)
         if exportFolder is not None:
             fig.savefig(f'{exportFolder}/cond_numbers.png', dpi=300)
@@ -268,8 +272,11 @@ class DANSEoutputs(DANSEparameters):
             plt.tight_layout()
             # Export
             if not bypassExport:
-                fig.savefig(f'{exportFolder}/converg_node{k+1}.png')
-                fig.savefig(f'{exportFolder}/converg_node{k+1}.pdf')
+                fullExportFolder = f'{exportFolder}/conv'
+                if not os.path.exists(fullExportFolder):
+                    os.makedirs(fullExportFolder)
+                fig.savefig(f'{fullExportFolder}/converg_node{k+1}.png')
+                fig.savefig(f'{fullExportFolder}/converg_node{k+1}.pdf')
             # Aggregate for export
             DANSEfilters_all[:, :, k] =\
                 self.filters[k][:, :, self.referenceSensor].T
