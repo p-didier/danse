@@ -17,11 +17,11 @@ from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsA
 PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230414.yaml'
 N_SRO_TESTS = 10    # number of SRO tests to run
 MAX_SRO_PPM = 500   # maximum SRO in PPM
-EXPORT_FIGURES = True
-OUT_FOLDER = '20230414_tests/sros_effect/FCasy_[1,2,3]_randLayout_beta5s'  # export path relative to `danse/out`
+EXPORT_DATA = True
+OUT_FOLDER = '20230414_tests/sros_effect/FCasy_[1,2,3]_randLayout_beta2s'  # export path relative to `danse/out`
 # OUT_FOLDER = '20230414_tests/sros_effect/test_new2'  # export path relative to `danse/out`
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
-SNR_PLOT_LIMITS = [-5, 25]
+# SNR_PLOT_LIMITS = [-5, 25]
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
 
 def main():
@@ -32,29 +32,19 @@ def main():
             ii in np.arange(0, N_SRO_TESTS)]
     
     # Run tests
-    res, lastTestParams = run_test_batch(
+    res = run_test_batch(
         configFilePath=PATH_TO_CONFIG_FILE,
         srosToConsider=srosToConsider,
     )
-    
-    # Post-process results
-    figs = post_process_results(
-        res,
-        nSensorPerNode=lastTestParams.wasnParams.nSensorPerNode,
-    )
 
-    if EXPORT_FIGURES:
+    if EXPORT_DATA:
         basePath = f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}'
-        for k, fig in enumerate(figs):
-            fig.savefig(f'{basePath}/sros_effect_node{k + 1}.png', dpi=300)
-            fig.savefig(f'{basePath}/sros_effect_node{k + 1}.pdf')
+        # Export res object
+        with open(f'{basePath}/metricsAsFctOfSROs.pkl', 'wb') as f:
+            pickle.dump(res, f)
         # Export srosToConsider object
         with open(f'{basePath}/srosConsidered.pkl', 'wb') as f:
             pickle.dump(srosToConsider, f)
-    
-    plt.show()  # show the post-processing figures
-
-    return None
 
 
 def setup_config(filePath: str):
@@ -159,7 +149,7 @@ def setup_config(filePath: str):
 def run_test_batch(
         configFilePath: str,
         srosToConsider: list
-    ) -> tuple[list[dict], TestParameters]:
+    ) -> list[dict]:
     """
     Runs a test batch based on a (YAML) configuration.
     
@@ -174,8 +164,6 @@ def run_test_batch(
     ----------
     allVals : list[dict]
         List of dictionaries containing the speech enhancement metrics results.
-    testParams : TestParameters
-        Test parameters object (last one used).
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
@@ -210,7 +198,7 @@ def run_test_batch(
         allVals.append(vals)
         plt.close(fig='all')  # close all figures (avoid memory overload)
 
-    return allVals, testParams
+    return allVals
 
 
 def extract_single_test_results(res: DANSEoutputs):

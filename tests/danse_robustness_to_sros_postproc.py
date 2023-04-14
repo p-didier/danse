@@ -41,8 +41,10 @@ def import_results(folder: str):
 
     Returns:
     --------
-    res: list
-        List of results (one per sub-folder).
+    resFiltNorm: list
+        List of filter-norm results (one per sub-folder).
+    resMetrics: list
+        List of metrics results (one per sub-folder).
     srosConsidered: list
         List of SROs considered (one per sub-folder).
     sensorToNodeIdx: list[int]
@@ -59,7 +61,7 @@ def import_results(folder: str):
         srosConsidered = pickle.load(f)
 
     # Import results
-    res = []
+    resFiltNorm = []
     for ii, subfolder in enumerate(subfolders):
         # Import results
         print(f'Importing results from {subfolder}...')
@@ -67,7 +69,7 @@ def import_results(folder: str):
         with open(pathToFile, 'rb') as f:
             results = pickle.load(f)
         # Append results
-        res.append(results)
+        resFiltNorm.append(results)
         
         if ii == 0:
             # Find YAML file containing numbers of sensor per node
@@ -86,48 +88,91 @@ def import_results(folder: str):
             for idxNode, nSensors in enumerate(nSensorPerNode):
                 sensorToNodeIdx += [idxNode] * nSensors
 
-    print('Done.')
+    # Load metrics res object
+    with open(f'{folder}/metricsAsFctOfSROs.pkl', 'rb') as f:
+        resMetrics = pickle.load(f)
 
-    return res, srosConsidered, sensorToNodeIdx
+    return resFiltNorm, resMetrics, srosConsidered, sensorToNodeIdx
 
 
 def plot_results(
-        res: list,
+        resFiltNorm: list,
+        resMetrics: list,
         srosConsidered: list,
         sensorToNodeIdx: list
-    ) -> None:
+    ) -> list:
     """
     Plots the results from the `tests.danse_robustness_to_sros` script.
 
     Parameters:
     -----------
-    res: list
-        List of results (one per sub-folder).
+    resFiltNorm: list
+        List of filter-norm results (one per sub-folder).
+    resMetrics: list
+        List of metrics results (one per sub-folder).
     srosConsidered: list
         List of SROs considered (one per sub-folder).
     sensorToNodeIdx: list[int]
         Sensor-to-node index mappings.
+
+    Returns:
+    --------
+    figs: list
+        List of all figures (metrics, then filter-norm).
     """
 
+    # Derive number of sensors per node
+    nSensorsPerNode = np.unique(sensorToNodeIdx, return_counts=True)[1] 
+    # Metrics plot
+    figsMetrics = plot_metrics_as_fct_of_sros(
+        resMetrics,
+        nSensorPerNode=nSensorsPerNode
+    )
+
+    # Filter norms plot
+    figsFiltNorm = plot_filtnorm_as_fct_of_sros(
+        resFiltNorm,
+        sensorToNodeIdx,
+        srosConsidered
+    )
+
+    return figsMetrics + figsFiltNorm
+
+
+def plot_filtnorm_as_fct_of_sros(resFiltNorm, sensorToNodeIdx, srosConsidered):
+    """
+    Plots the filter-norm results from the `tests.danse_robustness_to_sros`
+    script.
+
+    Parameters:
+    -----------
+    resFiltNorm: list
+        List of filter-norm results (one per sub-folder).
+    srosConsidered: list
+        List of SROs considered (one per sub-folder).
+    sensorToNodeIdx: list[int]
+        Sensor-to-node index mappings.
+
+    Returns:
+    --------
+    figs: list
+        List of figures.
+    """
     # Infer titles
-    # nNodes = int(len(res[0]) / 2)
-    # titles = [f'DANSE filter norms, node {k + 1} (avg. over last {LOOK_AT_THE_LAST_N_ITERATIONS} iter.)'\
-    #     for k in range(nNodes)]
-    # titles += [f'Centralized filter norms, node {k + 1} (avg. over last {LOOK_AT_THE_LAST_N_ITERATIONS} iter.)'\
-    #     for k in range(nNodes)]
-    nNodes = int(len(res[0]) / 2)
+    nNodes = int(len(resFiltNorm[0]) / 2)
     titles = [f'DANSE filter norms, node {k + 1}'\
         for k in range(nNodes)]
     titles += [f'Centralized filter norms, node {k + 1}'\
         for k in range(nNodes)]
 
     # Arrange results
-    filtNorms = [np.zeros((len(res), res[0][k].shape[1])) for k in range(len(res[0]))]
+    filtNorms = [np.zeros((len(resFiltNorm), resFiltNorm[0][k].shape[1]))\
+        for k in range(len(resFiltNorm[0]))]
     # ^^^ one list per filtNorm plot (i.e., one per node + one per node centralized)
     #     In each list, the first dimension is the number of SROs considered,
     #     the second dimension is the number of filter coefficients.
 
-    for idxSROs, resultsCurrSROs in enumerate(res):
+    for idxSROs, resultsCurrSROs in enumerate(resFiltNorm):
         for k in range(len(resultsCurrSROs)):
             # Compute mean filter norms starting from iteration
             nTotalIters = resultsCurrSROs[k].shape[0]
@@ -260,6 +305,95 @@ def plot_results(
     return figs
 
 
+def plot_metrics_as_fct_of_sros(res: list[dict], nSensorPerNode: np.ndarray):
+    """
+    Post-processes the results of a test batch.
+    
+    Parameters
+    ----------
+    res : list[dict]
+        Results.
+    nSensorPerNode : np.ndarray[int]
+        Number of sensors per node.
+    
+    Returns
+    ----------
+    figs : list[matplotlib.figure.Figure]
+        List of figures, one for each node in the WASN.
+    
+    (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
+    """
+
+    # Get useful variables
+    nNodes = len(res[0]['snr'])
+    # Extract local and raw results (same for all SROs)
+    localResSNR = np.zeros(nNodes)
+    localResSTOI = np.zeros(nNodes)
+    rawResSNR = np.zeros(nNodes)
+    rawResSTOI = np.zeros(nNodes)
+    for k in range(nNodes):
+        localResSNR[k] = res[0]['snr'][f'Node{k+1}']['local']
+        localResSTOI[k] = res[0]['estoi'][f'Node{k+1}']['local']
+        rawResSNR[k] = res[0]['snr'][f'Node{k+1}']['raw']
+        rawResSTOI[k] = res[0]['estoi'][f'Node{k+1}']['raw']
+
+    # Build arrays for DANSE and centralized results
+    danseResSNR = np.zeros((len(res), nNodes))
+    danseResSTOI = np.zeros((len(res), nNodes))
+    centralResSNR = np.zeros((len(res), nNodes))
+    centralResSTOI = np.zeros((len(res), nNodes))
+    for ii in range(len(res)):
+        for k in range(nNodes):
+            danseResSNR[ii, k] = res[ii]['snr'][f'Node{k+1}']['danse']
+            danseResSTOI[ii, k] = res[ii]['estoi'][f'Node{k+1}']['danse']
+            centralResSNR[ii, k] = res[ii]['snr'][f'Node{k+1}']['centr']
+            centralResSTOI[ii, k] = res[ii]['estoi'][f'Node{k+1}']['centr']
+    
+    # Plot
+    figs = []
+    for k in range(nNodes):
+        fig, axes = plt.subplots(1, 2)
+        fig.set_size_inches(10, 5)
+        axes[0].plot(danseResSNR[:, k], color='C1', marker='o', label='DANSE')
+        axes[0].plot(centralResSNR[:, k], color='C2', marker='s', label='Centralized')
+        axes[0].hlines(localResSNR[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
+        axes[0].hlines(rawResSNR[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
+        axes[0].set_xlabel('SROs [PPM]')
+        axes[0].set_title('SNR')
+        axes[0].set_ylabel('[dB]')
+        axes[0].set_xticks(np.arange(len(res)))
+        axes[0].set_xticklabels(
+            [str(res[ii]['sros'][1:]) for ii in range(len(res))],
+            rotation=90
+        )
+        axes[0].legend(loc='lower left')
+        axes[0].grid()
+        axes[0].set_ylim(SNR_PLOT_LIMITS)  # eSTOI limits
+        # plt.show()
+        axes[1].plot(danseResSTOI[:, k], color='C1', marker='o', label='DANSE')
+        axes[1].plot(centralResSTOI[:, k], color='C2', marker='s', label='Centralized')
+        axes[1].hlines(localResSTOI[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
+        axes[1].hlines(rawResSTOI[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
+        axes[1].set_xlabel('SROs [PPM]')
+        axes[1].set_title('eSTOI')
+        axes[1].set_xticks(np.arange(len(res)))
+        axes[1].set_xticklabels(
+            [str(res[ii]['sros'][1:]) for ii in range(len(res))],
+            rotation=90
+        )
+        axes[1].legend(loc='lower left')
+        axes[1].grid()
+        axes[1].set_ylim([0, 1])  # eSTOI limits
+        fig.suptitle(f'Node {k + 1} ({nSensorPerNode[k]} sensors)')
+        fig.tight_layout()
+
+        # Save figure
+        figLab = f'metricsSROs_n{k + 1}'
+        fig.set_label(figLab)
+        figs.append(fig)
+        plt.close(fig)
+
+    return figs
 
 if __name__ == '__main__':
     sys.exit(main())
