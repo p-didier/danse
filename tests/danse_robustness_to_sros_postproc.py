@@ -15,7 +15,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 # FOLDER = f'{Path(__file__).parent.parent}/out/20230414_tests/sros_effect/FCasy_[1,2,3]_randLayout'
-FOLDER = f'{Path(__file__).parent.parent}/out/20230414_tests/sros_effect/FCasy_[1,2,3]_randLayout_beta5s'
+FOLDER = f'{Path(__file__).parent.parent}/out/20230414_tests/sros_effect/FCasy_[1,2,3]_randLayout_beta2s'
 RELATIVE_PATH_TO_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder
 SROS_REF_FILENAME = 'srosConsidered.pkl'  # file containing the SROs used for each test in `FOLDER`
 LOOK_AT_THE_LAST_N_ITERATIONS = 100  # number of iterations to consider for computing the average filter norms
@@ -351,6 +351,16 @@ def plot_metrics_as_fct_of_sros(res: list[dict], nSensorPerNode: np.ndarray):
     
     # Plot
     figs = []
+    # Derive y-axis limits for the SNR plot
+    yLimSNR = [
+        np.amin(np.array([np.amin(danseResSNR), np.amin(centralResSNR), np.amin(localResSNR), np.amin(rawResSNR)])),
+        np.amax(np.array([np.amax(danseResSNR), np.amax(centralResSNR), np.amax(localResSNR), np.amax(rawResSNR)]))
+    ]
+    yLimSNR = [
+        yLimSNR[0] - 0.1 * (yLimSNR[1] - yLimSNR[0]),
+        yLimSNR[1] + 0.1 * (yLimSNR[1] - yLimSNR[0])
+    ]
+    
     for k in range(nNodes):
         fig, axes = plt.subplots(1, 2)
         fig.set_size_inches(10, 5)
@@ -366,9 +376,9 @@ def plot_metrics_as_fct_of_sros(res: list[dict], nSensorPerNode: np.ndarray):
             [str(res[ii]['sros'][1:]) for ii in range(len(res))],
             rotation=90
         )
-        axes[0].legend(loc='lower left')
+        axes[0].legend(loc='upper right')
         axes[0].grid()
-        axes[0].set_ylim(SNR_PLOT_LIMITS)  # eSTOI limits
+        axes[0].set_ylim(yLimSNR)  # SNR limits
         # plt.show()
         axes[1].plot(danseResSTOI[:, k], color='C1', marker='o', label='DANSE')
         axes[1].plot(centralResSTOI[:, k], color='C2', marker='s', label='Centralized')
