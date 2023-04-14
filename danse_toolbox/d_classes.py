@@ -1519,12 +1519,12 @@ class DANSEvariables(base.DANSEparameters):
         k : int
             Node index.
         """
-        def _update_w(Ryy, Rnn, refSensor):
+        def _update_w(Ryy, Rnn, refSensorIdx):
             """Helper function for regular MWF-like
             DANSE filter update."""
             # Reference sensor selection vector
             Evect = np.zeros(Ryy.shape[-1])
-            Evect[refSensor] = 1
+            Evect[refSensorIdx] = 1
 
             # Cross-correlation matrix update 
             ryd = np.matmul(Ryy - Rnn, Evect)
@@ -1533,14 +1533,14 @@ class DANSEvariables(base.DANSEparameters):
             w = np.matmul(Ryyinv, ryd[:, :, np.newaxis])
             return w[:, :, 0]  # get rid of singleton dimension
 
-        def _update_w_gevd(Ryy, Rnn, refSensor):
+        def _update_w_gevd(Ryy, Rnn, refSensorIdx):
             """Helper function for GEVD-based MWF-like
             DANSE filter update."""
             n = Ryy.shape[-1]
             nFreqs = Ryy.shape[0]
             # Reference sensor selection vector 
             Evect = np.zeros((n,))
-            Evect[refSensor] = 1
+            Evect[refSensorIdx] = 1
 
             sigma = np.zeros((nFreqs, n))
             Xmat = np.zeros((nFreqs, n, n), dtype=complex)
@@ -1583,7 +1583,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryytilde[k],
                     self.Rnntilde[k],
-                    self.referenceSensor
+                    refSensorIdx=self.referenceSensor
                 )
                 self.nInternalFilterUps[k] += 1  
             # Update centralised filter
@@ -1591,7 +1591,9 @@ class DANSEvariables(base.DANSEparameters):
                 self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryycentr[k],
                     self.Rnncentr[k],
-                    int(np.sum(self.nSensorPerNode[:k]) + self.referenceSensor)
+                    refSensorIdx=int(
+                        np.sum(self.nSensorPerNode[:k]) + self.referenceSensor
+                    )
                 )
                 self.nCentrFilterUps[k] += 1  
             # Update local filter
@@ -1599,7 +1601,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.wLocal[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryylocal[k],
                     self.Rnnlocal[k],
-                    self.referenceSensor
+                    refSensorIdx=self.referenceSensor
                 )
                 self.nLocalFilterUps[k] += 1
 
