@@ -13,28 +13,35 @@ from .sandbox import main as main_sandbox
 from danse_toolbox.d_post import DANSEoutputs
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
-PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230406.yaml'
-SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
-N_SRO_TESTS = 10
-MAX_SRO_PPM = 500
+# PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230406.yaml'
+PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230414.yaml'
+N_SRO_TESTS = 10    # number of SRO tests to run
+MAX_SRO_PPM = 500   # maximum SRO in PPM
 EXPORT_FIGURES = True
-OUT_FOLDER = '20230406_tests/sros_effect/fc_danse_nogevd_randST'  # export path relative to `danse/out`
+OUT_FOLDER = '20230414_tests/sros_effect/test_newConfig'  # export path relative to `danse/out`
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
 SNR_PLOT_LIMITS = [-5, 25]
+SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
 
 def main():
     """Main function (called by default when running script)."""
-    cfg = read_config(filePath=PATH_TO_CONFIG_FILE)
 
-    # Get SROs - linearly spaced in PPM
-    cfg['sros'] = [np.array([ii / 2, ii]) * MAX_SRO_PPM / N_SRO_TESTS for\
-        ii in np.arange(0, N_SRO_TESTS)]
-
+    # SROs to consider
+    srosToConsider = [np.array([ii / 2, ii]) * MAX_SRO_PPM / N_SRO_TESTS for\
+            ii in np.arange(0, N_SRO_TESTS)]
+    
     # Run tests
-    res = run_test_batch(cfg)
-
+    res, lastTestParams = run_test_batch(
+        configFilePath=PATH_TO_CONFIG_FILE,
+        srosToConsider=srosToConsider,
+    )
+    
     # Post-process results
-    figs = post_process_results(res, nSensorPerNode=cfg['nSensorPerNode'])
+    figs = post_process_results(
+        res,
+        nSensorPerNode=lastTestParams.wasnParams.nSensorPerNode,
+    )
+
     if EXPORT_FIGURES:
         for k, fig in enumerate(figs):
             fig.savefig(
@@ -49,9 +56,9 @@ def main():
     return None
 
 
-def read_config(filePath: str):
+def setup_config(filePath: str):
     """
-    Reads the YAML configuration file.
+    Reads the YAML configuration file and sets up the `cfg` object.
     
     Parameters
     ----------
@@ -60,57 +67,137 @@ def read_config(filePath: str):
     
     Returns
     ----------
-    cfg : dict
-        Configuration object.
+    testParams : TestParameters
+        Test parameters object.
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
-    with open(filePath, "r") as ymlfile:
-        cfg = yaml.load(ymlfile, Loader=yaml.SafeLoader)
+    # Check number of lines in config file
+    with open(filePath, 'r') as f:
+        nLines = len(f.readlines())
 
-    return cfg
+    if nLines > 20:  # -- Cfg file type after 14.04.2023. Use newer method.
+        testParams = TestParameters().load_from_yaml(filePath)
+        
+    else:  # -- Cfg file type prior to 14.04.2023. Use old method.
+
+        with open(filePath, "r") as ymlfile:
+            cfg = yaml.load(ymlfile, Loader=yaml.SafeLoader)
+        
+        # Create test parameters
+        testParams = TestParameters(
+            exportParams=ExportParameters(
+                bypassAllExports=True  # bypass all sounds and figures exports
+            ),
+            seed=cfg['seed'],
+            wasnParams=WASNparameters(
+                layoutType=cfg['layoutType'],
+                VADenergyDecrease_dB=35,  # [dB]
+                topologyParams=TopologyParameters(
+                    topologyType=cfg['topologyType'],
+                    commDistance=4.,  # [m]
+                    seed=cfg['seed'],
+                    userDefinedTopo=np.array([
+                        [1, 1, 0],  # Node 1
+                        [1, 1, 1],  # Node 2
+                        [0, 1, 1],  # Node 3
+                    ]),
+                ),
+                sigDur=cfg['sigDur'],  # [s]
+                rd=np.array([5, 5, 5]),
+                fs=16000,
+                t60=cfg['t60'],  # ====<<<<<
+                interSensorDist=0.2,
+                nNodes=3,
+                nSensorPerNode=cfg['nSensorPerNode'],  # ====<<<<<
+                selfnoiseSNR=99,
+                desiredSignalFile=[f'{SIGNALS_PATH}/01_speech/{file}'\
+                    for file in [
+                        'speech1.wav',
+                        'speech2.wav'
+                    ]],
+                noiseSignalFile=[f'{SIGNALS_PATH}/02_noise/{file}'\
+                    for file in [
+                        'ssn/ssn_speech1.wav',
+                        'ssn/ssn_speech2.wav'
+                    ]],
+                SROperNode=[],  # <-- will be set in `run_test_batch`
+            ),
+            danseParams=DANSEparameters(
+                DFTsize=1024,
+                WOLAovlp=.5,
+                nodeUpdating=cfg['nodeUpdating'],  # ====<<<<<
+                broadcastType='wholeChunk',
+                estimateSROs='CohDrift',
+                compensateSROs=False,
+                cohDrift=CohDriftParameters(
+                    loop='open',
+                    alpha=0.95
+                ),
+                filterInitType='selectFirstSensor_andFixedValue',
+                filterInitFixedValue=1,
+                computeCentralised=True,
+                computeLocal=True,
+                noExternalFilterRelaxation=False,
+                performGEVD=cfg['performGEVD'],  # ====<<<<<
+                t_expAvg50p=10,
+                timeBtwExternalFiltUpdates=1,
+                # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                printoutsAndPlotting=PrintoutsAndPlotting(
+                    showWASNs=False,
+                    onlySNRandESTOIinPlots=True
+                )
+            )
+        )
+    # Complete parameters
+    testParams.danseParams.get_wasn_info(testParams.wasnParams)
+    
+    return testParams
 
 
-def run_test_batch(cfg: dict):
+def run_test_batch(
+        configFilePath: str,
+        srosToConsider: list
+    ) -> tuple[list[dict], TestParameters]:
     """
     Runs a test batch based on a (YAML) configuration.
     
     Parameters
     ----------
-    cfg : dict
-        Configuration object.
+    configFilePath : str
+        Path to YAML configuration file.
+    srosToConsider : list[list[float]]
+        List of lists of SROs to consider (per node) [PPM].
     
     Returns
     ----------
     allVals : list[dict]
         List of dictionaries containing the speech enhancement metrics results.
+    testParams : TestParameters
+        Test parameters object (last one used).
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
+    # Set up configuration
+    testParams = setup_config(configFilePath)
     
     allVals = []
-    for ii, sros in enumerate(cfg['sros']):
+    for ii, sros in enumerate(srosToConsider):
         # Set up SRO parameter
         currSROs = np.concatenate((np.array([0.]), sros))
-        pickleFilePath = f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/backupvals/vals_{ii+1}.pkl.gz'
+        pickleFilePath = f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/backupvals/vals_sros_{ii+1}.pkl.gz'
         if SKIP_ALREADY_RUN and Path(pickleFilePath).exists():
-            print(f'>>> Skipping SRO test {ii+1} / {len(cfg["sros"])}: {currSROs} PPM\n')
+            print(f'>>> Skipping SRO test {ii+1} / {len(srosToConsider)}: {currSROs} PPM\n')
             # Load results
             vals = pickle.load(gzip.open(pickleFilePath, 'r'))
         else:
-            print(f'\n\n>>> Running SRO test {ii+1} / {len(cfg["sros"])}: {currSROs} PPM\n')
+            print(f'\n\n>>> Running SRO test {ii+1} / {len(srosToConsider)}: {currSROs} PPM\n')
             # Set up test parameters
-            testParams = setup_test_parameters(
-                cfg,
-                currSROs,
-                # Only export an early ASC figure for the first test
-                exportFolder=f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}' if ii==0 else ''
-            )
+            testParams.wasnParams.SROperNode = currSROs
+            testParams.exportParams.exportFolder =\
+                f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_{ii+1}'
             # Run test
-            res = main_sandbox(
-                p=testParams,
-                plotASCearly=True if ii==0 else False  # only plot ASC for first test
-            )
+            res = main_sandbox(p=testParams)
             # Extract single test results
             vals = extract_single_test_results(res)
             # Save results
@@ -119,7 +206,7 @@ def run_test_batch(cfg: dict):
             pickle.dump(vals, gzip.open(pickleFilePath, 'wb'))
         allVals.append(vals)
 
-    return allVals
+    return allVals, testParams
 
 
 def extract_single_test_results(res: DANSEoutputs):
@@ -161,93 +248,98 @@ def extract_single_test_results(res: DANSEoutputs):
     return vals
 
 
-def setup_test_parameters(cfg: dict, currSROs: np.ndarray, exportFolder: str='') -> TestParameters:
-    """
-    Sets up the test parameters.
+# def setup_test_parameters(cfg: dict, currSROs: np.ndarray, exportFolder: str='') -> TestParameters:
+#     """
+#     Sets up the test parameters.
     
-    Parameters
-    ----------
-    cfg : dict
-        Configuration object.
-    currSROs : np.ndarray
-        Current SROs per node.
+#     Parameters
+#     ----------
+#     cfg : dict
+#         Configuration object.
+#     currSROs : np.ndarray
+#         Current SROs per node.
     
-    Returns
-    ----------
-    testParams : TestParameters
-        Test parameters object.
+#     Returns
+#     ----------
+#     testParams : TestParameters
+#         Test parameters object.
     
-    (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
-    """
+#     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
+#     """
 
-    # Create test parameters
-    testParams = TestParameters(
-        bypassExport=True,  # <-- BYPASSING FIGURES AND SOUNDS EXPORT
-        exportFolder=exportFolder,
-        seed=cfg['seed'],
-        wasnParams=WASNparameters(
-            layoutType=cfg['layoutType'],
-            VADenergyDecrease_dB=35,  # [dB]
-            topologyParams=TopologyParameters(
-                topologyType=cfg['topologyType'],
-                commDistance=4.,  # [m]
-                seed=cfg['seed'],
-                userDefinedTopo=np.array([
-                    [1, 1, 0],  # Node 1
-                    [1, 1, 1],  # Node 2
-                    [0, 1, 1],  # Node 3
-                ]),
-            ),
-            sigDur=cfg['sigDur'],  # [s]
-            rd=np.array([5, 5, 5]),
-            fs=16000,
-            t60=cfg['t60'],  # =========================<<<<<
-            interSensorDist=0.2,
-            nNodes=3,
-            nSensorPerNode=cfg['nSensorPerNode'],  # =========================<<<<<
-            selfnoiseSNR=99,
-            desiredSignalFile=[f'{SIGNALS_PATH}/01_speech/{file}'\
-                for file in [
-                    'speech1.wav',
-                    'speech2.wav'
-                ]],
-            noiseSignalFile=[f'{SIGNALS_PATH}/02_noise/{file}'\
-                for file in [
-                    'ssn/ssn_speech1.wav',
-                    'ssn/ssn_speech2.wav'
-                ]],
-            SROperNode=currSROs,  # =========================<<<<<
-        ),
-        danseParams=DANSEparameters(
-            DFTsize=1024,
-            WOLAovlp=.5,
-            nodeUpdating=cfg['nodeUpdating'],  # =========================<<<<<
-            broadcastType='wholeChunk',
-            estimateSROs='CohDrift',
-            compensateSROs=False,
-            cohDrift=CohDriftParameters(
-                loop='open',
-                alpha=0.95
-            ),
-            filterInitType='selectFirstSensor_andFixedValue',
-            filterInitFixedValue=1,
-            computeCentralised=True,
-            computeLocal=True,
-            noExternalFilterRelaxation=False,
-            performGEVD=cfg['performGEVD'],  # =========================<<<<<
-            t_expAvg50p=10,
-            timeBtwExternalFiltUpdates=1,
-            # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            printoutsAndPlotting=PrintoutsAndPlotting(
-                showWASNs=False,
-                onlySNRandESTOIinPlots=True
-            )
-        )
-    )
-    # Complete parameters
-    testParams.danseParams.get_wasn_info(testParams.wasnParams)
+#     if len(cfg) < 20:  # -- Cfg file type prior to 14.04.2023. Use old method.
+#         # Create test parameters
+#         testParams = TestParameters(
+#             bypassExport=True,  # <-- BYPASSING FIGURES AND SOUNDS EXPORT
+#             exportFolder=exportFolder,
+#             seed=cfg['seed'],
+#             wasnParams=WASNparameters(
+#                 layoutType=cfg['layoutType'],
+#                 VADenergyDecrease_dB=35,  # [dB]
+#                 topologyParams=TopologyParameters(
+#                     topologyType=cfg['topologyType'],
+#                     commDistance=4.,  # [m]
+#                     seed=cfg['seed'],
+#                     userDefinedTopo=np.array([
+#                         [1, 1, 0],  # Node 1
+#                         [1, 1, 1],  # Node 2
+#                         [0, 1, 1],  # Node 3
+#                     ]),
+#                 ),
+#                 sigDur=cfg['sigDur'],  # [s]
+#                 rd=np.array([5, 5, 5]),
+#                 fs=16000,
+#                 t60=cfg['t60'],  # ====<<<<<
+#                 interSensorDist=0.2,
+#                 nNodes=3,
+#                 nSensorPerNode=cfg['nSensorPerNode'],  # ====<<<<<
+#                 selfnoiseSNR=99,
+#                 desiredSignalFile=[f'{SIGNALS_PATH}/01_speech/{file}'\
+#                     for file in [
+#                         'speech1.wav',
+#                         'speech2.wav'
+#                     ]],
+#                 noiseSignalFile=[f'{SIGNALS_PATH}/02_noise/{file}'\
+#                     for file in [
+#                         'ssn/ssn_speech1.wav',
+#                         'ssn/ssn_speech2.wav'
+#                     ]],
+#                 SROperNode=currSROs,  # ====<<<<<
+#             ),
+#             danseParams=DANSEparameters(
+#                 DFTsize=1024,
+#                 WOLAovlp=.5,
+#                 nodeUpdating=cfg['nodeUpdating'],  # ====<<<<<
+#                 broadcastType='wholeChunk',
+#                 estimateSROs='CohDrift',
+#                 compensateSROs=False,
+#                 cohDrift=CohDriftParameters(
+#                     loop='open',
+#                     alpha=0.95
+#                 ),
+#                 filterInitType='selectFirstSensor_andFixedValue',
+#                 filterInitFixedValue=1,
+#                 computeCentralised=True,
+#                 computeLocal=True,
+#                 noExternalFilterRelaxation=False,
+#                 performGEVD=cfg['performGEVD'],  # ====<<<<<
+#                 t_expAvg50p=10,
+#                 timeBtwExternalFiltUpdates=1,
+#                 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#                 printoutsAndPlotting=PrintoutsAndPlotting(
+#                     showWASNs=False,
+#                     onlySNRandESTOIinPlots=True
+#                 )
+#             )
+#         )
+#     else:  # -- Cfg file type after 14.04.2023. Use new method.
+#         # Create test parameters
+#         testParams = TestParameters().load_from_yaml(cfg)
 
-    return testParams
+#     # Complete parameters
+#     testParams.danseParams.get_wasn_info(testParams.wasnParams)
+
+#     return testParams
 
 
 def post_process_results(res: list[dict], nSensorPerNode: np.ndarray):

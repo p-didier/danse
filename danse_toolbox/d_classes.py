@@ -135,6 +135,24 @@ def compute_condition_numbers(array, loopAxis=None):
 
 
 @dataclass
+class ExportParameters:
+    """Boolean decisions for what to export after running the DANSE algorithm."""
+    filterNormsPlot: bool = True  # if True, filter norms plot is exported
+    conditionNumberPlot: bool = True  # if True, condition number plot is exported
+    convergencePlot: bool = True  # if True, convergence plot is exported
+    wavFiles: bool = True  # if True, WAV files are exported
+    acousticScenarioPlot: bool = True  # if True, acoustic scenario plot is exported
+    sroEstimPerfPlot: bool = True  # if True, SRO estimation performance plot is exported
+    metricsPlot: bool = True  # if True, metrics plot is exported
+    waveformsAndSpectrograms: bool = True  # if True, waveforms and spectrograms are exported
+    # vvv Files (not plots)
+    danseOutputsFile: bool = True  # if True, DANSE outputs are exported as a pickle file
+    parametersFile: bool = True  # if True, parameters are exported as a pickle file or a YAML file
+    # vvv Global
+    bypassAllExports: bool = False  # if True, all exports are bypassed
+    exportFolder: str = ''  # folder to export outputs
+
+@dataclass
 class TestParameters:
     referenceSensor: int = 0    # Index of the reference sensor at each node
     #
@@ -142,8 +160,7 @@ class TestParameters:
         sigDur=5
     )
     danseParams: base.DANSEparameters = base.DANSEparameters()
-    exportFolder: str = ''  # folder to export outputs
-    bypassExport: bool = False  # if True, bypass export
+    exportParams: ExportParameters = ExportParameters()
     #
     seed: int = 12345
     snrYlimMax: float = None  # SNR ylim max (if None, use auto lim)
@@ -164,6 +181,9 @@ class TestParameters:
             # Switch to topology-independent node-update system
             print(f'/!\ The WASN is not fully connected -- switching `danseParams.nodeUpdating` from "{self.danseParams.nodeUpdating}" to "topo-indep_{self.danseParams.nodeUpdating}".')
             self.danseParams.nodeUpdating = f'topo-indep_{self.danseParams.nodeUpdating}'
+        if not self.exportParams.conditionNumberPlot:
+            # If condition number plot is not exported, don't compute it
+            self.danseParams.saveConditionNumber = False
 
     def save(self, exportType='pkl'):
         """Saves dataclass to Pickle archive."""
