@@ -163,6 +163,9 @@ class TestParameters:
     danseParams: base.DANSEparameters = base.DANSEparameters()
     exportParams: ExportParameters = ExportParameters()
     #
+    setThoseSensorsToNoise: list = field(default_factory=list)
+    # ^^^ set those sensor indices to noise (render them useless).
+    #
     seed: int = 12345
     snrYlimMax: float = None  # SNR ylim max (if None, use auto lim)
     loadedFromYaml: bool = False  # if True, the parameters were loaded from a YAML file
@@ -210,6 +213,8 @@ class TestParameters:
         if self.loadedFromYaml:
             # Copy YAML file to export folder
             shutil.copy(self.originYaml, self.exportParams.exportFolder)
+            # Also save as readily readable .txt file
+            met.save_as_txt(self, self.exportParams.exportFolder)
         else:
             raise ValueError('Cannot save YAML file: the parameters were not loaded from a YAML file.')
 
@@ -1101,7 +1106,7 @@ class DANSEvariables(base.DANSEparameters):
                         self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
                     # Update last external filter update instant [s]
                     self.lastExtFiltUp[k] = t
-                    if self.printout_externalFilterUpdate:    # inform user
+                    if self.printoutsAndPlotting.printout_externalFilterUpdate:    # inform user
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
             else:
@@ -2413,7 +2418,7 @@ class TIDANSEvariables(DANSEvariables):
                         self.wTilde[k][:, self.i[k] + 1, :]
                     # Update last external filter update instant [s]
                     self.lastExtFiltUp[k] = t
-                    if self.printout_externalFilterUpdate:    # inform user
+                    if self.printoutsAndPlotting.printout_externalFilterUpdate:    # inform user
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
             else:

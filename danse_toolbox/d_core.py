@@ -68,8 +68,8 @@ def danse(
         base.events_parser(
             events,
             dv.startUpdates,
-            dv.printout_eventsParser,
-            dv.printout_eventsParserNoBC
+            dv.printoutsAndPlotting.printout_eventsParser,
+            dv.printoutsAndPlotting.printout_eventsParserNoBC
         )
 
         for idxEventCurrInstant in range(events.nEvents):
@@ -91,7 +91,7 @@ def danse(
     # Profiling
     if not is_interactive():
         profiler.stop()
-        if dv.printout_profiler:
+        if dv.printoutsAndPlotting.printout_profiler:
             profiler.print()
 
     print('\nSimultaneous DANSE processing all done.')
@@ -179,11 +179,11 @@ def tidanse(
     for instantIdx, currEvents in enumerate(eventInstants):
 
         # Parse event matrix and inform user (if asked)
-        if tidv.printout_eventsParser:
+        if tidv.printoutsAndPlotting.printout_eventsParser:
             base.events_parser_ti_danse(
                 currEvents,
                 tidv.startUpdates,
-                tidv.printout_eventsParserNoBC
+                tidv.printoutsAndPlotting.printout_eventsParserNoBC
             )
 
         for idxEventCurrInstant in range(currEvents.nEvents):
@@ -234,7 +234,7 @@ def tidanse(
     # Profiling
     if not is_interactive():
         profiler.stop()
-        if tidv.printout_profiler:
+        if tidv.printoutsAndPlotting.printout_profiler:
             profiler.print()
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0

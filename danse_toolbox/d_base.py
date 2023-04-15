@@ -96,6 +96,17 @@ class Hyperparameters:
     # Efficiency
     efficientSpSBC: bool = True     # if True, perform efficient sample-per-
         # sample broadcast by adapting the DANSE-events creation mechanism.
+    # Other
+    bypassUpdates: bool = False   # if True, do not update filters.
+
+@dataclass
+class PrintoutsAndPlotting:
+    verbose: bool = True   # if True, enable print outs during DANSE.
+    showWASNs : bool = False    # if True, shows a 3-D plot of the WASN every
+        # time the topology changes (e.g., when a new tree is formed, or a new
+        # root is set, in TI-DANSE).
+    onlySNRandESTOIinPlots : bool = False   # if True, only include the SNR and
+        # the eSTOI in the metrics plot.
     # Printouts
     printout_profiler: bool = True      # controls printouts of Profiler.
     printout_eventsParser: bool = True      # controls printouts in
@@ -104,16 +115,14 @@ class Hyperparameters:
                                                 # broadcasts in event parser.
     printout_externalFilterUpdate: bool = True      # controls printouts of
                                                     # external filter updates.
-    # Other
-    bypassUpdates: bool = False   # if True, do not update filters.
-
-@dataclass
-class PrintoutsAndPlotting:
-    showWASNs : bool = False    # if True, shows a 3-D plot of the WASN every
-        # time the topology changes (e.g., when a new tree is formed, or a new
-        # root is set, in TI-DANSE).
-    onlySNRandESTOIinPlots : bool = False   # if True, only include the SNR and
-        # the eSTOI in the metrics plot.
+    def __post_init__(self):
+        # Adapt printouts depending on the verbosity
+        self.printout_eventsParser = self.printout_eventsParser and self.verbose
+        self.printout_eventsParserNoBC = self.printout_eventsParserNoBC and \
+            self.verbose
+        self.printout_profiler = self.printout_profiler and self.verbose
+        self.printout_externalFilterUpdate = self.printout_externalFilterUpdate \
+            and self.verbose
 
 @dataclass
 class DANSEparameters(Hyperparameters):
@@ -248,10 +257,15 @@ class DANSEparameters(Hyperparameters):
     saveConditionNumber: bool = False   # if True, save condition numbers of
         # relevant covariance matrices.
     saveConditionNumberEvery: int = 1    # [iter] bw. condition number saves.
+    wasnInfoInitiated: bool = False     # if True, the WASN info has been
+        # initiated (i.e. the WASN has been created).
     
     def __post_init__(self):
         """Adapt some fields depending on the value of others, after 
         dataclass instance initialisation."""
+        # Re-run post-init method on nested dataclasses
+        self.printoutsAndPlotting.__post_init__()
+
         self.Ns = int(self.DFTsize * (1 - self.WOLAovlp))
         # Create windows
         if self.winWOLAanalysisType == 'sqrthann':
@@ -287,6 +301,8 @@ class DANSEparameters(Hyperparameters):
         self.referenceSensor = wasnParams.referenceSensor
         self.baseFs = wasnParams.fs
         self.seed = wasnParams.topologyParams.seed
+        #
+        self.wasnInfoInitiated = True
     
 def prep_sigs_for_FFT(y, N, Ns, t):
     """

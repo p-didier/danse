@@ -691,7 +691,8 @@ def build_wasn(
         wetNoises,
         p: classes.WASNparameters,
         startComputeMetricsAt: str,
-        minNoSpeechDurEndUtterance: float
+        minNoSpeechDurEndUtterance: float,
+        setThoseSensorsToNoise: list=[]
     ):
     """
     Build WASN from parameters (including asynchronicities and topology).
@@ -806,6 +807,35 @@ def build_wasn(
         startComputeMetricsAt=startComputeMetricsAt,
         minNoSpeechDurEndUtterance=minNoSpeechDurEndUtterance,
     )
+
+    # Render specific sensors useless by replacing their signal
+    # with random noise, if asked.
+    if len(setThoseSensorsToNoise) > 0:
+        print('Replacing signal at sensors with Python indices', setThoseSensorsToNoise, 'with random noise.')
+        for m in setThoseSensorsToNoise:
+            # Find node index of that sensor
+            k = p.sensorToNodeIndices[m]
+            # Find local microphone index of that sensor
+            mLocal = np.where(p.sensorToNodeIndices == k)[0].tolist().index(m)
+            # Replace signal with random noise
+            myWASN.wasn[k].data[:, mLocal] = np.random.uniform(
+                -1, 1, size=myWASN.wasn[k].data[:, mLocal].shape
+            )
+            # Replace clean speech with random noise
+            myWASN.wasn[k].cleanspeech[:, mLocal] = np.random.uniform(
+                -1, 1, size=myWASN.wasn[k].cleanspeech[:, mLocal].shape
+            )
+            # Udpate clean speech at reference sensor
+            myWASN.wasn[k].cleanspeechRefSensor =\
+                myWASN.wasn[k].cleanspeech[:, myWASN.wasn[k].refSensorIdx]
+            # Replace clean noise with random noise
+            myWASN.wasn[k].cleannoise[:, mLocal] = np.random.uniform(
+                -1, 1, size=myWASN.wasn[k].cleannoise[:, mLocal].shape
+            )
+            # Udpate clean noise at reference sensor
+            myWASN.wasn[k].cleannoiseRefSensor =\
+                myWASN.wasn[k].cleannoise[:, myWASN.wasn[k].refSensorIdx]
+            
 
     return myWASN
 

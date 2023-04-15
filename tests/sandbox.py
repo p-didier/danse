@@ -32,6 +32,10 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         p = TestParameters().load_from_yaml(PATH_TO_CONFIG_FILE)
         p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
         print('Parameters loaded.')
+    else:
+        # Check that parameters are complete
+        if p.danseParams.wasnInfoInitiated is False:
+            p.danseParams.get_wasn_info(p.wasnParams)
 
     # Build room
     print('Building room...')
@@ -47,7 +51,8 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         wetNoises,
         p.wasnParams,
         p.danseParams.startComputeMetricsAt,
-        p.danseParams.minNoSpeechDurEndUtterance
+        p.danseParams.minNoSpeechDurEndUtterance,
+        p.setThoseSensorsToNoise
     )
     print('WASN built.')
 
@@ -62,7 +67,7 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
         )
     
     # DANSE
-    print('Running DANSE...')
+    print(f'Running DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose})')
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
     print('DANSE run complete.')
 
