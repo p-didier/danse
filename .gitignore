@@ -8,5 +8,5 @@
 *.cpython-39.pyc
 *.txt
 *.pkf
-*.yaml
+out/
 *.pkl
