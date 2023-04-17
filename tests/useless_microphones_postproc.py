@@ -9,6 +9,7 @@
 import re
 import sys
 import pickle
+import fnmatch
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -20,7 +21,7 @@ EXPORT_FOLDER = f'postproc{N_USELESS_MICS_TO_PLOT}uselessMic'  # relative to FOL
 
 def main():
     """Main function (called by default when running script)."""
-    figs = plot_results_1uselessmic(
+    figs = plot_results(
         *import_results(folder=FOLDER),
         N_USELESS_MICS_TO_PLOT
     )
@@ -90,10 +91,9 @@ def import_results(folder: str):
     return results, sensorToNodeIdx
 
 
-def plot_results_1uselessmic(res: dict, sensorToNodeIdx: list, nUselessMicsToPlot: int = 1):
+def plot_results(res: dict, sensorToNodeIdx: list, nUselessMicsToPlot: int = 1):
     """
-    Plot results from the `tests.useless_microphones` script, for the case
-    where only one microphone is rendered useless.
+    Plot results from the `tests.useless_microphones` script.
     
     Parameters
     ----------
@@ -190,17 +190,58 @@ def get_legend_and_colors(
         leg = get_centr_legend(sensorToNodeIdx, nodeIndex, uselessMics)
 
     # Build colors
-    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    colors = [colors[i] for i in range(len(leg))]
-    # Remove color of useless microphone
-    idxUselessMicLegEntry = [True if 'useless' in entry else False for entry in leg]
-    legIndicesUselessMic = np.where(idxUselessMicLegEntry)[0]
-    for ii, legIdx in enumerate(legIndicesUselessMic):
-        colors[legIdx] = str(
-            np.round(1 - (ii + 1) / len(legIndicesUselessMic), 1)
-        )
+    colors = build_line_colors(leg)
 
     return leg, colors
+
+
+def build_line_colors(leg):
+    """Build colors for the lines in the plots."""
+
+    def _get_node_index(entry):
+        """Extract node index from legend entry."""
+        return int(re.findall(r'\d+', entry)[0]) - 1
+    
+    def _hex_to_rgb(hex):
+        """Convert hex color to rgb."""
+        hex = hex.lstrip('#')
+        return tuple(int(hex[i:i+2], 16) / 255 for i in (0, 2, 4))
+    
+    uselessMicCount = 0
+    legIndicesUselessMic = np.where(['useless' in entry for entry in leg])[0]
+    # Infer nodes indices from legend entries
+    nodeIndexPerEntry = [_get_node_index(entry) for entry in leg]
+    nNodes = len(np.unique(nodeIndexPerEntry))
+    # Get number of entries per node
+    nEntriesPerNode = np.array([
+        len(np.where(np.array(nodeIndexPerEntry) == ii)[0]) for ii in range(nNodes)
+    ])
+    # Define base colors (one per node)
+    baseColors = plt.rcParams['axes.prop_cycle'].by_key()['color'][:nNodes]
+    
+    colors = []
+    counterPerNode = np.zeros(nNodes)
+    for ii, entry in enumerate(leg):
+        if 'useless' in entry:
+            colors.append(str(
+                np.round(
+                    1 - (uselessMicCount + 1) / len(legIndicesUselessMic),
+                    1
+                )
+            ))
+            uselessMicCount += 1
+        else:
+            # Current node index
+            currNodeIndex = _get_node_index(entry)
+            # Get base color for current node
+            currBaseColor = _hex_to_rgb(baseColors[currNodeIndex])
+            # Add transparency
+            alpha = 1 - counterPerNode[currNodeIndex] / nEntriesPerNode[currNodeIndex]
+            currBaseColor = tuple(np.append(currBaseColor, alpha))
+            colors.append(currBaseColor)
+            counterPerNode[currNodeIndex] += 1
+
+    return colors
 
 
 def get_danse_legend(sensorToNodeIdx, nodeIndex, uselessMics=None):
@@ -228,7 +269,7 @@ def get_danse_legend(sensorToNodeIdx, nodeIndex, uselessMics=None):
     # Add local sensors legend entries
     nLocalSensors = len(np.where(sensorToNodeIdx == nodeIndex)[0])
     for idxSensor in range(len(np.where(sensorToNodeIdx == nodeIndex)[0])):
-        leg.append(f'Local $m={idxSensor + 1}/{nLocalSensors}$')
+        leg.append(f'Local ($k={nodeIndex + 1}$) $m={idxSensor + 1}/{nLocalSensors}$')
         
     # Add one entry per remote node
     for idxNode in np.unique(sensorToNodeIdx):
@@ -279,11 +320,11 @@ def get_centr_legend(sensorToNodeIdx, nodeIndex, uselessMics=None):
         # Get node index of current sensor
         idxNode = sensorToNodeIdx[idxSensor]
         if idxNode == nodeIndex:
-            leg.append(f'Local $m={idxSensor + 1}/{sum(sensorToNodeIdx == nodeIndex)}$')
+            leg.append(f'Local ($k={nodeIndex + 1}$) $m={idxSensor + 1}/{sum(sensorToNodeIdx == nodeIndex)}$')
         else:
             # Get local index of current sensor
             idxLocalSensor = np.where(np.where(sensorToNodeIdx == idxNode)[0] == idxSensor)[0][0]
-            leg.append(f'Remote $m={idxLocalSensor + 1}/{len(np.where(sensorToNodeIdx == idxNode)[0])}$ of node $k={idxNode + 1}$')
+            leg.append(f'Remote ($k={idxNode + 1}$) $m={idxLocalSensor + 1}/{len(np.where(sensorToNodeIdx == idxNode)[0])}$')
 
     # Get index of reference sensor
     idxRefSensor = np.where(sensorToNodeIdx == nodeIndex)[0][0]
