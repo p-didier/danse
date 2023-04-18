@@ -912,8 +912,16 @@ def plot_asc(
         Whether to plot a 3D view of the acoustic scenario.
     """
 
-    def _plot_connections(sensorCoords):
-        """Helper function to plot connections based on WASN topology."""
+    def _plot_connections(sensorCoords, stnIdx):
+        """Helper function to plot connections based on WASN topology.
+        
+        Parameters
+        ----------
+        sensorCoords : [2 x N] np.ndarray (float)
+            Sensor coordinates.
+        stnIdx : [N] np.ndarray (int)
+            Sensor-to-node assignment.
+        """
         def __plot_from_mat(mat, coords, ax, color, linestyle):
             """Helper sub-function."""
             # Add topology connectivity lines for the original adjacency matrix
@@ -932,7 +940,7 @@ def plot_asc(
         nodeCoords = np.zeros((2, p.nNodes))
         for k in range(p.nNodes):
             nodeCoords[:, k] = np.mean(
-                sensorCoords[:, p.sensorToNodeIndices == k],
+                sensorCoords[:, stnIdx == k],
                 axis=1
             )
         # Add topology connectivity lines for the original adjacency matrix
@@ -940,11 +948,27 @@ def plot_asc(
         # Add topology connectivity lines for the effective adjacency matrix
         __plot_from_mat(usedAdjacencyMatrix, nodeCoords, ax, '0.25', '--')
 
+    # Select correct variables from parameters
+    if len(p.nSensorPerNodeASC) > 0:
+        # Some random-noise (unusable) signals have been added to the nodes
+        # for experimental purposes - use the original number of sensors per
+        # node instead of the current one for plotting.
+        nSensorPerNode = p.nSensorPerNodeASC
+    else:
+        nSensorPerNode = p.nSensorPerNode
+    if len(p.sensorToNodeIndicesASC) > 0:
+        # Some random-noise (unusable) signals have been added to the nodes
+        # for experimental purposes - use the original sensor-to-node indices
+        # instead of the current ones for plotting.
+        sensorToNodeIndices = p.sensorToNodeIndicesASC
+    else:
+        sensorToNodeIndices = p.sensorToNodeIndices
+
     # Determine appropriate node radius for ASC subplots
     nodeRadius = 0
     for k in range(p.nNodes):
-        allIndices = np.arange(sum(p.nSensorPerNode))
-        sensorIndices = allIndices[p.sensorToNodeIndices == k]
+        allIndices = np.arange(sum(nSensorPerNode))
+        sensorIndices = allIndices[sensorToNodeIndices == k]
         if len(sensorIndices) > 1:
             meanpos = np.mean(asc.mic_array.R[:, sensorIndices], axis=1)
             curr = np.amax(asc.mic_array.R[:, sensorIndices] - \
@@ -955,7 +979,7 @@ def plot_asc(
             nodeRadius = copy.copy(curr)
 
     fig = plt.figure()
-    #
+    # Plot 3D view if requested
     if plot3Dview:
         nCols = 3
         fig.set_size_inches(9.5, 3.5)
@@ -969,7 +993,7 @@ def plot_asc(
         np.array([ii.position[:2] for ii in asc.sources[:p.nDesiredSources]]), 
         np.array([ii.position[:2] for ii in asc.sources[-p.nNoiseSources:]]), 
         asc.mic_array.R[:2, :].T,
-        p.sensorToNodeIndices,
+        sensorToNodeIndices,
         dotted=p.t60==0,
         showLegend=False,
         nodeRadius=nodeRadius,
@@ -977,7 +1001,10 @@ def plot_asc(
     )
     if usedAdjacencyMatrix != np.array([]):
         # Add topology lines
-        _plot_connections(sensorCoords=asc.mic_array.R[:2, :])
+        _plot_connections(
+            sensorCoords=asc.mic_array.R[:2, :],
+            stnIdx=sensorToNodeIndices
+        )
     ax.set(xlabel='$x$ [m]', ylabel='$y$ [m]', title='Top view')
     #
     ax = fig.add_subplot(1, nCols, 2)
@@ -987,7 +1014,7 @@ def plot_asc(
         np.array([ii.position[-2:] for ii in asc.sources[:p.nDesiredSources]]), 
         np.array([ii.position[-2:] for ii in asc.sources[-p.nNoiseSources:]]), 
         asc.mic_array.R[-2:, :].T,
-        p.sensorToNodeIndices,
+        sensorToNodeIndices,
         dotted=p.t60==0,
         showLegend=False,
         nodeRadius=nodeRadius,
@@ -995,7 +1022,10 @@ def plot_asc(
     )
     if usedAdjacencyMatrix != np.array([]):
         # Add topology lines
-        _plot_connections(sensorCoords=asc.mic_array.R[-2:, :])
+        _plot_connections(
+            sensorCoords=asc.mic_array.R[-2:, :],
+            stnIdx=sensorToNodeIndices
+        )
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
     #
     if plot3Dview:

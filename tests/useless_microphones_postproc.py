@@ -9,15 +9,19 @@
 import re
 import sys
 import pickle
-import fnmatch
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-FOLDER = f'{Path(__file__).parent.parent}/out/20230415_tests/uselessMics/test'
+# FOLDER = f'{Path(__file__).parent.parent}/out/20230415_tests/uselessMics/test'
+FOLDER = f'{Path(__file__).parent.parent}/out/20230418_tests/addNoiseSigs/tmp'
 RELATIVE_PATH_TO_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder
-N_USELESS_MICS_TO_PLOT = 3  # number of mics rendered useless to plot
-EXPORT_FOLDER = f'postproc{N_USELESS_MICS_TO_PLOT}uselessMic'  # relative to FOLDER
+N_USELESS_MICS_TO_PLOT = 1  # number of mics rendered useless to plot
+EXPORT_FOLDER = f'pp_a{N_USELESS_MICS_TO_PLOT}um'  # relative to FOLDER
+TEST_TYPE = 'render_mics_useless'  # type of test to post-process
+# TEST_TYPE = 'add_useless_mics'
+    # ^^^ 'render_mics_useless': render some mics useless.
+    # ^^^ 'add_useless_mics': add some useless mics.
 
 def main():
     """Main function (called by default when running script)."""
@@ -51,11 +55,14 @@ def import_results(folder: str):
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
+
+    # Get test ref from test type
+    testRef = ''.join([s[0] for s in re.split('_', TEST_TYPE)]) 
     
     # List subfolders
     subfolders = [f for f in Path(folder).iterdir() if f.is_dir()]
     # Only select the subfolders corresponding to the test cases
-    subfolders = [f for f in subfolders if f.name[:4] == 'comb']
+    subfolders = [f for f in subfolders if f.name[:len(testRef)] == testRef]
     # Sort subfolders by the comb reference number
     subfolders = sorted(
         subfolders,

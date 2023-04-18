@@ -256,3 +256,45 @@ def tidanse(
             wasnObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
 
     return out, wasnObj
+
+
+def check_params(p: TestParameters, wasnObj: WASN):
+    """
+    Checks test parameters and updates WASN object.
+
+    Parameters
+    ----------
+    p : TestParameters object
+        Test parameters.
+    wasnObj : `WASN` object
+        WASN under consideration.
+
+    Returns
+    -------
+    p : TestParameters object  
+        Test parameters (updated).
+    wasnObj : `WASN` object
+        WASN under consideration (updated).
+    """
+    for k in range(p.wasnParams.nNodes):  # for each node
+        # Derive exponential averaging factor for `Ryy` and `Rnn` updates
+        wasnObj.wasn[k].beta = np.exp(np.log(0.5) / \
+            (p.danseParams.t_expAvg50p * wasnObj.wasn[k].fs / p.danseParams.Ns))
+    
+    # If random-noise (unusable) signals have been added...
+    if any(p.wasnParams.addedNoiseSignalsPerNode > 0):
+        # Coopy base `nSensorPerNode` and `sensorToNodeIndices` for ASC plots.
+        p.wasnParams.nSensorPerNodeASC = copy.deepcopy(p.wasnParams.nSensorPerNode)
+        p.wasnParams.sensorToNodeIndicesASC = copy.deepcopy(p.wasnParams.sensorToNodeIndices)
+        # Update number of sensors per node
+        for ii, n in enumerate(p.wasnParams.addedNoiseSignalsPerNode):
+            p.wasnParams.nSensorPerNode[ii] += n
+        # Update sensor-to-node indices
+        p.wasnParams.sensorToNodeIndices = np.array(
+            list(itertools.chain(*[[ii] * p.wasnParams.nSensorPerNode[ii]\
+            for ii in range(len(p.wasnParams.nSensorPerNode))]))
+        )
+        # Update WASN info in DANSE parameters
+        p.danseParams.get_wasn_info(p.wasnParams)
+
+    return p, wasnObj

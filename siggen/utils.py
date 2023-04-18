@@ -810,7 +810,7 @@ def build_wasn(
 
     # Render specific sensors useless by replacing their signal
     # with random noise, if asked.
-    if len(setThoseSensorsToNoise) > 0:
+    if any(setThoseSensorsToNoise):
         print('Replacing signal at sensors with Python indices', setThoseSensorsToNoise, 'with random noise.')
         for m in setThoseSensorsToNoise:
             # Find node index of that sensor
@@ -835,7 +835,28 @@ def build_wasn(
             # Udpate clean noise at reference sensor
             myWASN.wasn[k].cleannoiseRefSensor =\
                 myWASN.wasn[k].cleannoise[:, myWASN.wasn[k].refSensorIdx]
-            
+    
+    # If asked, add random-noise (unusable) signals to the nodes
+    for ii, nRandNoiseSigs in enumerate(p.addedNoiseSignalsPerNode):
+        print('Adding', nRandNoiseSigs, 'random-noise signals to node', ii, '...')
+        # Create random-noise (unusable) signal
+        sig = np.random.uniform(
+            -1, 1, size=(myWASN.wasn[ii].data.shape[0], nRandNoiseSigs)
+        )
+        # Add to sensor signals
+        myWASN.wasn[ii].data = np.concatenate(
+            (myWASN.wasn[ii].data, sig), axis=1
+        )
+        # Add to clean speech
+        myWASN.wasn[ii].cleanspeech = np.concatenate(
+            (myWASN.wasn[ii].cleanspeech, sig), axis=1
+        )
+        # Add to clean noise
+        myWASN.wasn[ii].cleannoise = np.concatenate(
+            (myWASN.wasn[ii].cleannoise, sig), axis=1
+        )
+        # Update number of sensors
+        myWASN.wasn[ii].nSensors += nRandNoiseSigs
 
     return myWASN
 

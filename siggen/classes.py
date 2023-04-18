@@ -98,6 +98,13 @@ class WASNparameters(AcousticScenarioParameters):
     topologyParams: TopologyParameters = TopologyParameters()
     selfnoiseSNR: float = 50.   # self-noise SNR
         # [signal: noise-free signal; noise: self-noise]
+    # vvv Experimental parameters
+    addedNoiseSignalsPerNode: list = field(default_factory=list)
+        # Number of random-noise (unusable) signals to be added to each node.
+    sensorToNodeIndicesASC: list = field(default_factory=list)
+        # List of sensor-to-node indices, for ASC plotting.
+    nSensorPerNodeASC: list = field(default_factory=list)
+        # List of sensor-to-node indices, for ASC plotting.
     
     def __post_init__(self):
         """Post-initialization commands, automatically conducted when invoking
@@ -117,19 +124,36 @@ class WASNparameters(AcousticScenarioParameters):
             >> # sensor(s) per node: {self.nSensorPerNode};
             >> Topology: ad-hoc.
             """)
-        
-        # Dimensionality checks
-        if type(self.SROperNode) is not list:
-            # ^^^ required check for JSON export/import
-            if len(self.SROperNode) != self.nNodes:
-                if all(self.SROperNode == self.SROperNode[0]):
-                    print(f'Automatically setting all SROs to the only value provided ({self.SROperNode[0]} PPM).')
-                    self.SROperNode = np.full(
-                        self.nNodes,
-                        fill_value=self.SROperNode[0]
+
+        def _dim_check(var, nNodes, printoutRef):
+            """Helper function -- checks the dimensionality of a variable."""
+            if isinstance(var, list):
+                var = np.array(var)
+            elif isinstance(var, float) or isinstance(var, int):
+                var = np.array([var])
+            if len(var) != nNodes:
+                if all(var == var[0]):
+                    print(f'Automatically setting all {printoutRef} to the only value provided ({var[0]}).')
+                    var = np.full(
+                        nNodes,
+                        fill_value=var[0]
                     )
                 else:
-                    raise ValueError(f'The number of SRO values ({len(self.SROperNode)}) does not correspond to the number of nodes in the WASN ({self.nNodes}).')
+                    raise ValueError(f'The number of {printoutRef} values ({len(var)}) does not correspond to the number of nodes in the WASN ({nNodes}).')
+            return var
+        
+        # Dimensionality checks
+        self.addedNoiseSignalsPerNode = _dim_check(
+            self.addedNoiseSignalsPerNode,
+            self.nNodes,
+            'added random-noise (unusable) signals per node'
+        )
+        self.SROperNode = _dim_check(
+            self.SROperNode,
+            self.nNodes,
+            'SRO per node'
+        )
+
         # Explicitly derive sensor-to-node indices
         self.sensorToNodeIndices = np.array(
             list(itertools.chain(*[[ii] * self.nSensorPerNode[ii]\

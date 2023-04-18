@@ -65,6 +65,9 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
             [node.nodeType for node in wasnObj.wasn],
             plot3Dview=True
         )
+
+    # Parameters check for DANSE
+    p, wasnObj = core.check_params(p, wasnObj)
     
     # DANSE
     print(f'Running DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose})')
@@ -86,12 +89,6 @@ def danse_it_up(
     """
     Container function for prepping signals and launching the DANSE algorithm.
     """
-
-    for k in range(p.wasnParams.nNodes):  # for each node
-        # Derive exponential averaging factor for `Ryy` and `Rnn` updates
-        wasnObj.wasn[k].beta = np.exp(np.log(0.5) / \
-            (p.danseParams.t_expAvg50p * wasnObj.wasn[k].fs / p.danseParams.Ns))
-
     # Launch DANSE
     if p.is_fully_connected_wasn():
         # Fully connected WASN case
