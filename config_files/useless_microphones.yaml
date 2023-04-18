@@ -4,7 +4,7 @@ seed: 12348
 setThoseSensorsToNoise: []
 exportParams:
   # Often-used
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\out\20230418_tests\addNoiseSigs\tmp
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\out\20230418_tests\addNoiseSigs\test1
   #
   filterNormsPlot: true
   conditionNumberPlot: false
@@ -88,7 +88,7 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Often used
-  sigDur: 5  # [s]
+  sigDur: 10  # [s]
   selfnoiseSNR: 30  # [dB]
   # layoutType: random_spinning_top
   layoutType: random

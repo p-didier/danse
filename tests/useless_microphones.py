@@ -19,7 +19,7 @@ BYPASS_ALREADY_RUN = True  # if True, bypass tests that have already been run
 TEST_TYPE = 'add_useless_mics'
     # ^^^ 'render_mics_useless': render some mics useless.
     # ^^^ 'add_useless_mics': add some useless mics.
-N_ADDED_USELESS_MICS = np.arange(1, 11)  # number of useless mics to add
+N_ADDED_USELESS_MICS = np.arange(1, 4)  # numbers of useless mics to add
     # ^^^ only used if TEST_TYPE == 'add_useless_mics'
 
 def main():
@@ -76,7 +76,7 @@ def run_tests(p: TestParameters):
             runRef = f'{testRef}{ii + 1}_{currVar}'
         
         # Check if test has already been run
-        outputArchiveExportPath = f'{p.exportParams.exportFolder}/out_{testRef}_{runRef}.pkl.gz'
+        outputArchiveExportPath = f'{p.exportParams.exportFolder}/out_{runRef}.pkl.gz'
         if BYPASS_ALREADY_RUN and Path(outputArchiveExportPath).exists():
             print(f'>>> Test {runRef} already run. Bypassing...')
             continue
@@ -100,6 +100,8 @@ def run_tests(p: TestParameters):
         pCurr.danseParams.get_wasn_info(pCurr.wasnParams)
         # Adapt export folder
         pCurr.exportParams.exportFolder = f'{p.exportParams.exportFolder}/{runRef}'
+        # Reinitialize RNG seed
+        pCurr.__post_init__()
 
         # Run main and append
         outCurr = main_sandbox(pCurr)

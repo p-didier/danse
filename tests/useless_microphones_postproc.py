@@ -8,28 +8,41 @@
 
 import re
 import sys
+import gzip
 import pickle
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
 # FOLDER = f'{Path(__file__).parent.parent}/out/20230415_tests/uselessMics/test'
-FOLDER = f'{Path(__file__).parent.parent}/out/20230418_tests/addNoiseSigs/tmp'
-RELATIVE_PATH_TO_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder
+FOLDER = f'{Path(__file__).parent.parent}/out/20230418_tests/addNoiseSigs/test1'
+RELPATH_TO_FN_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder (filter norm results)
+RELPATH_TO_M_RESULTS = 'DANSEoutputs.pkl.gz'  # relative to subfolder (metrics results)
 N_USELESS_MICS_TO_PLOT = 1  # number of mics rendered useless to plot
-EXPORT_FOLDER = f'pp_a{N_USELESS_MICS_TO_PLOT}um'  # relative to FOLDER
-TEST_TYPE = 'render_mics_useless'  # type of test to post-process
-# TEST_TYPE = 'add_useless_mics'
+# TEST_TYPE = 'render_mics_useless'  # type of test to post-process
+TEST_TYPE = 'add_useless_mics'
     # ^^^ 'render_mics_useless': render some mics useless.
     # ^^^ 'add_useless_mics': add some useless mics.
 
+if TEST_TYPE == 'render_mics_useless':  
+    EXPORT_FOLDER = f'postproc_r{N_USELESS_MICS_TO_PLOT}mu'  # relative to `FOLDER`
+elif TEST_TYPE == 'add_useless_mics':
+    EXPORT_FOLDER = 'postproc_aum'  # relative to `FOLDER`
+
 def main():
     """Main function (called by default when running script)."""
-    figs = plot_results(
-        *import_results(folder=FOLDER),
-        N_USELESS_MICS_TO_PLOT
-    )
 
+    # Plot filter coefficients norms
+    figsFiltNorm = plot_filtnorm_results(*import_results_fn())
+    # Plot metrics
+    if TEST_TYPE == 'render_mics_useless':
+        print('Metrics plot not implemented (yet) for RMU tests.')
+        figsMetrics = []
+    elif TEST_TYPE == 'add_useless_mics':
+        figsMetrics = plot_metrics_results(*import_results_m())
+
+    # Export figures
+    figs = figsMetrics + figsFiltNorm
     for fig in figs:
         fullExportPath = f'{FOLDER}/{EXPORT_FOLDER}'
         # Ensure export folder exists
@@ -39,28 +52,76 @@ def main():
         # fig.savefig(f'{fullExportPath}/{fig.get_label()}.pdf')
 
 
-def import_results(folder: str):
+def import_results_fn():
     """
-    Import results from the `tests.useless_microphones` script.
-    
-    Parameters
-    ----------
-    folder : str
-        Path to the folder containing the results.
+    Import filter norm results from the `tests.useless_microphones` script.
     
     Returns
     ----------
     results : dict
         Dictionary containing the results.
+    sensorToNodeIdx : list
+        List of sensor-to-node indices for each test case.
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
+    # List subfolders
+    subfolders = get_subfolders()
 
+    # Import results
+    results = []
+    sensorToNodeIdx = []
+    for _, subfolder in enumerate(subfolders):
+        data = pickle.load(open(f'{subfolder}/{RELPATH_TO_FN_RESULTS}', 'rb'))
+        results.append((subfolder.name, data))
+        sensorToNodeIdx.append(get_sensor_to_node_idx(subfolder))
+
+    # Convert to dictionary
+    results = dict(results)
+
+    return results, sensorToNodeIdx
+
+
+def import_results_m():
+    """
+    Import speech enhancement metrics results from the
+    `tests.useless_microphones` script.
+    
+    Returns
+    ----------
+    results : dict
+        Dictionary containing the results.
+    sensorToNodeIdx : list
+        List of sensor-to-node indices for each test case.
+    
+    (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
+    """
+    # List subfolders
+    subfolders = get_subfolders()
+
+    # Import results
+    results = []
+    sensorToNodeIdx = []
+    for _, subfolder in enumerate(subfolders):
+        data = pickle.load(gzip.open(f'{subfolder}/{RELPATH_TO_M_RESULTS}', 'rb'))
+        results.append((subfolder.name, data.metrics))
+        sensorToNodeIdx.append(get_sensor_to_node_idx(subfolder))
+
+    # Convert to dictionary
+    results = dict(results)
+
+    return results, sensorToNodeIdx
+
+
+def get_subfolders():
+    """
+    Lists the desired tests subfolders.
+    """
     # Get test ref from test type
     testRef = ''.join([s[0] for s in re.split('_', TEST_TYPE)]) 
     
     # List subfolders
-    subfolders = [f for f in Path(folder).iterdir() if f.is_dir()]
+    subfolders = [f for f in Path(FOLDER).iterdir() if f.is_dir()]
     # Only select the subfolders corresponding to the test cases
     subfolders = [f for f in subfolders if f.name[:len(testRef)] == testRef]
     # Sort subfolders by the comb reference number
@@ -69,48 +130,73 @@ def import_results(folder: str):
         key=lambda x: int(re.findall(r'\d+', x.name)[0])
     )
 
-    # Import results
-    results = []
-    for ii, subfolder in enumerate(subfolders):
-        data = pickle.load(open(f'{subfolder}/{RELATIVE_PATH_TO_RESULTS}', 'rb'))
-        results.append((subfolder.name, data))
-    
-        if ii == 0:
-            # Find YAML file containing numbers of sensor per node
-            yamlFile = [f for f in Path(subfolder).iterdir() if f.suffix == '.yaml'][0]
-            # Read numbers of sensor per node
-            with open(yamlFile, 'r') as f:
-                yamlContent = f.readlines()
-                # Find line containing numbers of sensor per node
-                for line in yamlContent:
-                    if 'nSensorPerNode' in line:
-                        break
-                # Extract numbers of sensor per node
-                nSensorPerNode = [int(n) for n in re.findall(r'\d+', line)]
-            # Translate to sensor-to-node index mapping
-            sensorToNodeIdx = []
-            for idxNode, nSensors in enumerate(nSensorPerNode):
-                sensorToNodeIdx += [idxNode] * nSensors
-
-    # Convert to dictionary
-    results = dict(results)
-
-    return results, sensorToNodeIdx
+    return subfolders
 
 
-def plot_results(res: dict, sensorToNodeIdx: list, nUselessMicsToPlot: int = 1):
+def get_sensor_to_node_idx(subfolder: str, txtFileName='TestParameters_text.txt'):
     """
-    Plot results from the `tests.useless_microphones` script.
+    Get the sensor-to-node index mapping from YAML or TXT file.
+
+    Parameters
+    ----------
+    subfolder : str
+        Path to the folder containing the results.
+    txtFileName : str, optional
+        Name of the TXT file containing the sensor-to-node index mapping.
+        Only used if `TEST_TYPE` is 'add_useless_mics'. Default is
+        'TestParameters_text.txt'.
+    
+    Returns
+    ----------
+    sensorToNodeIdx : list
+        List containing the sensor-to-node index mapping.  
+    """
+
+    if TEST_TYPE == 'render_mics_useless':
+        # Find YAML file containing numbers of sensor per node
+        file = [f for f in Path(subfolder).iterdir() if\
+            f.suffix == '.yaml'][0]
+    elif TEST_TYPE == 'add_useless_mics':
+        # Find TXT file containing sensor-to-node index mapping
+        file = [f for f in Path(subfolder).iterdir() if\
+            f.name == txtFileName][0]
+    else:
+        raise ValueError(f'Unknown test type "{TEST_TYPE}".')
+    
+    # Read sensor-to-node index mapping
+    with open(file, 'r') as f:
+        txtContent = f.readlines()
+        # Find line containing sensor-to-node index mapping
+        for line in txtContent:
+            if 'nSensorPerNode' in line:
+                break
+    # Extract sensor-to-node index mapping
+    nSensorPerNode = [int(n) for n in re.findall(r'\d+', line)]
+    # Translate to sensor-to-node index mapping
+    sensorToNodeIdx = []
+    for idxNode, nSensors in enumerate(nSensorPerNode):
+        sensorToNodeIdx += [idxNode] * nSensors
+
+    return sensorToNodeIdx
+
+
+def plot_metrics_results(
+        metrics: dict,
+        sensorToNodeIdx: list,
+        metricsToPlot: list = ['snr', 'stoi'],
+    ):
+    """
+    Plot speech enhancement metrics results from the
+    `tests.useless_microphones` script.
     
     Parameters
     ----------
-    res : dict
+    metrics : dict
         Dictionary containing the results.
     sensorToNodeIdx : list
-        List containing the sensor-to-node index mapping.
-    nUselessMicsToPlot : int, optional
-        Number of microphones rendered useless in the figures to plot.
-        The default is 1.
+        List containing the sensor-to-node index mapping for each test case.
+    metricsToPlot : list, optional
+        List of metrics to plot. Default is ['snr', 'stoi'].
     
     Returns
     ----------
@@ -119,51 +205,148 @@ def plot_results(res: dict, sensorToNodeIdx: list, nUselessMicsToPlot: int = 1):
     
     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
     """
-    # Derive number of microphones rendered useless in each entry of `res`
-    # using the key of the entry.
-    nUselessMics = np.array(
-        [int(len(re.findall(r'\d+', k))) - 1 for k in list(res.keys())]
-    )
-
-    # Select results for the case where only one microphone is rendered useless
-    resNmics = {k: v for ii, (k, v) in enumerate(res.items())\
-        if nUselessMics[ii] == nUselessMicsToPlot}
 
     # Infer number of nodes
-    nNodes = np.amax(sensorToNodeIdx) + 1
+    nNodes = np.amax(sensorToNodeIdx[0]) + 1
+
+    # Plot metrics
+    figs = []
+    if TEST_TYPE == 'render_mics_useless':
+        raise ValueError('Not implemented yet.')
+    
+    elif TEST_TYPE == 'add_useless_mics':
+        for k in range(nNodes):
+            print(f'Plotting metrics for node {k + 1}...')
+            # Order metrics
+            metricsOut = dict([
+                (metricKey, dict([
+                    (testKey, None) for testKey in metrics.keys()
+                ])) for metricKey in metricsToPlot
+            ])
+            # Get metrics for node `k`
+            for testKey, value in metrics.items():
+                for metricStr in metricsToPlot:
+                    metricsOut[metricStr][testKey] =\
+                        getattr(value, metricStr)[f'Node{k + 1}']
+
+            # Plot metrics
+            fig = plot_metrics(metricsOut)
+            fig.set_label(f'aum_metrics_danse_k{k + 1}')
+            fig.suptitle(f'Node {k + 1}')
+            figs.append(fig)
+            plt.close(fig=fig)
+    
+    return figs
+
+
+def plot_metrics(metrics: dict):
+
+    nTests = len(metrics[list(metrics.keys())[0]])
+    nMetrics = len(metrics.keys())
+
+    # Build x-ticks labels
+    if TEST_TYPE == 'render_mics_useless':
+        pass  # TODO
+    elif TEST_TYPE == 'add_useless_mics':
+        xTicksLabels = [f'{ii + 1} AUMs' for ii in range(nTests)]
+
+    fig, axes = plt.subplots(1, nMetrics)
+    fig.set_size_inches(8.5, 3.5)
+    for idxMetric, (mKey, mVal) in enumerate(metrics.items()):
+        for ii in range(nTests):
+            currMetrics = mVal[list(mVal.keys())[ii]]
+            axes[idxMetric].bar(ii, currMetrics.after)
+        axes[idxMetric].set_xticks(range(nTests))
+        axes[idxMetric].set_xticklabels(xTicksLabels)
+        axes[idxMetric].grid()
+        axes[idxMetric].set_title(mKey.upper())
+    plt.tight_layout()
+
+    return fig
+
+
+def plot_filtnorm_results(
+        res: dict,
+        sensorToNodeIdx: list,
+    ):
+    """
+    Plot filter norm results from the `tests.useless_microphones` script.
+    
+    Parameters
+    ----------
+    res : dict
+        Dictionary containing the results.
+    sensorToNodeIdx : list
+        List containing the sensor-to-node index mapping for each test case.
+    
+    Returns
+    ----------
+    figs : list
+        List containing the figures.
+    
+    (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
+    """
+    # Infer number of nodes
+    nNodes = np.amax(sensorToNodeIdx[0]) + 1
+
+    if TEST_TYPE == 'render_mics_useless':
+        # Derive number of microphones rendered useless in each entry of `res`
+        # using the key of the entry.
+        nUselessMics = np.array(
+            [int(len(re.findall(r'\d+', k))) - 1 for k in list(res.keys())]
+        )
+        # Select results for the case where only `nUselessMicsToPlot`
+        # microphone(s) is (are) rendered useless.
+        res = {k: v for ii, (k, v) in enumerate(res.items())\
+            if nUselessMics[ii] == N_USELESS_MICS_TO_PLOT}
 
     # Plot results
     figs = []
-    for idx, (key, resCurr) in enumerate(resNmics.items()):
+    for idx, (key, resCurr) in enumerate(res.items()):
         # Inform user
-        print(f'Plotting results for {key} ({idx+1}/{len(resNmics.keys())})...')
+        print(f'Plotting filter norm results for "{key}" ({idx+1}/{len(res.keys())})...')
         # Get y-axis limits
         yLim = np.array([
             np.amin([np.amin(resCurr[ii]) for ii in range(len(resCurr))]),
             np.amax([np.amax(resCurr[ii]) for ii in range(len(resCurr))])
         ])
-        # Get index of the microphone rendered useless
-        uselessMicIdx = np.array(
-            [int(x) for x in re.findall(r'\d+', key)[-nUselessMicsToPlot:]]
-        )
+        yLim = yLim + np.array([-1, 1]) * 0.1 * np.diff(yLim)
+        
+        if TEST_TYPE == 'render_mics_useless':
+            # Get index of the microphone rendered useless
+            uselessMicIdx = np.array(
+                [int(x) for x in re.findall(r'\d+', key)[-N_USELESS_MICS_TO_PLOT:]]
+            )
+            # Get label snippet for the figure
+            labSnippet = 'uselessMicIdx'
+            nAddedMics = None  # Not used
+        
+        elif TEST_TYPE == 'add_useless_mics':
+            # Current number of added mics
+            nAddedMics = int(re.findall(r'\d+', key)[-1])
+            # Get label snippet for the figure
+            labSnippet = 'nAddedMics'
+            uselessMicIdx = None  # Not used
+        
         for ii in range(len(resCurr)):
             fig = plt.figure()
             if ii < nNodes:
                 legType = 'danse'
                 currNodeIndex = ii
                 ti = f'DANSE, node $k={currNodeIndex + 1}$'
-                figLab = f'uselessMicIdx{uselessMicIdx + 1}_filtNorms_danse_k{currNodeIndex + 1}'
+                figLab = f'{labSnippet}{nAddedMics + 1}_filtNorms_danse_k{currNodeIndex + 1}'
             else:
                 legType = 'centr'
                 currNodeIndex = ii - nNodes
                 ti = f'Centr., node $k={currNodeIndex + 1}$'
-                figLab = f'uselessMicIdx{uselessMicIdx + 1}_filtNorms_centr_k{currNodeIndex + 1}'
+                figLab = f'{labSnippet}{nAddedMics + 1}_filtNorms_centr_k{currNodeIndex + 1}'
             fig.set_label(figLab)
             leg, colors = get_legend_and_colors(
                 legType,
-                sensorToNodeIdx,
+                sensorToNodeIdx[idx],
                 currNodeIndex,
-                uselessMicIdx
+                indices=uselessMicIdx,
+                nAddedMics=nAddedMics
             )
             # Plot
             for jj in range(resCurr[ii].shape[-1]):
@@ -181,20 +364,226 @@ def plot_results(res: dict, sensorToNodeIdx: list, nUselessMicsToPlot: int = 1):
     return figs
 
 
+# def plot_results_aum(res: dict, sensorToNodeIdx: list):
+#     """
+#     Plot results from the `tests.useless_microphones` script for the test type
+#     "add useless mics".
+    
+#     Parameters
+#     ----------
+#     res : dict
+#         Dictionary containing the results.
+#     sensorToNodeIdx : list
+#         List containing the sensor-to-node index mapping for each test case.
+    
+#     Returns
+#     ----------
+#     figs : list
+#         List containing the figures.
+    
+#     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
+#     """
+#     # Infer number of nodes
+#     nNodes = np.amax(sensorToNodeIdx[0]) + 1
+
+#     # Plot results
+#     figs = []
+#     for idx, (key, resCurr) in enumerate(res.items()):
+#         # Current number of added mics
+#         nAddedMics = int(re.findall(r'\d+', key)[-1])
+#         # Inform user
+#         print(f'Plotting results for "{key}" ({idx+1}/{len(res.keys())})...')
+#         # Get y-axis limits
+#         yLim = np.array([
+#             np.amin([np.amin(resCurr[ii]) for ii in range(len(resCurr))]),
+#             np.amax([np.amax(resCurr[ii]) for ii in range(len(resCurr))])
+#         ])
+#         for ii in range(len(resCurr)):
+#             fig = plt.figure()
+#             if ii < nNodes:
+#                 legType = 'danse'
+#                 currNodeIndex = ii
+#                 ti = f'DANSE, node $k={currNodeIndex + 1}$'
+#                 figLab = f'nAddedMics{nAddedMics + 1}_filtNorms_danse_k{currNodeIndex + 1}'
+#             else:
+#                 legType = 'centr'
+#                 currNodeIndex = ii - nNodes
+#                 ti = f'Centr., node $k={currNodeIndex + 1}$'
+#                 figLab = f'nAddedMics{nAddedMics + 1}_filtNorms_centr_k{currNodeIndex + 1}'
+#             fig.set_label(figLab)
+#             leg, colors = get_legend_and_colors(
+#                 legType,
+#                 sensorToNodeIdx[idx],
+#                 currNodeIndex,
+#                 nAddedMics
+#             )
+#             # Plot
+#             for jj in range(resCurr[ii].shape[-1]):
+#                 plt.plot(resCurr[ii][:, jj], color=colors[jj])
+#             fig.legend(leg, loc='upper right')
+#             plt.xlabel('Iteration index')
+#             plt.ylabel('Filter coefficient norm')
+#             plt.title(ti, loc='left')
+#             plt.grid()
+#             plt.ylim(yLim)
+#             fig.tight_layout()
+#             figs.append(fig)
+#             plt.close()
+
+#     return figs
+
+
+# def plot_results_rmu(res: dict, sensorToNodeIdx: list, nUselessMicsToPlot: int = 1):
+#     """
+#     Plot results from the `tests.useless_microphones` script for the test type
+#     "render mics useless".
+    
+#     Parameters
+#     ----------
+#     res : dict
+#         Dictionary containing the results.
+#     sensorToNodeIdx : list
+#         List containing the sensor-to-node index mapping.
+#     nUselessMicsToPlot : int, optional
+#         Number of microphones rendered useless in the figures to plot.
+#         The default is 1.
+    
+#     Returns
+#     ----------
+#     figs : list
+#         List containing the figures.
+    
+#     (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
+#     """
+#     # Derive number of microphones rendered useless in each entry of `res`
+#     # using the key of the entry.
+#     nUselessMics = np.array(
+#         [int(len(re.findall(r'\d+', k))) - 1 for k in list(res.keys())]
+#     )
+
+#     # Select results for the case where only `nUselessMicsToPlot` microphone(s)
+#     # is (are) rendered useless.
+#     resNmics = {k: v for ii, (k, v) in enumerate(res.items())\
+#         if nUselessMics[ii] == nUselessMicsToPlot}
+
+#     # Infer number of nodes
+#     nNodes = np.amax(sensorToNodeIdx[0]) + 1
+
+#     # Plot results
+#     figs = []
+#     for idx, (key, resCurr) in enumerate(resNmics.items()):
+#         # Inform user
+#         print(f'Plotting results for "{key}" ({idx+1}/{len(resNmics.keys())})...')
+#         # Get y-axis limits
+#         yLim = np.array([
+#             np.amin([np.amin(resCurr[ii]) for ii in range(len(resCurr))]),
+#             np.amax([np.amax(resCurr[ii]) for ii in range(len(resCurr))])
+#         ])
+#         # Get index of the microphone rendered useless
+#         uselessMicIdx = np.array(
+#             [int(x) for x in re.findall(r'\d+', key)[-nUselessMicsToPlot:]]
+#         )
+#         for ii in range(len(resCurr)):
+#             fig = plt.figure()
+#             if ii < nNodes:
+#                 legType = 'danse'
+#                 currNodeIndex = ii
+#                 ti = f'DANSE, node $k={currNodeIndex + 1}$'
+#                 figLab = f'uselessMicIdx{uselessMicIdx + 1}_filtNorms_danse_k{currNodeIndex + 1}'
+#             else:
+#                 legType = 'centr'
+#                 currNodeIndex = ii - nNodes
+#                 ti = f'Centr., node $k={currNodeIndex + 1}$'
+#                 figLab = f'uselessMicIdx{uselessMicIdx + 1}_filtNorms_centr_k{currNodeIndex + 1}'
+#             fig.set_label(figLab)
+#             leg, colors = get_legend_and_colors_rmu(
+#                 legType,
+#                 sensorToNodeIdx[idx],
+#                 currNodeIndex,
+#                 uselessMicIdx
+#             )
+#             # Plot
+#             for jj in range(resCurr[ii].shape[-1]):
+#                 plt.plot(resCurr[ii][:, jj], color=colors[jj])
+#             fig.legend(leg, loc='upper right')
+#             plt.xlabel('Iteration index')
+#             plt.ylabel('Filter coefficient norm')
+#             plt.title(ti, loc='left')
+#             plt.grid()
+#             plt.ylim(yLim)
+#             fig.tight_layout()
+#             figs.append(fig)
+#             plt.close()
+
+#     return figs
+
+
+# def get_legend_and_colors_rmu(
+#         legType: str,
+#         sensorToNodeIdx: np.ndarray,
+#         nodeIndex: int,
+#         uselessMics: np.ndarray
+#     ):
+#     """
+#     Build legend for the results of one subfolder for the test type
+#     "render mics useless".
+#     """
+#     # Ensure sensor-to-node index mapping is a numpy array
+#     sensorToNodeIdx = np.array(sensorToNodeIdx)
+#     # Build legend
+#     if legType == 'danse':
+#         leg = get_danse_legend(sensorToNodeIdx, nodeIndex, uselessMics)
+#     elif legType == 'centr':
+#         leg = get_centr_legend(sensorToNodeIdx, nodeIndex, uselessMics)
+
+#     # Build colors
+#     colors = build_line_colors(leg)
+
+#     return leg, colors
+
+
 def get_legend_and_colors(
         legType: str,
         sensorToNodeIdx: np.ndarray,
         nodeIndex: int,
-        uselessMics: np.ndarray
+        indices: list = None,
+        nAddedMics: int = None
     ):
-    """Build legend for the results of one subfolder."""
+    """
+    Build legend for the results of one subfolder for the test type
+    "add useless mics".
+    """
     # Ensure sensor-to-node index mapping is a numpy array
     sensorToNodeIdx = np.array(sensorToNodeIdx)
+
+    if TEST_TYPE == 'add_useless_mics':
+        # Infer indices of useless microphones from the number of useless
+        # microphones added.
+        indicesNewNode = list(np.diff(sensorToNodeIdx).nonzero()[0])
+        indices = [list(np.linspace(
+            start=(i - nAddedMics + 1),
+            stop=i,
+            num=nAddedMics,
+            dtype=int
+        )) for i in indicesNewNode]
+        indices = [item for sublist in indices for item in sublist]  # flatten
+        # if nAddedMics > 1:
+        indices += list(np.linspace(
+            start=len(sensorToNodeIdx) - nAddedMics,
+            stop=len(sensorToNodeIdx) - 1,
+            num=nAddedMics,
+            dtype=int
+        ))  # add last index (indices)
+    elif TEST_TYPE == 'render_mics_useless':
+        pass  # do nothing -- use indices passed as argument
+
     # Build legend
     if legType == 'danse':
-        leg = get_danse_legend(sensorToNodeIdx, nodeIndex, uselessMics)
+        # Infer indices of useless microphones from the number of useless
+        # microphones added.
+        leg = get_danse_legend(sensorToNodeIdx, nodeIndex, indices)
     elif legType == 'centr':
-        leg = get_centr_legend(sensorToNodeIdx, nodeIndex, uselessMics)
+        leg = get_centr_legend(sensorToNodeIdx, nodeIndex, indices)
 
     # Build colors
     colors = build_line_colors(leg)
