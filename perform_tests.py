@@ -18,8 +18,8 @@ def main():
     # tests.sandbox.main()
     # tests.multiple_runs.main()
     # tests.write_yaml_template.main()
-    # tests.useless_microphones.main()
-    tests.useless_microphones_postproc.main()
+    tests.useless_microphones.main()
+    # tests.useless_microphones_postproc.main()
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -873,7 +873,7 @@ class DANSEvariables(base.DANSEparameters):
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
         # Check quality of covariance matrix estimates 
-        self.check_covariance_matrices(k)
+        self.check_covariance_matrices(k, tCurr=tCurr)
 
         if not skipUpdate and not bypassUpdateEventMat:
             # If covariance matrices estimates are full-rank, update filters
@@ -939,7 +939,7 @@ class DANSEvariables(base.DANSEparameters):
             ]).all()
 
 
-    def check_covariance_matrices(self, k):
+    def check_covariance_matrices(self, k, tCurr):
         """
         Checks that the number of rank-1 covariance matrix estimate updates
         done in `spatial_covariance_matrix_update()` is at least equal to
@@ -956,17 +956,13 @@ class DANSEvariables(base.DANSEparameters):
         k : int
             Node index.
         """
-
-        # def _is_pos_def(x):  # https://stackoverflow.com/a/16270026
-        #     """Finds out whether matrix `x` is positive definite."""
-        #     return np.all(np.linalg.eigvals(x) > 0)
         def _is_hermitian_and_posdef(x):
             """Finds out whether 3D complex matrix `x` is Hermitian along 
             the two last axes, as well as positive definite."""
             # Get rid of machine-precision residual imaginary parts
             x = np.real_if_close(x)
             # Assess Hermitian-ness
-            b1 = np.allclose(np.transpose(x, axes=(0,2,1)).conj(), x)
+            b1 = np.allclose(np.transpose(x, axes=(0, 2, 1)).conj(), x)
             # Assess positive-definiteness
             b2 = True
             for ii in range(x.shape[0]):
@@ -975,8 +971,8 @@ class DANSEvariables(base.DANSEparameters):
                     break
             return b1 and b2
         
-        def _check_validity(RnnMat, RyyMat):
-            """Helper function for conciseness: combine validity checks."""
+        def _check_validity_gevd(RnnMat, RyyMat):
+            """Helper function: combine validity checks for GEVD updates."""
             def __full_rank_check(mat):
                 """Helper subfunction: check full-rank property."""
                 return (np.linalg.matrix_rank(mat) == mat.shape[-1]).all()
@@ -986,31 +982,33 @@ class DANSEvariables(base.DANSEparameters):
             check4 = __full_rank_check(RyyMat)
             return check1 and check2 and check3 and check4
 
-        if not self.startUpdates[k]:
+        if not self.startUpdates[k] and tCurr >= self.startUpdatesAfterAtLeast:
             if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
                 if self.performGEVD:
-                    if _check_validity(self.Rnntilde[k], self.Ryytilde[k]):
+                    if _check_validity_gevd(self.Rnntilde[k], self.Ryytilde[k]):
                         self.startUpdates[k] = True
                 else:
                     self.startUpdates[k] = True
 
         # Centralised estimate
-        if self.computeCentralised and not self.startUpdatesCentr[k]:
+        if self.computeCentralised and not self.startUpdatesCentr[k]\
+            and tCurr >= self.startUpdatesAfterAtLeast:
             if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
                 if self.performGEVD:
-                    if _check_validity(self.Rnncentr[k], self.Ryycentr[k]):
+                    if _check_validity_gevd(self.Rnncentr[k], self.Ryycentr[k]):
                         self.startUpdatesCentr[k] = True
                 else:
                     self.startUpdatesCentr[k] = True
 
         # Local estimate
-        if self.computeLocal and not self.startUpdatesLocal[k]:
+        if self.computeLocal and not self.startUpdatesLocal[k]\
+            and tCurr >= self.startUpdatesAfterAtLeast:
             if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
                 self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
                 if self.performGEVD:
-                    if _check_validity(self.Rnnlocal[k], self.Ryylocal[k]):
+                    if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
                         self.startUpdatesLocal[k] = True
                 else:
                     self.startUpdatesLocal[k] = True
@@ -2197,7 +2195,7 @@ class TIDANSEvariables(DANSEvariables):
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
         # Check quality of covariance matrix estimates 
-        self.check_covariance_matrices(k)
+        self.check_covariance_matrices(k, tCurr=tCurr)
 
         # if not skipUpdate:
         # If covariance matrices estimates are full-rank, update filters

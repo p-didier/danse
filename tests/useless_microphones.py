@@ -19,7 +19,7 @@ BYPASS_ALREADY_RUN = True  # if True, bypass tests that have already been run
 TEST_TYPE = 'add_useless_mics'
     # ^^^ 'render_mics_useless': render some mics useless.
     # ^^^ 'add_useless_mics': add some useless mics.
-N_ADDED_USELESS_MICS = np.arange(1, 4)  # numbers of useless mics to add
+N_ADDED_USELESS_MICS = np.arange(0, 4)  # numbers of useless mics to add
     # ^^^ only used if TEST_TYPE == 'add_useless_mics'
 
 def main():

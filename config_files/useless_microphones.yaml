@@ -4,12 +4,12 @@ seed: 12348
 setThoseSensorsToNoise: []
 exportParams:
   # Often-used
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\out\20230418_tests\addNoiseSigs\test1
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\out\20230420_tests\addNoiseSigs\test4
   #
   filterNormsPlot: true
   conditionNumberPlot: false
   convergencePlot: false
-  wavFiles: false
+  wavFiles: true
   acousticScenarioPlot: true
   sroEstimPerfPlot: false
   metricsPlot: true
@@ -21,10 +21,12 @@ exportParams:
   # vvv Global
   bypassAllExports: false
 danseParams:
+  # startUpdatesAfterAtLeast: 1.92  # equivalent to 60 frames of 1024 samples (50% overlapped) at fs=16 kHz
+  startUpdatesAfterAtLeast: 0
   saveConditionNumber: true
   saveConditionNumberEvery: 10  # [iterations]
   performGEVD: false
-  t_expAvg50p: 2   # beta-setter
+  t_expAvg50p: 10   # beta-setter
   #
   DFTsize: 1024
   # DFTsize: 2048
@@ -76,7 +78,8 @@ danseParams:
     onlySNRandESTOIinPlots: true
     showWASNs: false
   seqUpdateStartNodeIdx: 1
-  startComputeMetricsAt: beginning_2nd_utterance
+  # startComputeMetricsAt: beginning_2nd_utterance
+  startComputeMetricsAt: after_beginning_2nd_utterance_200  # 200 ms after beg. of 2nd utt.
   # startComputeMetricsAt: beginning_1st_utterance
   # startComputeMetricsAt: end_1st_utterance
   timeBtwExternalFiltUpdates: 1
@@ -88,7 +91,7 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Often used
-  sigDur: 10  # [s]
+  sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # layoutType: random_spinning_top
   layoutType: random

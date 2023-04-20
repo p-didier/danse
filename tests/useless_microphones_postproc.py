@@ -14,11 +14,12 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-# FOLDER = f'{Path(__file__).parent.parent}/out/20230415_tests/uselessMics/test'
-FOLDER = f'{Path(__file__).parent.parent}/out/20230418_tests/addNoiseSigs/test1'
+# FOLDER = f'{Path(__file__).parent.parent}/out/20230418_tests/addNoiseSigs/test1'
+FOLDER = f'{Path(__file__).parent.parent}/out/20230420_tests/addNoiseSigs/test3'
 RELPATH_TO_FN_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder (filter norm results)
 RELPATH_TO_M_RESULTS = 'DANSEoutputs.pkl.gz'  # relative to subfolder (metrics results)
-N_USELESS_MICS_TO_PLOT = 1  # number of mics rendered useless to plot
+N_USELESS_MICS_TO_PLOT = 1  # number of mics rendered useless to plot (only used if TEST_TYPE == 'render_mics_useless')
+
 # TEST_TYPE = 'render_mics_useless'  # type of test to post-process
 TEST_TYPE = 'add_useless_mics'
     # ^^^ 'render_mics_useless': render some mics useless.
@@ -231,7 +232,7 @@ def plot_metrics_results(
 
             # Plot metrics
             fig = plot_metrics(metricsOut)
-            fig.set_label(f'aum_metrics_danse_k{k + 1}')
+            fig.set_label(f'aum_metrics_k{k + 1}')
             fig.suptitle(f'Node {k + 1}')
             figs.append(fig)
             plt.close(fig=fig)
@@ -248,18 +249,27 @@ def plot_metrics(metrics: dict):
     if TEST_TYPE == 'render_mics_useless':
         pass  # TODO
     elif TEST_TYPE == 'add_useless_mics':
-        xTicksLabels = [f'{ii + 1} AUMs' for ii in range(nTests)]
+        xTicksLabels = [f'{ii} AUMs' for ii in range(nTests)]
 
-    fig, axes = plt.subplots(1, nMetrics)
+    fig, axes = plt.subplots(2, nMetrics)
     fig.set_size_inches(8.5, 3.5)
     for idxMetric, (mKey, mVal) in enumerate(metrics.items()):
+        # Regular DANSE filters (with fusion)
         for ii in range(nTests):
             currMetrics = mVal[list(mVal.keys())[ii]]
-            axes[idxMetric].bar(ii, currMetrics.after)
-        axes[idxMetric].set_xticks(range(nTests))
-        axes[idxMetric].set_xticklabels(xTicksLabels)
-        axes[idxMetric].grid()
-        axes[idxMetric].set_title(mKey.upper())
+            axes[0, idxMetric].bar(ii, currMetrics.after)
+        axes[0, idxMetric].set_xticks(range(nTests))
+        axes[0, idxMetric].set_xticklabels(xTicksLabels)
+        axes[0, idxMetric].grid()
+        axes[0, idxMetric].set_title(f'{mKey.upper()} - Regular DANSE')
+        # No-fusion DANSE filters ("centralized"-ish)
+        for ii in range(nTests):
+            currMetrics = mVal[list(mVal.keys())[ii]]
+            axes[1, idxMetric].bar(ii, currMetrics.afterCentr)
+        axes[1, idxMetric].set_xticks(range(nTests))
+        axes[1, idxMetric].set_xticklabels(xTicksLabels)
+        axes[1, idxMetric].grid()
+        axes[1, idxMetric].set_title(f'{mKey.upper()} - No-fusion DANSE')
     plt.tight_layout()
 
     return fig

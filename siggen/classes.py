@@ -341,7 +341,7 @@ class WASN:
                     self.wasn[k].metricStartTime =\
                         vadChangesIndices[idxVADstartMetrics - 1] / self.wasn[k].fs
                 
-            elif startComputeMetricsAt == 'beginning_2nd_utterance':
+            elif 'beginning_2nd_utterance' in startComputeMetricsAt:
                 # Jump over short (less than `minNoSpeechDurEndUtterance`) 
                 # no-speech (VAD == 0) segments --> until reaching the 
                 # end of an actual utterance.
@@ -351,6 +351,11 @@ class WASN:
                 # Set the metrics computation start time [s]
                 self.wasn[k].metricStartTime = idxVadToSpeech / self.wasn[k].fs
 
+                if 'after' in startComputeMetricsAt:
+                    # Add the specified duration [s] after the beginning of the
+                    # 2nd utterance
+                    durAfterMs = float(startComputeMetricsAt.split('_')[-1])
+                    self.wasn[k].metricStartTime += durAfterMs / 1e3
             
                 
     def orientate(self):
