@@ -114,6 +114,8 @@ def run_tests(p: TestParameters):
                 outputArchiveExportPath
             )
 
+            plt.close('all')  # close all figures
+
 
 def dump_to_pickle_archive(data, path: str):
     """Dump object to pickle Gzip archive."""

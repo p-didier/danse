@@ -70,7 +70,7 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
     p, wasnObj = core.check_params(p, wasnObj)
     
     # DANSE
-    print(f'Running DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose})')
+    print(f'Running DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
     print('DANSE run complete.')
 

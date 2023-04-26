@@ -4,7 +4,7 @@ seed: 12348
 setThoseSensorsToNoise: []
 exportParams:
   # Often-used
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\out\20230420_tests\addNoiseSigs\test4
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\out\20230426_tests\test1
   #
   filterNormsPlot: true
   conditionNumberPlot: false
@@ -24,8 +24,8 @@ danseParams:
   # startUpdatesAfterAtLeast: 1.92  # equivalent to 60 frames of 1024 samples (50% overlapped) at fs=16 kHz
   startUpdatesAfterAtLeast: 0
   saveConditionNumber: true
-  saveConditionNumberEvery: 10  # [iterations]
-  performGEVD: false
+  saveConditionNumberEvery: 99999  # [iterations]
+  performGEVD: true
   t_expAvg50p: 10   # beta-setter
   #
   DFTsize: 1024
@@ -74,7 +74,7 @@ danseParams:
   printout_externalFilterUpdate: true
   printout_profiler: true
   printoutsAndPlotting:
-    verbose: false  # !
+    verbose: true  # !
     onlySNRandESTOIinPlots: true
     showWASNs: false
   seqUpdateStartNodeIdx: 1
