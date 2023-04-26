@@ -15,11 +15,13 @@ from .sandbox import main as main_sandbox
 
 YAML_FILE = f'{Path(__file__).parent.parent}/config_files/useless_microphones.yaml'
 BYPASS_ALREADY_RUN = True  # if True, bypass tests that have already been run
-# TEST_TYPE = 'render_mics_useless'
-TEST_TYPE = 'add_useless_mics'
+# TEST_TYPE = ['render_mics_useless']
+# TEST_TYPE = ['add_useless_mics']
+TEST_TYPE = ['render_mics_useless', 'add_useless_mics']  # both tests
     # ^^^ 'render_mics_useless': render some mics useless.
     # ^^^ 'add_useless_mics': add some useless mics.
-N_ADDED_USELESS_MICS = np.arange(0, 4)  # numbers of useless mics to add
+MAX_N_MICS_RENDERED_USELESS = 2  # maximum number of mics to render useless
+N_ADDED_USELESS_MICS = np.arange(0, 3)  # numbers of useless mics to add
     # ^^^ only used if TEST_TYPE == 'add_useless_mics'
 
 def main():
@@ -29,7 +31,7 @@ def main():
     testParams = TestParameters().load_from_yaml(YAML_FILE)
 
     # Run tests
-    res = run_tests(testParams)
+    run_tests(testParams)
 
 
 def run_tests(p: TestParameters):
@@ -40,81 +42,77 @@ def run_tests(p: TestParameters):
     -----------
     p: TestParameters
         Test parameters.
-
-    Returns:
-    --------
-    out: list
     """
 
-    # Get test ref from test type
-    testRef = ''.join([s[0] for s in re.split('_', TEST_TYPE)]) 
+    for testType in TEST_TYPE:
 
-    # Choose loop variable
-    if TEST_TYPE == 'render_mics_useless':
-        # Extract number of sensors
-        nSensors = len(p.wasnParams.sensorToNodeIndices)
-        # Derive all combinations of useless sensors
-        combs = list(itertools.product([False, True], repeat=nSensors))
-        # Do not consider case where all sensors are noise
-        loopVariable = combs[:-1]
-        # All sensor indices
-        allSensorIndices = np.arange(nSensors)
-    elif TEST_TYPE == 'add_useless_mics':
-        loopVariable = N_ADDED_USELESS_MICS
+        # Get test ref from test type
+        testRef = ''.join([s[0] for s in re.split('_', testType)]) 
 
-    # Run tests
-    out = []
-    for ii, currVar in enumerate(loopVariable):
+        # Choose loop variable
+        if testType == 'render_mics_useless':
+            # Extract number of sensors
+            nSensors = len(p.wasnParams.sensorToNodeIndices)
+            # Derive all combinations of useless sensors
+            combs = list(itertools.product([False, True], repeat=nSensors))
+            # Only keep the ones which have less or equal to 
+            # MAX_N_MICS_RENDERED_USELESS sensors rendered useless
+            combs = [c for c in combs if np.sum(c) <= MAX_N_MICS_RENDERED_USELESS]
+            # Do not consider case where all sensors are noise
+            loopVariable = combs[:-1]
+            # All sensor indices
+            allSensorIndices = np.arange(nSensors)
+        elif testType == 'add_useless_mics':
+            loopVariable = N_ADDED_USELESS_MICS
 
-        if TEST_TYPE == 'render_mics_useless':
-            # Render a particular combination of sensors useless
-            currComb = allSensorIndices[np.array(currVar)]
-            # Set current run reference
-            runRef = f'{testRef}{ii + 1}_{currComb}'
-        elif TEST_TYPE == 'add_useless_mics':
-            # Set current run reference
-            runRef = f'{testRef}{ii + 1}_{currVar}'
-        
-        # Check if test has already been run
-        outputArchiveExportPath = f'{p.exportParams.exportFolder}/out_{runRef}.pkl.gz'
-        if BYPASS_ALREADY_RUN and Path(outputArchiveExportPath).exists():
-            print(f'>>> Test {runRef} already run. Bypassing...')
-            continue
+        # Run tests
+        for ii, currVar in enumerate(loopVariable):
 
-        # Inform user
-        print(f'>>> Running test "{runRef}"...')
+            if testType == 'render_mics_useless':
+                # Render a particular combination of sensors useless
+                currComb = allSensorIndices[np.array(currVar)]
+                # Set current run reference
+                runRef = f'{testRef}{ii + 1}_{currComb}'
+            elif testType == 'add_useless_mics':
+                # Set current run reference
+                runRef = f'{testRef}{ii + 1}_{currVar}'
+            
+            # Check if test has already been run
+            outputArchiveExportPath = f'{p.exportParams.exportFolder}/out_{runRef}.pkl.gz'
+            if BYPASS_ALREADY_RUN and Path(outputArchiveExportPath).exists():
+                print(f'>>> Test {runRef} already run. Bypassing...')
+                continue
 
-        # Adapt test parameters and make sure that the RNG seed is reinitialized
-        pCurr = copy.deepcopy(p)
-        if TEST_TYPE == 'render_mics_useless':
-            # Set sensors to noise
-            pCurr.setThoseSensorsToNoise = currComb
-        elif TEST_TYPE == 'add_useless_mics':
-            # Add useless microphones
-            pCurr.wasnParams.addedNoiseSignalsPerNode = np.full(
-                p.wasnParams.nNodes,
-                fill_value=currVar  # add `nUselessMics` useless mics per node
+            # Inform user
+            print(f'>>> Running test "{runRef}"...')
+
+            # Adapt test parameters and make sure that the RNG seed is reinitialized
+            pCurr = copy.deepcopy(p)
+            if testType == 'render_mics_useless':
+                # Set sensors to noise
+                pCurr.setThoseSensorsToNoise = currComb
+            elif testType == 'add_useless_mics':
+                # Add useless microphones
+                pCurr.wasnParams.addedNoiseSignalsPerNode = np.full(
+                    p.wasnParams.nNodes,
+                    fill_value=currVar  # add `nUselessMics` useless mics per node
+                )
+            # Update WASN parameters
+            pCurr.wasnParams.__post_init__()
+            pCurr.danseParams.get_wasn_info(pCurr.wasnParams)
+            # Adapt export folder
+            pCurr.exportParams.exportFolder = f'{p.exportParams.exportFolder}/{runRef}'
+            # Reinitialize RNG seed
+            pCurr.__post_init__()
+
+            # Run main and append
+            outCurr = main_sandbox(pCurr)
+
+            # Dump to pickle file
+            dump_to_pickle_archive(
+                [outCurr.filters, outCurr.filtersCentr],
+                outputArchiveExportPath
             )
-        # Update WASN parameters
-        pCurr.wasnParams.__post_init__()
-        pCurr.danseParams.get_wasn_info(pCurr.wasnParams)
-        # Adapt export folder
-        pCurr.exportParams.exportFolder = f'{p.exportParams.exportFolder}/{runRef}'
-        # Reinitialize RNG seed
-        pCurr.__post_init__()
-
-        # Run main and append
-        outCurr = main_sandbox(pCurr)
-
-        # Dump to pickle file
-        dump_to_pickle_archive(
-            [outCurr.filters, outCurr.filtersCentr],
-            outputArchiveExportPath
-        )
-
-        out.append(outCurr)
-
-    return out
 
 
 def dump_to_pickle_archive(data, path: str):
