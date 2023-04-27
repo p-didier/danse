@@ -132,14 +132,18 @@ class WASNparameters(AcousticScenarioParameters):
             elif isinstance(var, float) or isinstance(var, int):
                 var = np.array([var])
             if len(var) != nNodes:
-                if all(var == var[0]):
-                    print(f'Automatically setting all {printoutRef} to the only value provided ({var[0]}).')
-                    var = np.full(
-                        nNodes,
-                        fill_value=var[0]
-                    )
+                if len(var) > 0:
+                    if all(var == var[0]):
+                        print(f'Automatically setting all {printoutRef} to the only value provided ({var[0]}).')
+                        var = np.full(
+                            nNodes,
+                            fill_value=var[0]
+                        )
+                    else:
+                        raise ValueError(f'The number of {printoutRef} values ({len(var)}) does not correspond to the number of nodes in the WASN ({nNodes}).')
                 else:
-                    raise ValueError(f'The number of {printoutRef} values ({len(var)}) does not correspond to the number of nodes in the WASN ({nNodes}).')
+                    # If no value provided, use 0
+                    var = np.full(nNodes, fill_value=0)
             return var
         
         # Dimensionality checks
