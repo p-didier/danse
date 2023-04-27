@@ -14,14 +14,13 @@ from danse_toolbox.d_post import DANSEoutputs
 from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsAndPlotting
 
 # PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230406.yaml'
-PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230414.yaml'
+PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect.yaml'
 N_SRO_TESTS = 10    # number of SRO tests to run
 MAX_SRO_PPM = 500   # maximum SRO in PPM
 EXPORT_DATA = True
-OUT_FOLDER = '20230414_tests/sros_effect/FCasy_[1,2,3]_randLayout_beta2s'  # export path relative to `danse/out`
+OUT_FOLDER = '20230426_tests/sros_effect/run1'  # export path relative to `danse/out`
 # OUT_FOLDER = '20230414_tests/sros_effect/test_new2'  # export path relative to `danse/out`
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
-# SNR_PLOT_LIMITS = [-5, 25]
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
 
 def main():
@@ -238,96 +237,3 @@ def extract_single_test_results(res: DANSEoutputs):
         ('sros', res.SROgroundTruth)
     ])
     return vals
-
-
-def post_process_results(res: list[dict], nSensorPerNode: np.ndarray):
-    """
-    Post-processes the results of a test batch.
-    
-    Parameters
-    ----------
-    res : list[dict]
-        Results.
-    nSensorPerNode : np.ndarray[int]
-        Number of sensors per node.
-    
-    Returns
-    ----------
-    figs : list[matplotlib.figure.Figure]
-        List of figures, one for each node in the WASN.
-    
-    (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
-    """
-
-    # Get useful variables
-    nNodes = len(res[0]['snr'])
-    # Extract local and raw results (same for all SROs)
-    localResSNR = np.zeros(nNodes)
-    localResSTOI = np.zeros(nNodes)
-    rawResSNR = np.zeros(nNodes)
-    rawResSTOI = np.zeros(nNodes)
-    for k in range(nNodes):
-        localResSNR[k] = res[0]['snr'][f'Node{k+1}']['local']
-        localResSTOI[k] = res[0]['estoi'][f'Node{k+1}']['local']
-        rawResSNR[k] = res[0]['snr'][f'Node{k+1}']['raw']
-        rawResSTOI[k] = res[0]['estoi'][f'Node{k+1}']['raw']
-
-    # Build arrays for DANSE and centralized results
-    danseResSNR = np.zeros((len(res), nNodes))
-    danseResSTOI = np.zeros((len(res), nNodes))
-    centralResSNR = np.zeros((len(res), nNodes))
-    centralResSTOI = np.zeros((len(res), nNodes))
-    for ii in range(len(res)):
-        for k in range(nNodes):
-            danseResSNR[ii, k] = res[ii]['snr'][f'Node{k+1}']['danse']
-            danseResSTOI[ii, k] = res[ii]['estoi'][f'Node{k+1}']['danse']
-            centralResSNR[ii, k] = res[ii]['snr'][f'Node{k+1}']['centr']
-            centralResSTOI[ii, k] = res[ii]['estoi'][f'Node{k+1}']['centr']
-    
-    # Plot
-    figs = []
-    for k in range(nNodes):
-        fig, axes = plt.subplots(1, 2)
-        fig.set_size_inches(10, 5)
-        axes[0].plot(danseResSNR[:, k], color='C1', marker='o', label='DANSE')
-        axes[0].plot(centralResSNR[:, k], color='C2', marker='s', label='Centralized')
-        axes[0].hlines(localResSNR[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
-        axes[0].hlines(rawResSNR[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
-        axes[0].set_xlabel('SROs [PPM]')
-        axes[0].set_title('SNR')
-        axes[0].set_ylabel('[dB]')
-        axes[0].set_xticks(np.arange(len(res)))
-        axes[0].set_xticklabels(
-            [str(res[ii]['sros'][1:]) for ii in range(len(res))],
-            rotation=90
-        )
-        axes[0].legend(loc='lower left')
-        axes[0].grid()
-        axes[0].set_ylim(SNR_PLOT_LIMITS)  # eSTOI limits
-        # plt.show()
-        axes[1].plot(danseResSTOI[:, k], color='C1', marker='o', label='DANSE')
-        axes[1].plot(centralResSTOI[:, k], color='C2', marker='s', label='Centralized')
-        axes[1].hlines(localResSTOI[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
-        axes[1].hlines(rawResSTOI[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
-        axes[1].set_xlabel('SROs [PPM]')
-        axes[1].set_title('eSTOI')
-        axes[1].set_xticks(np.arange(len(res)))
-        axes[1].set_xticklabels(
-            [str(res[ii]['sros'][1:]) for ii in range(len(res))],
-            rotation=90
-        )
-        axes[1].legend(loc='lower left')
-        axes[1].grid()
-        axes[1].set_ylim([0, 1])  # eSTOI limits
-        fig.suptitle(f'Node {k + 1} ({nSensorPerNode[k]} sensors)')
-        fig.tight_layout()
-
-        # Save figure
-        figs.append(fig)
-        plt.close(fig)
-
-    return figs
-
-
-if __name__ == '__main__':
-    sys.exit(main())
