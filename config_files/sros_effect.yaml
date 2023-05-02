@@ -1,56 +1,130 @@
-sros: [[20, 40], [50, 100], [200, 400]]
-
-# dataset_dir: ???
-# n_samples: ???
-
-# mics:
-#   n_mics: 4
-#   mic_coordinates: null
-#   mic_type: benchmark # single | circular | benchmark ... (see mic_array_geometries.py for all available)
-#   n_array: 2 # Only used when mic_type != single
-#   radius_in_meters: [0.02, 0.07] #0.045 # Used when mic_type == "circular"
-#   phi: [0, 6.28] # Used when mic_type == "circular". Angle the first microphone in the array makes with the x axis, in radians
-#   mic_delay_ranges: null
-#   mic_gain_ranges: null
-#   mic_sampling_rate_offsets: null #[-2, 2] microphones 1 and 2 will have an offset of this number of samples
-#   snr_in_db: 30 # Sensor noise
-
-# # Source config
-
-# sources:
-#   source_coordinates: null # source coordinates will be generated randomly, or a vector of three floats may be provided as a fixed position.
-#   speech_signals_dir: /Users/ezajlerg/datasets/third_party/vctk/no_silence
-#   n_sources: 2
-#   moving: True
-#   n_trajectory_points: 156
-
-# # Interferer's config
-# n_interferers: 0 # Number of directional noise sources
-# interferers_snr_range: [-5, 30] 
-
-# # Room & reverb config
-# room_dims: [[3, 8], [3, 8], [3, 3]] # Ranges of the width, length and height room dimensions.
-# use_reflectivity_biased_sampling: True # If "reflectivity_biased_sampling",
-#                                               # the absorption coeffs. of the surfaces will be generated
-#                                               # as described in https://asa.scitation.org/doi/10.1121/10.0005888.
-#                                               # To use a fixed rt60 range, this must be set to null
-# anechoic: False
-# rt60: [0.2, 0.6] # reverberation time range in seconds. If room_surfaces is provided, this is not used.
-
-# # Misc config
-# base_sampling_rate: 16000
-# signal_duration_in_seconds: 1
-# min_wall_distance: 0 # The positions where microphones and sources will be placed at must be placed at a minimum distance from the walls.
-# min_mic_source_dist: 0.5 # Each source and microphone pair will be separated by at least 'min_mic_source_dist' meters
-# mask_delay: true # Trim the beginning of the signals to mask the null samples introduced by adding the delay
-# ism_order: 17 # Number of reflections to simulate using the image source model. 17 is the same as used in 
-#               # https://ieeexplore.ieee.org/document/9306409
-# n_jobs: 1 # Number of parallel jobs. Suggestion: set to number of cores in the machine
-# random_seed: 0
-
-# default_device_height: 1 # If provided, each device (microphones and sources) will have this height value
-# anechoic_dataset_dir: null # If provided, two datasets will be generated, where one is anechoic. This is used for tasks such as dereverberation
-
-# metadata_format: json # csv | yaml | json
-
-# acoustic_simulator: pyroomacoustics # gpuRIR | pyroomacoustics
+# Often-used
+seed: 12348
+setThoseSensorsToNoise: []
+#
+exportParams:
+  # Often-used
+  exportFolder: ''  # folder to export outputs (set in `danse_robustness_to_sros.py`)
+  #
+  filterNormsPlot: true
+  conditionNumberPlot: false  # if true, condition number plot is exported
+  convergencePlot: false  # if true, convergence plot is exported
+  wavFiles: true  # if true, WAV files are exported
+  acousticScenarioPlot: true  # if true, acoustic scenario plot is exported
+  sroEstimPerfPlot: false  # if true, SRO estimation performance plot is exported
+  metricsPlot: true  # if true, metrics plot is exported
+  waveformsAndSpectrograms: true  # if true, waveforms and spectrograms are exported
+  # vvv Files (not plots)
+  danseOutputsFile: true  # if true, DANSE outputs are exported as a pickle file
+  parametersFile: true  # if true, parameters are exported as a pickle file or a YAML file
+  filterNorms: true 
+  # vvv Global
+  bypassAllExports: false  # if true, all exports are bypassed
+danseParams:
+  # For debug
+  saveConditionNumber: true
+  saveConditionNumberEvery: 9999
+  performGEVD: true
+  t_expAvg50p: 10
+  # t_expAvg50p: 2
+  #
+  DFTsize: 1024
+  # DFTsize: 2048
+  GEVDrank: 1
+  WOLAovlp: 0.5
+  alphaExternalFilters: 0.5
+  broadcastType: wholeChunk
+  bypassUpdates: false
+  cohDrift:
+    alpha: 0.95
+    alphaEps: 0.05
+    estEvery: 1
+    estimationMethod: gs
+    loop: open
+    segLength: 10
+    startAfterNups: 11
+  compensateSROs: false
+  computeCentralised: true
+  computeLocal: true
+  computeNoiseFree: false
+  covMatEyeInitScaling: 1.0
+  covMatInitType: fully_random
+  covMatRandomInitScaling: 2.220446049250313e-16
+  covMatSameInitForAllFreqs: true
+  covMatSameInitForAllNodes: true
+  desSigProcessingType: wola
+  dynMetrics:
+    chunkDuration: 1.0
+    chunkOverlap: 0.5
+    dynamicPESQ: false
+    dynamicSNR: false
+    dynamicSTOI: false
+    dynamicfwSNRseg: false
+  efficientSpSBC: true
+  estimateSROs: CohDrift
+  filterInitFixedValue: 1
+  filterInitType: selectFirstSensor_andFixedValue
+  frameLenfwSNRseg: 0.03
+  gammafwSNRseg: 0.2
+  minNoSpeechDurEndUterrance: 0.2
+  noExternalFilterRelaxation: false
+  nodeUpdating: asy
+  printout_eventsParser: true
+  printout_eventsParserNoBC: false
+  printout_externalFilterUpdate: true
+  printout_profiler: true
+  printoutsAndPlotting:
+    onlySNRandESTOIinPlots: true
+    showWASNs: false
+  seqUpdateStartNodeIdx: 1
+  startComputeMetricsAt: after_beginning_2nd_utterance_200  # 200 ms after beg. of 2nd utt.
+  # startComputeMetricsAt: beginning_2nd_utterance
+  # startComputeMetricsAt: beginning_1st_utterance
+  # startComputeMetricsAt: end_1st_utterance
+  timeBtwExternalFiltUpdates: 1
+  treeFormationAlgorithm: prim
+  upTDfilterEvery: 1.0
+  winWOLAanalysisType: sqrthann
+  winWOLAsynthesisType: sqrthann
+referenceSensor: 0
+snrYlimMax: null
+wasnParams:
+  # Often used
+  sigDur: 15  # [s]
+  selfnoiseSNR: 30  # [dB]
+  # layoutType: random_spinning_top
+  layoutType: random
+  spinTop_randomWiggleAmount: 0.25  # [m]
+  t60: 0.2  # [s]
+  SROperNode: '[0]'  # [PPM]
+  nSensorPerNode: '[1, 2, 3]'
+  interSensorDist: 0.05
+  #
+  VADenergyDecrease_dB: 35
+  VADwinLength: 0.04
+  arrayGeometry: grid3d
+  baseSNR: 5
+  desiredSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
+  fs: 16000
+  generateRandomWASNwithSeed: 0
+  lenRIR: 1024
+  loadFrom: ''
+  minDistToWalls: 0.5
+  nDesiredSources: 1
+  nNodes: 3
+  nNoiseSources: 1
+  noiseSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
+  rd: '[5, 5, 5]'  # compact way to write lists/arrays (as a string)
+  referenceSensor: 0
+  topologyParams:
+    # Often used
+    topologyType: fully-connected
+    #
+    commDistance: 4.0
+    plotTopo: false
+    seed: 12348
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

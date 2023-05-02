@@ -406,16 +406,47 @@ def check_clock_jitter(timeInstants: np.ndarray, nNodes: int):
     return fs
 
 
+def ensure_shortfat_orientation(x: np.ndarray):
+    """
+    Ensures that the input array is a matrix with more columns than rows.
+    """
+    if len(x.shape) == 1:
+        x = x.reshape((x.shape[0], 1))
+    elif len(x.shape) > 2:
+        raise ValueError('Input array must have 2 dimensions or less.')
+    if x.shape[0] > x.shape[1]:
+        x = x.T
+    return x
+
+
+def base_event_checks(timeInstants: np.ndarray, p: DANSEparameters):
+    """
+    Conducts basic checks on the event instants matrix.
+    """
+    # Make sure time stamps matrix is indeed a matrix, correctly oriented
+    timeInstants = ensure_shortfat_orientation(timeInstants)
+    # Number of nodes
+    nNodes = timeInstants.shape[1]
+    # Check for clock jitter and save sampling frequencies
+    fs = check_clock_jitter(timeInstants, nNodes)
+    # Check consistency
+    if 'sim' in p.nodeUpdating and any(fs != fs[p.referenceSensor]):
+        raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
+
+    return timeInstants, nNodes, fs
+
+
 def initialize_events(
     timeInstants: np.ndarray,
     p: DANSEparameters,
     wasnObj: WASN = WASN()
     ) -> tuple[list[DANSEeventInstant], np.ndarray, list[WASN]]:
     """
-    Returns the matrix the columns of which to loop over in SRO-affected
-    simultaneous DANSE. For each event instant, the matrix contains the instant
-    itself (in [s]), the node indices concerned by this instant, and the
-    corresponding event type ("bc" for broadcast, "up" for update).
+    Returns the matrix the columns of which to loop over in (SRO-affected)
+    asynchronous node-updating  DANSE. For each event instant, the matrix
+    contains the instant itself (in [s]), the node indices concerned by
+    this instant, and the corresponding event type ("bc" for broadcast,
+    "up" for update).
     
     Parameters
     ----------
@@ -437,26 +468,9 @@ def initialize_events(
         Only used for TI-DANSE: List of the WASNs topologies that exist
         through the entire signal duration.
     """
+    # Basic checks (clock jitter, etc.) + infer sampling frequencies
+    timeInstants, nNodes, fs = base_event_checks(timeInstants, p)
     
-    # Make sure time stamps matrix is indeed a matrix, correctly oriented
-    if timeInstants.ndim != 2:
-        if timeInstants.ndim == 1:
-            timeInstants = timeInstants[:, np.newaxis]
-        else:
-            raise ValueError('Unexpected dimensions for `timeInstants`.')
-    if timeInstants.shape[0] < timeInstants.shape[1]:
-        timeInstants = timeInstants.T
-
-    # Number of nodes
-    nNodes = timeInstants.shape[1]
-
-    # Check for clock jitter and save sampling frequencies
-    fs = check_clock_jitter(timeInstants, nNodes)
-
-    # Check consistency
-    if 'sim' in p.nodeUpdating and any(fs != fs[p.referenceSensor]):
-        raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
-
     # Total signal duration [s] per node (after truncation during sig. gen.).
     Ttot = timeInstants[-1, :]
 
@@ -479,6 +493,70 @@ def initialize_events(
     )
 
     return outputEvents, fs, prepOutput['wasnObjList']
+
+
+def initialize_events_batch(
+    timeInstants: np.ndarray,
+    p: DANSEparameters,
+    wasnObj: WASN = WASN()
+    ) -> tuple[list[DANSEeventInstant], np.ndarray, list[WASN]]:
+    """
+    Returns the matrix the columns of which to loop over in (SRO-affected)
+    asynchronous node-updating DANSE, batch implemenation.
+    For each event instant, the matrix contains the instant
+    itself (in [s]), the node indices concerned by this instant, and the
+    corresponding event type (only one type: "up" for update).
+    
+    Parameters
+    ----------
+    timeInstants : [Nt x Nn] np.ndarray (floats)
+        Time instants corresponding to the samples of each of the `Nn` nodes.
+    p : DANSEparameters object
+        Parameters.
+    wasnObj : WASN class instance
+        Only used for TI-DANSE: WASN under consideration, state at WASN
+        initialization (before any pruning to a tree topology).
+
+    Returns
+    -------
+    outputEvents : [Ne x 1] list of DANSEeventInstant objects
+        Event instants matrix.
+    fs : [Nn x 1] np.ndarray[float]
+        Sampling frequency at each node [Hz].
+    wasnObjList : list[WASN class instances]
+        Only used for TI-DANSE: List of the WASNs topologies that exist
+        through the entire signal duration.
+    """
+    # Basic checks (clock jitter, etc.) + infer sampling frequencies
+    timeInstants, nNodes, fs = base_event_checks(timeInstants, p)
+
+    # Total signal duration [s] per node (after truncation during sig. gen.).
+    Ttot = timeInstants[-1, :]
+
+    # Prepare events matrix building
+    if p.simType == 'batch':
+        prepOutput = prep_evmat_build_batch(p, nNodes, wasnObj, fs, Ttot)
+    else:
+        raise ValueError(f'Unexpected `simType`: {p.simType} (should be "batch" for batch DANSE).')
+    
+    raise NotImplementedError('Batch DANSE not implemented yet.')
+    # Build event matrix
+    outputEvents = build_events_matrix(
+        up_t=prepOutput['upInstants'],
+        bc_t=prepOutput['bcInstants'],
+        nodeUpdating=p.nodeUpdating,
+        fuse_t=prepOutput['fuInstants'],
+        re_t=prepOutput['reInstants'],
+        tr_t=prepOutput['trInstantsArranged'],
+        leafToRootOrderings=prepOutput['leafToRootOrderings'],
+        firstUpdatingNode=p.seqUpdateStartNodeIdx
+    )
+
+    return outputEvents, fs, prepOutput['wasnObjList']
+
+
+def prep_evmat_build_batch():
+    pass  # TODO
 
 
 def prep_evmat_build_online(

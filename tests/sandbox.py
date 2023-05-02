@@ -90,12 +90,17 @@ def danse_it_up(
     Container function for prepping signals and launching the DANSE algorithm.
     """
     # Launch DANSE
-    if p.is_fully_connected_wasn():
-        # Fully connected WASN case
-        out, wasnUpdated = core.danse(wasnObj, p.danseParams)
-    else:
-        # Ad-hoc WASN topology case
-        out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
+    if p.is_fully_connected_wasn():  # Fully connected WASN case
+        if p.is_batch():    # Batch DANSE
+            out, wasnUpdated = core.danse_batch(wasnObj, p.danseParams)
+        else:               # Online DANSE
+            out, wasnUpdated = core.danse(wasnObj, p.danseParams)
+    else:  # Ad-hoc WASN topology case
+        if p.is_batch():    # Batch TI-DANSE
+            raise NotImplementedError('Batch TI-DANSE not implemented yet.')
+            out, wasnUpdated = core.tidanse_batch(wasnObj, p.danseParams)
+        else:               # Online TI-DANSE
+            out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
 
     return out, wasnUpdated
 

@@ -3,6 +3,7 @@ import shutil
 import random
 import warnings
 import numpy as np
+from numba import jit
 import scipy.linalg as sla
 from siggen.classes import *
 from dataclasses import dataclass
@@ -201,6 +202,9 @@ class TestParameters:
 
     def is_fully_connected_wasn(self):
         return self.wasnParams.topologyParams.topologyType == 'fully-connected'
+    
+    def is_batch(self):
+        return self.danseParams.simType == 'batch'
     
     def load_from_yaml(self, path):
         """Loads dataclass from YAML file."""
@@ -1581,10 +1585,12 @@ class DANSEvariables(base.DANSEparameters):
                     driver='gvd'
                 )
                 # Flip Xmat to sort eigenvalues in descending order
-                idx = np.flip(np.argsort(sigmacurr))
+                # idx = np.flip(np.argsort(sigmacurr))
+                idx = jit_flipargsort(sigmacurr)  # jitted version
                 sigma[kappa, :] = sigmacurr[idx]
                 Xmat[kappa, :, :] = Xmatcurr[:, idx]
 
+            # w = jit_update_gevd_endbit(Xmat, sigma, Evect, nFreqs, n, self.GEVDrank)
             Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0,2,1]))
             # GEVLs tensor
             Dmat = np.zeros((nFreqs, n, n))
@@ -2421,3 +2427,29 @@ class TIDANSEvariables(DANSEvariables):
             # Sequential node-updating
             else:
                 self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
+
+# --------------------------------------------------------------------------- #
+# Jitted functions
+# --------------------------------------------------------------------------- #
+
+@jit(nopython=True)
+def jit_flipargsort(a: np.ndarray) -> np.ndarray:
+    """
+    Jitted version of `np.flip(np.argsort())`.
+    """
+    return np.flip(np.argsort(a))
+
+
+@jit(nopython=True)
+def jit_update_gevd_endbit(Xmat, sigma, Evect, nFreqs, n, GEVDrank):
+    
+    Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0,2,1]))
+    # GEVLs tensor
+    Dmat = np.zeros((nFreqs, n, n))
+    for ii in range(GEVDrank):
+        Dmat[:, ii, ii] = np.squeeze(1 - 1/sigma[:, ii])
+    # LMMSE weights
+    Qhermitian = np.transpose(Qmat.conj(), axes=[0,2,1])
+    w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
+
+    return w
