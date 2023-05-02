@@ -13,9 +13,9 @@ import tests.useless_microphones
 import tests.useless_microphones_postproc
 
 def main():
+    tests.sandbox.main()
     # tests.danse_robustness_to_sros.main()
-    tests.danse_robustness_to_sros_postproc.main()
-    # tests.sandbox.main()
+    # tests.danse_robustness_to_sros_postproc.main()
     # tests.multiple_runs.main()
     # tests.write_yaml_template.main()
     # tests.useless_microphones.main()

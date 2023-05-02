@@ -21,6 +21,7 @@ import danse_toolbox.d_base as base
 from danse_toolbox.d_sros import *
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_post import DANSEoutputs
+from danse_toolbox.d_batch import BatchDANSEvariables
 
 
 def danse_batch(
@@ -46,12 +47,9 @@ def danse_batch(
     """
 
     # Initialize variables
-    dv = DANSEvariables()
-    dv.import_params(p)
-    dv.init_from_wasn(wasnObj.wasn)
-
-    # Compute events
-    eventInstants, fs, _ = base.initialize_events_batch(dv.timeInstants, p)
+    bdv = BatchDANSEvariables()  # batch!
+    bdv.import_params(p)
+    bdv.init_from_wasn(wasnObj.wasn)
 
     # Profiling
     def is_interactive():
@@ -60,62 +58,42 @@ def danse_batch(
     if not is_interactive():
         profiler = Profiler()
         profiler.start()
-    t0 = time.perf_counter()    # timing
+    t0 = time.perf_counter()
 
-    # Loop over event instants
-    for idxInstant in range(len(eventInstants)):
-
-        # Process events at current instant
-        events = eventInstants[idxInstant] 
-
-        # Parse event matrix and inform user (if asked)
-        base.events_parser(
-            events,
-            dv.startUpdates,
-            dv.printoutsAndPlotting.printout_eventsParser,
-            dv.printoutsAndPlotting.printout_eventsParserNoBC
-        )
-
-        for idxEventCurrInstant in range(events.nEvents):
-            k = events.nodes[idxEventCurrInstant]  # node index
-            # Broadcast event
-            if events.type[idxEventCurrInstant] == 'bc':
-                dv.broadcast(events.t, fs[k], k)
+    # Perform batch DANSE
+    for _ in range(p.maxBatchUpdates):
+        # Inform user
+        if bdv.printoutsAndPlotting.printout_batch_updates:
+            print(f'Batch update {_ + 1}/{p.maxBatchUpdates}...')
+        for k in range(bdv.nNodes):
             # Filter updates and desired signal estimates event
-            elif events.type[idxEventCurrInstant] == 'up':
-                dv.update_and_estimate(
-                    events.t,
-                    fs[k],
-                    k,
-                    events.bypassUpdate[idxEventCurrInstant]
-                )
-            else:
-                raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')
+            bdv.batch_update_broadcast_signals()
+            bdv.batch_update(k)
 
     # Profiling
     if not is_interactive():
         profiler.stop()
-        if dv.printoutsAndPlotting.printout_profiler:
+        if bdv.printoutsAndPlotting.printout_profiler:
             profiler.print()
 
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0
-    print(f'{np.amax(dv.timeInstants)}s of signal processed in \
+    print(f'{np.amax(bdv.timeInstants)}s of signal processed in \
         {str(datetime.timedelta(seconds=dur))}.')
     print(f'(Real-time processing factor: \
-        {np.round(np.amax(dv.timeInstants) / dur, 4)})')
+        {np.round(np.amax(bdv.timeInstants) / dur, 4)})')
 
     # Build output
     out = DANSEoutputs()
     out.import_params(p)
-    out.from_variables(dv)
+    out.from_variables(bdv)
     # Update WASN object
     for k in range(len(wasnObj.wasn)):
-        wasnObj.wasn[k].enhancedData = dv.d[:, k]
-        if dv.computeCentralised:
-            wasnObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
-        if dv.computeLocal:
-            wasnObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
+        wasnObj.wasn[k].enhancedData = bdv.d[:, k]
+        if bdv.computeCentralised:
+            wasnObj.wasn[k].enhancedData_c = bdv.dCentr[:, k]
+        if bdv.computeLocal:
+            wasnObj.wasn[k].enhancedData_l = bdv.dLocal[:, k]
 
     return out, wasnObj
 

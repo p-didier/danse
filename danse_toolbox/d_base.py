@@ -108,6 +108,8 @@ class PrintoutsAndPlotting:
     onlySNRandESTOIinPlots : bool = False   # if True, only include the SNR and
         # the eSTOI in the metrics plot.
     # Printouts
+    printout_batch_updates: bool = True     # controls printouts of batch
+                                            # updates.
     printout_profiler: bool = True      # controls printouts of Profiler.
     printout_eventsParser: bool = True      # controls printouts in
                                             # `events_parser()` function.
@@ -158,6 +160,8 @@ class DANSEparameters(Hyperparameters):
     """
     # --- General
     simType: str = 'batch'  # simulation type ("batch" or "online")
+    maxBatchUpdates: int = 100   # maximum number of batch DANSE updates
+        # (used iff `simType == 'batch'`)
     DFTsize: int = 1024     # DFT size
         # (used iff `simType == 'online'`)
     WOLAovlp: float = .5    # WOLA window overlap [*100%]
@@ -414,7 +418,7 @@ def ensure_shortfat_orientation(x: np.ndarray):
         x = x.reshape((x.shape[0], 1))
     elif len(x.shape) > 2:
         raise ValueError('Input array must have 2 dimensions or less.')
-    if x.shape[0] > x.shape[1]:
+    if x.shape[0] < x.shape[1]:
         x = x.T
     return x
 
@@ -498,7 +502,7 @@ def initialize_events(
 def initialize_events_batch(
     timeInstants: np.ndarray,
     p: DANSEparameters,
-    wasnObj: WASN = WASN()
+    wasnObj: WASN = None
     ) -> tuple[list[DANSEeventInstant], np.ndarray, list[WASN]]:
     """
     Returns the matrix the columns of which to loop over in (SRO-affected)
@@ -527,6 +531,10 @@ def initialize_events_batch(
         Only used for TI-DANSE: List of the WASNs topologies that exist
         through the entire signal duration.
     """
+    if wasnObj is not None:
+        raise NotImplementedError('Batch TI-DANSE not implemented yet.')
+    wasnObjList = None
+
     # Basic checks (clock jitter, etc.) + infer sampling frequencies
     timeInstants, nNodes, fs = base_event_checks(timeInstants, p)
 
@@ -535,28 +543,33 @@ def initialize_events_batch(
 
     # Prepare events matrix building
     if p.simType == 'batch':
-        prepOutput = prep_evmat_build_batch(p, nNodes, wasnObj, fs, Ttot)
+        # Expected number of DANSE update per node over total signal length
+        numUpInTtot = np.floor(Ttot * fs / p.Ns)
+
+        if 'topo-indep' in p.nodeUpdating:   # ad-hoc (non fully connected) WASN
+            raise NotImplementedError('Batch TI-DANSE not implemented yet.')
+        else: 
+            # Expected DANSE update instants
+            upInstants = [
+                np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
+                int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            ]
     else:
         raise ValueError(f'Unexpected `simType`: {p.simType} (should be "batch" for batch DANSE).')
     
-    raise NotImplementedError('Batch DANSE not implemented yet.')
-    # Build event matrix
+    # Compile events
     outputEvents = build_events_matrix(
-        up_t=prepOutput['upInstants'],
-        bc_t=prepOutput['bcInstants'],
+        up_t=upInstants,
+        bc_t=[],
         nodeUpdating=p.nodeUpdating,
-        fuse_t=prepOutput['fuInstants'],
-        re_t=prepOutput['reInstants'],
-        tr_t=prepOutput['trInstantsArranged'],
-        leafToRootOrderings=prepOutput['leafToRootOrderings'],
+        fuse_t=[],
+        re_t= [],
+        tr_t=[],
+        leafToRootOrderings=[],
         firstUpdatingNode=p.seqUpdateStartNodeIdx
     )
-
-    return outputEvents, fs, prepOutput['wasnObjList']
-
-
-def prep_evmat_build_batch():
-    pass  # TODO
+    
+    return outputEvents, fs, wasnObjList
 
 
 def prep_evmat_build_online(
@@ -751,8 +764,8 @@ def get_sequential_update_instants(
 
 def build_events_matrix(
         up_t,
-        bc_t,
-        nodeUpdating,
+        bc_t=[],
+        nodeUpdating='seq',
         visualizeUps=False,
         fuse_t=[],
         re_t=[],
@@ -815,17 +828,20 @@ def build_events_matrix(
             [:, 1] == node index;
             [:, 2] == event reference;
         """
-        nInstants = sum(
-            [len(np.unique(t[k])) for k in range(K)]
-        )
-        eventInstants = np.zeros((nInstants, 3))
-        for k in range(K):
-            idxStart = sum([len(t[q]) for q in range(k)])
-            idxEnd = idxStart + len(t[k])
-            eventInstants[idxStart:idxEnd, 0] = t[k]
-            eventInstants[idxStart:idxEnd, 1] = k
-            eventInstants[:, 2] = eventRef    # event reference
-        return eventInstants
+        if len(t) == 0:   # no instants
+            return np.zeros((0, 3))
+        else:
+            nInstants = sum(
+                [len(np.unique(t[k])) for k in range(K)]
+            )
+            eventInstants = np.zeros((nInstants, 3))
+            for k in range(K):
+                idxStart = sum([len(t[q]) for q in range(k)])
+                idxEnd = idxStart + len(t[k])
+                eventInstants[idxStart:idxEnd, 0] = t[k]
+                eventInstants[idxStart:idxEnd, 1] = k
+                eventInstants[:, 2] = eventRef    # event reference
+            return eventInstants
     
     # Events dictionary (in chronological order of events)
     # -- 'fu_ds': fuse local signals (only if `'topo-indep' in nodeUpdating`).
@@ -1432,10 +1448,12 @@ def fill_buffers_td_few_samples(k, neighs, zBuffer, zLocalK, L):
 
 
 def events_parser(
-    events: DANSEeventInstant,
-    startUpdates,
-    printouts=False,
-    doNotPrintBCs=False):
+        events: DANSEeventInstant,
+        startUpdates,
+        printouts=False,
+        doNotPrintBCs=False,
+        batchMode=False
+    ):
     """
     Printouts to inform user of DANSE events.
     
@@ -1451,7 +1469,11 @@ def events_parser(
     doNotPrintBCs : bool
         If True, do not print the broadcast events
         (only used if `printouts == True`).
+    batchMode : bool
+        If True, show "batch" in the printouts.
     """
+    if batchMode:
+        doNotPrintBCs = True  # do not print broadcast events in batch mode
 
     if printouts:
         if 'up' in events.type:
@@ -1482,6 +1504,8 @@ def events_parser(
                         updatesTxt += f'{k + 1}'
             # Get ready to print
             fullTxt = txt + broadcastsTxt + '; ' + updatesTxt
+            if batchMode:
+                fullTxt += ' -- batch'
             if is_interactive():  # if we are running from a notebook
                 # Print on the same line
                 print(f"\r{fullTxt}", end="")
@@ -2093,3 +2117,101 @@ def get_stft(x, fs, win, ovlp):
         f = np.array([i[0] for i in f])
 
     return out, f, t
+
+
+def init_complex_filter(
+        size,
+        refIdx=0,
+        initType='selectFirstSensor',
+        fixedValue=0.,
+        seed=0,
+    ):
+    """
+    Returns an initialized STFT-domain filter vector,
+    i.e., a selector of the reference sensor at node 1.
+    
+    Parameters
+    ----------
+    size : tuple
+        Filter size.
+    refIdx : int, optional
+        Index of the reference sensor, by default 0.
+    initType : str, optional
+        Initialization type, by default 'selectFirstSensor'.
+    fixedValue : float, optional
+        Fixed value for the filter vector, by default 0. Used iff `initType`
+        includes 'fixedValue'.
+    seed : int, optional
+        Random number generator seed, by default 0.
+
+    Returns
+    -------
+    wInit : np.ndarray (complex)
+        Initialized filter vector.
+    """
+    if initType == 'selectFirstSensor':
+        wInit = np.zeros(size, dtype=complex)
+        if len(size) == 3:
+            wInit[:, :, refIdx] = 1
+        elif len(size) == 2:
+            wInit[:, refIdx] = 1
+    elif initType == 'random':
+        rng = np.random.default_rng(seed)
+        wInit = (rng.random(size) - 0.5) + 1j * (rng.random(size) - 0.5)
+    elif initType == 'fixedValue':
+        wInit = np.full(size, fill_value=fixedValue, dtype=complex)
+    elif initType == 'selectFirstSensor_andFixedValue':
+        wInit = np.full(size, fill_value=fixedValue, dtype=complex)
+        if len(size) == 3:
+            wInit[:, :, refIdx] = 1
+        elif len(size) == 2:
+            wInit[:, refIdx] = 1
+    return wInit
+
+
+def init_covmats(
+        dims: tuple,
+        rng,
+        covMatInitType,
+        covMatRandomInitScaling,
+        covMatEyeInitScaling
+    ) -> np.ndarray:
+    """
+    Helper function to initialize the covariance matrices.
+    
+    Parameters
+    ----------
+    dims : tuple
+        Covariance matrix dimensions.
+    rng : np.random.Generator
+        Random number generator.
+    covMatInitType : str
+        Covariance matrix initialization type.
+    covMatRandomInitScaling : float
+        Scaling factor for the random part of the covariance matrix.
+    covMatEyeInitScaling : float
+        Scaling factor for the identity part of the covariance matrix.
+
+    Returns
+    -------
+    fullSlice : np.ndarray
+        Initialized covariance matrix.
+    """
+    # Generate a basis random array for random initializations
+    randArray = 2 * rng.random(dims) - 1 +\
+        1j * (2 * rng.random(dims) - 1)
+    if covMatInitType == 'fully_random':
+        # Scale the random array
+        fullSlice = covMatRandomInitScaling * randArray
+    elif covMatInitType == 'eye_and_random':
+        if len(dims) == 2:  # for single freq-bin slice
+            eyePart = np.eye(dims[-1]) * covMatEyeInitScaling
+        elif len(dims) == 3:  # for multiple bins
+            eyePart = np.tile(
+                np.eye(dims[-1]) * covMatEyeInitScaling,
+                (dims[0], 1, 1)
+            )
+        # Scale the random array and add an identity matrix
+        # to each slice.
+        fullSlice = eyePart + covMatRandomInitScaling * randArray
+    return fullSlice

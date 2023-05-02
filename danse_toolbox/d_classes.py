@@ -10,15 +10,6 @@ from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
 
-
-# @dataclass
-# class CondNum:
-#     """
-#     Class that stores the condition number(s) of a matrix or list of matrices.
-#     """
-#     cn: float = np.nan  # condition number
-#     t: float = np.nan   # time at which the condition number was computed
-
 @dataclass
 class ConditionNumbers:
     cn_RyyDANSE: list = field(default_factory=list)  # condition number of
@@ -251,7 +242,7 @@ class DANSEvariables(base.DANSEparameters):
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
         # Check for TI-DANSE case
-        tidanseFlag = ~check_if_fully_connected(wasn)
+        tidanseFlag = not check_if_fully_connected(wasn)
 
         avgProdResiduals = []   # average residuals product coming out of
                                 # filter-shift processing (SRO estimation).
@@ -286,78 +277,25 @@ class DANSEvariables(base.DANSEparameters):
         zBuffer = []
         zLocal = []
 
-        def _init_complex_filter(size, refIdx=0, initType='selectFirstSensor', fixedValue=0.):
-            """Returns an initialized STFT-domain filter vector,
-            i.e., a selector of the reference sensor at node 1."""
-            if initType == 'selectFirstSensor':
-                wInit = np.zeros(size, dtype=complex)
-                if len(size) == 3:
-                    wInit[:, :, refIdx] = 1
-                elif len(size) == 2:
-                    wInit[:, refIdx] = 1
-            elif initType == 'random':
-                rng = np.random.default_rng(self.seed)
-                wInit = (rng.random(size) - 0.5) +\
-                    1j * (rng.random(size) - 0.5)
-            elif initType == 'fixedValue':
-                wInit = np.full(size, fill_value=fixedValue, dtype=complex)
-            elif initType == self.filterInitType:
-                wInit = np.full(size, fill_value=fixedValue, dtype=complex)
-                if len(size) == 3:
-                    wInit[:, :, refIdx] = 1
-                elif len(size) == 2:
-                    wInit[:, refIdx] = 1
-            return wInit
-
         # Initialize covariance matrices slices
         rng = np.random.default_rng(self.seed)
-
-        def _init_covmats(dims: tuple) -> np.ndarray:
-            """Helper function to initialize the covariance matrices."""
-            # Generate a basis random array for random initializations
-            randArray = 2 * rng.random(dims) - 1 +\
-                1j * (2 * rng.random(dims) - 1)
-            if self.covMatInitType == 'fully_random':
-                # Scale the random array
-                fullSlice = self.covMatRandomInitScaling * randArray
-            elif self.covMatInitType == 'eye_and_random':
-                if len(dims) == 2:  # for single freq-bin slice
-                    eyePart = np.eye(dims[-1]) * self.covMatEyeInitScaling
-                elif len(dims) == 3:  # for multiple bins
-                    eyePart = np.tile(
-                        np.eye(dims[-1]) * self.covMatEyeInitScaling,
-                        (dims[0], 1, 1)
-                    )
-                # Scale the random array and add an identity matrix
-                # to each slice.
-                fullSlice = eyePart + self.covMatRandomInitScaling * randArray
-            return fullSlice
+        args = (
+            self.covMatInitType,
+            self.covMatRandomInitScaling,
+            self.covMatEyeInitScaling
+        )  # fixed arguments for `init_covmats` function
 
         # Covariance matrices initialization
         if self.covMatInitType == 'batch_ground_truth':
-            raise ValueError('[NYI]')
-            # TODO: -- see journal week14_2023 TUE
-            
-            # Initialise the covariance matrices with their batch ground truth
-            for k in range(nNodes):
-                nHat = np.fft.fft(wasn[k].cleannoise, n=self.DFTsize, axis=0)
-                yHat = np.fft.fft(wasn[k].data, n=self.DFTsize, axis=0)
-                Rnntilde.append(np.einsum('ij,ik->ijk', nHat, nHat.conj()))
-                Ryytilde.append(np.einsum('ij,ik->ijk', yHat, yHat.conj()))
-
-                # Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
-                # Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
-
-                # Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
-                # Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
+            raise NotImplementedError
         elif self.covMatSameInitForAllNodes:
             if self.covMatSameInitForAllFreqs:
-                fullSlice = _init_covmats(
-                    (nSensorsTotal, nSensorsTotal)
+                fullSlice = base.init_covmats(
+                    (nSensorsTotal, nSensorsTotal), rng, *args
                 )
             else:
-                fullSlice = _init_covmats(
-                    (self.nPosFreqs, nSensorsTotal, nSensorsTotal)
+                fullSlice = base.init_covmats(
+                    (self.nPosFreqs, nSensorsTotal, nSensorsTotal), rng, *args
                 )
         
         for k in range(nNodes):
@@ -378,12 +316,12 @@ class DANSEvariables(base.DANSEparameters):
             #
             if not self.covMatSameInitForAllNodes:
                 if self.covMatSameInitForAllFreqs:
-                    fullSlice = _init_covmats(
-                        (nSensorsTotal, nSensorsTotal)
+                    fullSlice = base.init_covmats(
+                        (nSensorsTotal, nSensorsTotal), rng, *args
                     )
                 else:
-                    fullSlice = _init_covmats(
-                        (self.nPosFreqs, nSensorsTotal, nSensorsTotal)
+                    fullSlice = base.init_covmats(
+                        (self.nPosFreqs, nSensorsTotal, nSensorsTotal), rng, *args
                     )
             
             if self.covMatSameInitForAllFreqs:
@@ -421,45 +359,45 @@ class DANSEvariables(base.DANSEparameters):
             # initialize time-domain filter as Dirac for first sensor signal
             wtmp[self.DFTsize, 0] = 1   
             wIR.append(wtmp)
-            wTilde.append(_init_complex_filter(
+            wTilde.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, dimYTilde[k]),
                 self.referenceSensor,
                 initType=self.filterInitType,
                 fixedValue=self.filterInitFixedValue
             ))
             if tidanseFlag:
-                wTildeExt.append(_init_complex_filter(
+                wTildeExt.append(base.init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
                 ))
-                wTildeExtTarget.append(_init_complex_filter(
+                wTildeExtTarget.append(base.init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
                 ))
             else:
-                wTildeExt.append(_init_complex_filter(
+                wTildeExt.append(base.init_complex_filter(
                     (self.nPosFreqs, wasn[k].nSensors),
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
                 ))
-                wTildeExtTarget.append(_init_complex_filter(
+                wTildeExtTarget.append(base.init_complex_filter(
                     (self.nPosFreqs, wasn[k].nSensors),
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
                 ))
-            wCentr.append(_init_complex_filter(
+            wCentr.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, nSensorsTotal),
                 self.referenceSensor,
                 initType=self.filterInitType,
                 fixedValue=self.filterInitFixedValue
             ))
-            wLocal.append(_init_complex_filter(
+            wLocal.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, wasn[k].nSensors),
                 self.referenceSensor,
                 initType=self.filterInitType,
@@ -1075,7 +1013,6 @@ class DANSEvariables(base.DANSEparameters):
         self.yHatCentr_s[k][:, self.i[k], :] = yHatCentrCurr_s[:self.nPosFreqs, :]
         self.yHatCentr_n[k][:, self.i[k], :] = yHatCentrCurr_n[:self.nPosFreqs, :]
 
-
     def update_external_filters(self, k, t):
         """
         Update external filters for relaxed filter update.
@@ -1387,7 +1324,6 @@ class DANSEvariables(base.DANSEparameters):
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
         self.yTildeHat_s[k][:, self.i[k], :] = yTildeHatCurr_s[:self.nPosFreqs, :]
         self.yTildeHat_n[k][:, self.i[k], :] = yTildeHatCurr_n[:self.nPosFreqs, :]
-
 
     def compensate_sros(self, k, t):
         """
@@ -1758,7 +1694,6 @@ class DANSEvariables(base.DANSEparameters):
         # Save SRO (residuals)
         self.SROsResiduals[k][iter, :] = sroOut
 
-    
     def build_phase_shifts_for_srocomp(self, k):
         """
         Computed appropriate phase shift factors for next SRO compensation.
@@ -1787,7 +1722,6 @@ class DANSEvariables(base.DANSEparameters):
             self.phaseShiftFactors[k][self.nLocalMic[k] + q] -=\
                 self.SROsEstimates[k][self.i[k], q] * self.Ns 
 
-    
     def get_desired_signal(self, k):
         """
         Compute chunk of desired signal from DANSE freq.-domain filters
@@ -1939,7 +1873,6 @@ class DANSEvariables(base.DANSEparameters):
                 self.dLocal_n[self.idxEndChunk -\
                     self.Ns:self.idxEndChunk, k] = dChunk_n
 
-
 class TIDANSEvariables(DANSEvariables):
     """
     References
@@ -2073,7 +2006,7 @@ class TIDANSEvariables(DANSEvariables):
             #     zqPrevious=self.zLocalPrimeBuffer[k]
             # )
         else:
-            raise ValueError('[NYI]')  # TODO:
+            raise NotImplementedError  # TODO:
     
     def ti_compute_partial_sum(self, k):
         """
