@@ -1,16 +1,15 @@
-# Often-used
 seed: 12348
 #
 exportParams:
-  # Often-used
   exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230502_tests/tmp_batch  # folder to export outputs
 danseParams:
   simType: batch  # 'batch' or 'online'
   maxBatchUpdates: 20
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 10
+  computeLocal: true
+  computeCentralised: true
 wasnParams:
-  # Often used
   sigDur: 7  # [s]
   selfnoiseSNR: 30  # [dB]
   layoutType: random

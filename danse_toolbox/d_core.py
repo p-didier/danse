@@ -67,6 +67,8 @@ def danse_batch(
             # Filter updates and desired signal estimates event
             bdv.batch_update_broadcast_signals()
             bdv.batch_update(k)
+            bdv.batch_estimate(k)
+            bdv.i[k] += 1  # update DANSE iteration counter
 
     # Profilin
     if not is_interactive():

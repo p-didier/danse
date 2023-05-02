@@ -485,6 +485,14 @@ class BatchDANSEoutputs(DANSEparameters):
         """
 
         self.filters: list[np.ndarray] = bdv.wTilde
+        if self.computeCentralised:
+            self.filtersCentr: list[np.ndarray] = bdv.wCentr
+        if self.computeLocal:
+            self.filtersLocal: list[np.ndarray] = bdv.wLocal
+
+        self.desiredSigEstimates = np.array(bdv.dHat)
+        self.desiredSigEstCentr = np.array(bdv.dHatCentr)
+        self.desiredSigs = np.array([x[:, np.newaxis] for x in bdv.d])
 
         # Show initialised status
         self.initialised = True
@@ -497,8 +505,30 @@ class BatchDANSEoutputs(DANSEparameters):
             return ValueError('The DANSEoutputs object is empty.')
         
     def plot_filters_evol(self):
-        """Plot filters evolution through time."""
+        """Plot filters evolution through time, at each node in the network."""
         self.check_init()
+        
+        def _plot_single_set_filters(ax, f, ls, lab):
+            """
+            Plots a single set of filters.
+
+            Parameters
+            ----------
+            ax : matplotlib.axes.Axes
+                Axes on which to plot.
+            f : np.ndarray
+                Filters to plot.
+            ls : str
+                Line style for plot.
+            lab : str
+                Label for plot legend.
+            """
+            for m in range(f.shape[0]):
+                ax.plot(
+                    f[m, :],
+                    f'{ls}C{m}',
+                    label=f'{lab} coeff. {m + 1}/{f.shape[0]}'
+                )
 
         nNodes = len(self.filters)
         figs = []
@@ -510,12 +540,10 @@ class BatchDANSEoutputs(DANSEparameters):
         for k in range(nNodes):
             fig, axes = plt.subplots(1,1)
             fig.set_size_inches(8.5, 3.5)
-            for m in range(self.filters[k].shape[0]):
-                axes.plot(
-                    self.filters[k][m, :],
-                    '.-',
-                    label=f'Coeff. {m + 1}/{self.filters[k].shape[0]}'
-                )
+            _plot_single_set_filters(axes, self.filters[k], '.-', 'DANSE')
+            if self.computeCentralised:
+                _plot_single_set_filters(axes, self.filtersCentr[k], '--', 'Centr.')
+            # _plot_single_set_filters(axes, self.filtersLocal[k], ':', 'Local')
             axes.set_title(f'Filters at node {k + 1}')
             axes.set_xlabel('DANSE iteration $i$')
             axes.set_ylabel('Coefficients')
@@ -528,7 +556,35 @@ class BatchDANSEoutputs(DANSEparameters):
             fig.tight_layout()
             figs.append(fig)
         return figs
+    
+    def plot_mmse_perf(self):
+        """
+        Plot the MMSE cost as a function of DANSE iterations for the batch
+        DANSE algorithm, at each node in the network.
+        """
+        # Compute MMSE cost
+        mmse = np.mean(
+            np.abs(self.desiredSigs - self.desiredSigEstimates) ** 2, axis=1
+        )
+        mmseCentr = np.mean(
+            np.abs(self.desiredSigs - self.desiredSigEstCentr) ** 2, axis=1
+        )
 
+        fig, axes = plt.subplots(1,1)
+        fig.set_size_inches(8.5, 3.5)
+        for m in range(mmse.shape[0]):
+            axes.plot(mmse[m, :], f'.-C{m}', label=f'Node {m + 1}')
+            axes.plot(mmseCentr[m, :], f'.--C{m}', label=f'Node {m + 1} (centr.)')
+        axes.set_xlabel('DANSE iteration $i$')
+        axes.set_ylabel('MMSE cost')
+        axes.set_xticks(axes.get_xticks())
+        axes.set_xticklabels([int(i) for i in axes.get_xticks()])
+        axes.set_xlim([0, mmse.shape[1]])
+        axes.legend()
+        axes.grid()
+        plt.tight_layout()	
+        plt.show()
+        stop = 1
 
 def compute_metrics(
         out: DANSEoutputs,
@@ -1838,6 +1894,12 @@ def export_batch_danse_outputs(
     """
         
     if not p.exportParams.bypassAllExports:
-        out.plot_filters_evol()
+        # out.plot_filters_evol()  # TODO: figure out whether this is useful or not
+
+        out.plot_mmse_perf()
+
+        # TODO: plot waveforms and spectrograms
+        raise NotImplementedError
+        out.plot_sigs()  
 
     return out
