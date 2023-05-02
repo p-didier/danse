@@ -2,8 +2,18 @@
 #
 # ~created on 19.10.2022 by Paul Didier
 
-# General TODO:'s
-# -- Allow computation of local and centralised estimates
+# References 
+# ----------
+# [1] A. Bertrand and M. Moonen, "Distributed Adaptive Node-Specific Signal
+# Estimation in Fully Connected Sensor Networks—Part I: Sequential Node
+# Updating," in IEEE Transactions on Signal Processing, vol. 58, no. 10,
+# pp. 5277-5291, Oct. 2010, doi: 10.1109/TSP.2010.2052612.
+#
+# [2] J. Szurley, A. Bertrand and M. Moonen, "Topology-Independent
+# Distributed Adaptive Node-Specific Signal Estimation in Wireless
+# Sensor Networks," in IEEE Transactions on Signal and Information
+# Processing over Networks, vol. 3, no. 1, pp. 130-144, March 2017,
+# doi: 10.1109/TSIPN.2016.2623095.
 
 import time, datetime
 from pyinstrument import Profiler
@@ -12,12 +22,110 @@ from danse_toolbox.d_sros import *
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_post import DANSEoutputs
 
+
+def danse_batch(
+    wasnObj: WASN,
+    p: base.DANSEparameters
+    ) -> tuple[DANSEoutputs, WASN]:
+    """
+    Fully connected batch-implementation DANSE main function.
+
+    Parameters
+    ----------
+    wasnObj : `WASN` object
+        WASN under consideration.
+    p : DANSEparameters object
+        Parameters.
+
+    Returns
+    -------
+    out : DANSEoutputs object
+        DANSE outputs.
+    wasnObj : `WASN` object
+        WASN under consideration, after batch DANSE.
+    """
+
+    # Initialize variables
+    dv = DANSEvariables()
+    dv.import_params(p)
+    dv.init_from_wasn(wasnObj.wasn)
+
+    # Compute events
+    eventInstants, fs, _ = base.initialize_events_batch(dv.timeInstants, p)
+
+    # Profiling
+    def is_interactive():
+        import __main__ as main
+        return not hasattr(main, '__file__')
+    if not is_interactive():
+        profiler = Profiler()
+        profiler.start()
+    t0 = time.perf_counter()    # timing
+
+    # Loop over event instants
+    for idxInstant in range(len(eventInstants)):
+
+        # Process events at current instant
+        events = eventInstants[idxInstant] 
+
+        # Parse event matrix and inform user (if asked)
+        base.events_parser(
+            events,
+            dv.startUpdates,
+            dv.printoutsAndPlotting.printout_eventsParser,
+            dv.printoutsAndPlotting.printout_eventsParserNoBC
+        )
+
+        for idxEventCurrInstant in range(events.nEvents):
+            k = events.nodes[idxEventCurrInstant]  # node index
+            # Broadcast event
+            if events.type[idxEventCurrInstant] == 'bc':
+                dv.broadcast(events.t, fs[k], k)
+            # Filter updates and desired signal estimates event
+            elif events.type[idxEventCurrInstant] == 'up':
+                dv.update_and_estimate(
+                    events.t,
+                    fs[k],
+                    k,
+                    events.bypassUpdate[idxEventCurrInstant]
+                )
+            else:
+                raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')
+
+    # Profiling
+    if not is_interactive():
+        profiler.stop()
+        if dv.printoutsAndPlotting.printout_profiler:
+            profiler.print()
+
+    print('\nSimultaneous DANSE processing all done.')
+    dur = time.perf_counter() - t0
+    print(f'{np.amax(dv.timeInstants)}s of signal processed in \
+        {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: \
+        {np.round(np.amax(dv.timeInstants) / dur, 4)})')
+
+    # Build output
+    out = DANSEoutputs()
+    out.import_params(p)
+    out.from_variables(dv)
+    # Update WASN object
+    for k in range(len(wasnObj.wasn)):
+        wasnObj.wasn[k].enhancedData = dv.d[:, k]
+        if dv.computeCentralised:
+            wasnObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
+        if dv.computeLocal:
+            wasnObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
+
+    return out, wasnObj
+
+
 def danse(
     wasnObj: WASN,
     p: base.DANSEparameters
-    ) -> tuple[DANSEoutputs, list[str]]:
+    ) -> tuple[DANSEoutputs, WASN]:
     """
-    Fully connected DANSE main function.
+    Fully connected online-implementation DANSE main function.
 
     Parameters
     ----------
@@ -32,13 +140,6 @@ def danse(
         DANSE outputs.
     wasnObj : `WASN` object
         WASN under consideration, after DANSE.
-
-    References
-    ----------
-    [1] A. Bertrand and M. Moonen, "Distributed Adaptive Node-Specific Signal
-    Estimation in Fully Connected Sensor Networks—Part I: Sequential Node
-    Updating," in IEEE Transactions on Signal Processing, vol. 58, no. 10,
-    pp. 5277-5291, Oct. 2010, doi: 10.1109/TSP.2010.2052612.
     """
 
     # Initialize variables
@@ -119,9 +220,9 @@ def danse(
 def tidanse(
     wasnObj: WASN,
     p: base.DANSEparameters
-    ) -> tuple[DANSEoutputs, list[str]]:
+    ) -> tuple[DANSEoutputs, WASN]:
     """
-    Topology-independent DANSE main function.
+    Topology-independent online-implementation DANSE main function.
 
     Parameters
     ----------
@@ -136,14 +237,6 @@ def tidanse(
         DANSE outputs.
     wasnObj : `WASN` object
         WASN under consideration, after DANSE.
-
-    References
-    ----------
-    [1] J. Szurley, A. Bertrand and M. Moonen, "Topology-Independent
-    Distributed Adaptive Node-Specific Signal Estimation in Wireless
-    Sensor Networks," in IEEE Transactions on Signal and Information
-    Processing over Networks, vol. 3, no. 1, pp. 130-144, March 2017,
-    doi: 10.1109/TSIPN.2016.2623095.
     """
 
     # Initialize TI-DANSE variables
@@ -260,7 +353,8 @@ def tidanse(
 
 def check_params(p: TestParameters, wasnObj: WASN):
     """
-    Checks test parameters and updates WASN object.
+    Checks that all test parameters are up to date and updates the WASN object
+    accordingly.
 
     Parameters
     ----------
