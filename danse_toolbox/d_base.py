@@ -194,7 +194,7 @@ class DANSEparameters(Hyperparameters):
         #   https://github.com/fgnt/asnsig).
     cohDrift: CohDriftParameters = CohDriftParameters()
     # ---- General
-    performGEVD: bool = True    # if True, perform GEVD
+    performGEVD: bool = False    # if True, perform GEVD
     GEVDrank: int = 1           # GEVD rank
     noExternalFilterRelaxation: bool = False  # if True, bypass external
         # filter updates.

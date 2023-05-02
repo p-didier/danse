@@ -97,7 +97,7 @@ class BatchDANSEvariables(base.DANSEparameters):
         Rnn = np.dot(self.yTilde_n[k].T.conj(), self.yTilde_n[k])
 
         if self.performGEVD:
-            pass  # TODO: implement
+            raise NotImplementedError
         else:
             # Reference sensor selection vector
             Evect = np.zeros(Ryy.shape[-1])

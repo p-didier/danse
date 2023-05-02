@@ -15,9 +15,10 @@ import matplotlib.pyplot as plt
 from danse_toolbox.d_eval import *
 from dataclasses import dataclass, fields
 import danse_toolbox.dataclass_methods as met
-from siggen.classes import Node, WASNparameters
+from siggen.classes import Node, WASNparameters, WASN
+from danse_toolbox.d_batch import BatchDANSEvariables
 from danse_toolbox.d_base import DANSEparameters, get_stft
-from danse_toolbox.d_classes import DANSEvariables, ConditionNumbers
+from danse_toolbox.d_classes import DANSEvariables, ConditionNumbers, TestParameters
 from siggen.utils import plot_asc_3d
 
 @dataclass
@@ -305,7 +306,6 @@ class DANSEoutputs(DANSEparameters):
 
         return None
 
-
     def plot_sro_perf(self, Ns, fs, xaxistype='both'):
         """
         Shows evolution of SRO estimates / residuals through time.
@@ -464,6 +464,70 @@ class DANSEoutputs(DANSEparameters):
         if exportFolder is not None:
             for k in range(len(figs)):
                 figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.png')
+
+
+@dataclass
+class BatchDANSEoutputs(DANSEparameters):
+    """
+    Dataclass to assemble all useful outputs
+    of the batch DANSE algorithm.
+    """
+    initialised : bool = False
+    # ^^^ turns to True when `self.from_variables()` is called
+    
+    def import_params(self, p: DANSEparameters):
+        self.__dict__.update(p.__dict__)
+    
+    def from_variables(self, bdv: BatchDANSEvariables):
+        """
+        Selects useful output values from `BatchDANSEvariables` object
+        after DANSE processing.
+        """
+
+        self.filters: list[np.ndarray] = bdv.wTilde
+
+        # Show initialised status
+        self.initialised = True
+
+        return self
+
+    def check_init(self):
+        """Check if object is correctly initialised."""
+        if not self.initialised:
+            return ValueError('The DANSEoutputs object is empty.')
+        
+    def plot_filters_evol(self):
+        """Plot filters evolution through time."""
+        self.check_init()
+
+        nNodes = len(self.filters)
+        figs = []
+        # Get yaxis limits
+        ymin = np.amin([np.amin(f) for f in self.filters])
+        ymax = np.amax([np.amax(f) for f in self.filters])
+        ymin = ymin - 0.1 * (ymax - ymin)  # 10% margin
+        ymax = ymax + 0.1 * (ymax - ymin)  # 10% margin
+        for k in range(nNodes):
+            fig, axes = plt.subplots(1,1)
+            fig.set_size_inches(8.5, 3.5)
+            for m in range(self.filters[k].shape[0]):
+                axes.plot(
+                    self.filters[k][m, :],
+                    '.-',
+                    label=f'Coeff. {m + 1}/{self.filters[k].shape[0]}'
+                )
+            axes.set_title(f'Filters at node {k + 1}')
+            axes.set_xlabel('DANSE iteration $i$')
+            axes.set_ylabel('Coefficients')
+            axes.set_xticks(axes.get_xticks())
+            axes.set_xticklabels([int(i) for i in axes.get_xticks()])
+            axes.set_xlim([0, len(self.filters[k][0, :])])
+            axes.set_ylim([ymin, ymax])
+            axes.legend()
+            axes.grid()
+            fig.tight_layout()
+            figs.append(fig)
+        return figs
 
 
 def compute_metrics(
@@ -1653,3 +1717,127 @@ def plot_filter_norms(
     figs = dict(figs)
     
     return figs, dataFigs
+
+
+def export_online_danse_outputs(
+        out: DANSEoutputs,
+        wasnObj: WASN,
+        room: pra.room.ShoeBox,
+        p: TestParameters
+    ):
+    """
+    Post-processing after an online DANSE run.
+
+    Parameters
+    ----------
+    out : `danse.danse_toolbox.d_post.DANSEoutputs` object
+        DANSE outputs (signals, etc.)
+    wasnObj : `WASN` object
+        WASN under consideration, after DANSE processing.
+    room : `pyroomacoustics.room.ShoeBox` object
+        Acoustic scenario under consideration.
+    p : `TestParameters` object
+        Test parameters.
+
+    Returns
+    -------
+    out : `danse.danse_toolbox.d_post.DANSEoutputs` object
+        DANSE outputs (signals, etc.), after post-processing.
+    """
+        
+    if not p.exportParams.bypassAllExports:
+        # Export filter coefficients norm plot
+        if p.exportParams.filterNormsPlot:
+            out.plot_filter_norms(
+                p.exportParams.exportFolder,
+                exportNormsAsPickle=p.exportParams.filterNorms  # boolean to export filter norms as pickle  
+            )
+
+        # Export condition number plot
+        if p.exportParams.conditionNumberPlot:
+            out.plot_cond(p.exportParams.exportFolder)
+
+        # Export convergence plot
+        if p.exportParams.convergencePlot:
+            out.plot_convergence(p.exportParams.exportFolder)
+
+        # Export .wav files
+        if p.exportParams.wavFiles:
+            out.export_sounds(wasnObj.wasn, p.exportParams.exportFolder)
+
+        # Plot (+ export) acoustic scenario (WASN)
+        if p.exportParams.acousticScenarioPlot:
+            plot_asc(
+                asc=room,
+                p=p.wasnParams,
+                folder=p.exportParams.exportFolder,
+                usedAdjacencyMatrix=wasnObj.adjacencyMatrix,
+                nodeTypes=[node.nodeType for node in wasnObj.wasn],
+                originalAdjacencyMatrix=p.wasnParams.topologyParams.userDefinedTopo
+            )
+
+        # Plot SRO estimation performance
+        if p.exportParams.sroEstimPerfPlot:
+            fig = out.plot_sro_perf(
+                Ns=p.danseParams.Ns,
+                fs=p.wasnParams.fs,
+                xaxistype='both'  # "both" == iterations & instants
+            )
+            fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.png')
+            fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.pdf')
+
+    # Compute performance metrics (+ export if needed)
+    if p.exportParams.metricsPlot:
+        if p.exportParams.bypassAllExports:
+            exportFolder = None
+        else:
+            exportFolder = p.exportParams.exportFolder
+            out.plot_perf(
+                wasnObj.wasn,
+                exportFolder,
+                p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots,
+                snrYlimMax=p.snrYlimMax,
+            )
+
+    if not p.exportParams.bypassAllExports:
+        # Plot signals at specific nodes (+ export)
+        if p.exportParams.waveformsAndSpectrograms:
+            out.plot_sigs(wasnObj.wasn, p.exportParams.exportFolder)
+
+        # Save `DANSEoutputs` object after metrics computation
+        if p.exportParams.danseOutputsFile:
+            out.save(foldername=p.exportParams.exportFolder, light=True)
+        # Save `TestParameters` object
+        if p.exportParams.parametersFile:
+            if p.loadedFromYaml:
+                p.save_yaml()   # save `TestParameters` object as YAML file
+            else:
+                p.save()    # save `TestParameters` object as Pickle archive
+
+    return out
+
+
+def export_batch_danse_outputs(
+        out: BatchDANSEoutputs,
+        p: TestParameters
+    ):
+    """
+    Post-processing after a batch DANSE run.
+
+    Parameters
+    ----------
+    out : `danse.danse_toolbox.d_post.BatchDANSEoutputs` object
+        Batch DANSE outputs.
+    p : `TestParameters` object
+        Test parameters.
+
+    Returns
+    -------
+    out : `danse.danse_toolbox.d_post.BatchDANSEoutputs` object
+        Batch DANSE outputs after post-processing.
+    """
+        
+    if not p.exportParams.bypassAllExports:
+        out.plot_filters_evol()
+
+    return out

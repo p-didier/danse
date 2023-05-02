@@ -1,0 +1,140 @@
+# Often-used
+seed: 12348
+#
+exportParams:
+  # Often-used
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230502_tests/tmp  # folder to export outputs
+  #
+  filterNormsPlot: true
+  conditionNumberPlot: True  # if True, condition number plot is exported
+  convergencePlot: True  # if True, convergence plot is exported
+  wavFiles: True  # if True, WAV files are exported
+  acousticScenarioPlot: True  # if True, acoustic scenario plot is exported
+  sroEstimPerfPlot: True  # if True, SRO estimation performance plot is exported
+  metricsPlot: True  # if True, metrics plot is exported
+  waveformsAndSpectrograms: True  # if True, waveforms and spectrograms are exported
+  # vvv Files (not plots)
+  danseOutputsFile: True  # if True, DANSE outputs are exported as a pickle file
+  parametersFile: True  # if True, parameters are exported as a pickle file or a YAML file
+  # vvv Global
+  bypassAllExports: False  # if True, all exports are bypassed
+danseParams:
+  # For debug
+  saveConditionNumber: true
+  saveConditionNumberEvery: 100  # [iterations]
+  performGEVD: false
+  # Often used
+  simType: batch  # 'batch' or 'online'
+  maxBatchUpdates: 20
+  #
+  DFTsize: 1024
+  # DFTsize: 2048
+  GEVDrank: 1
+  WOLAovlp: 0.5
+  alphaExternalFilters: 0.5
+  broadcastType: wholeChunk
+  bypassUpdates: false
+  cohDrift:
+    alpha: 0.95
+    alphaEps: 0.05
+    estEvery: 1
+    estimationMethod: gs
+    loop: open
+    segLength: 10
+    startAfterNups: 11
+  compensateSROs: false
+  computeCentralised: true
+  computeLocal: true
+  computeNoiseFree: false
+  covMatEyeInitScaling: 1.0
+  covMatInitType: fully_random
+  covMatRandomInitScaling: 2.220446049250313e-16
+  covMatSameInitForAllFreqs: true
+  covMatSameInitForAllNodes: true
+  desSigProcessingType: wola
+  dynMetrics:
+    chunkDuration: 1.0
+    chunkOverlap: 0.5
+    dynamicPESQ: false
+    dynamicSNR: false
+    dynamicSTOI: false
+    dynamicfwSNRseg: false
+  efficientSpSBC: true
+  estimateSROs: CohDrift
+  filterInitFixedValue: 1
+  filterInitType: selectFirstSensor_andFixedValue
+  frameLenfwSNRseg: 0.03
+  gammafwSNRseg: 0.2
+  minNoSpeechDurEndUterrance: 0.2
+  noExternalFilterRelaxation: false
+  nodeUpdating: asy
+  printout_eventsParser: true
+  printout_eventsParserNoBC: false
+  printout_externalFilterUpdate: true
+  printout_profiler: true
+  printoutsAndPlotting:
+    onlySNRandESTOIinPlots: true
+    showWASNs: false
+  seqUpdateStartNodeIdx: 1
+  # startComputeMetricsAt: beginning_2nd_utterance
+  # startComputeMetricsAt: beginning_1st_utterance
+  startComputeMetricsAt: after_beginning_2nd_utterance_200
+  t_expAvg50p: 10
+  timeBtwExternalFiltUpdates: 1
+  treeFormationAlgorithm: prim
+  upTDfilterEvery: 1.0
+  winWOLAanalysisType: sqrthann
+  winWOLAsynthesisType: sqrthann
+referenceSensor: 0
+snrYlimMax: null
+wasnParams:
+  # Often used
+  sigDur: 7  # [s]
+  selfnoiseSNR: 30  # [dB]
+  # layoutType: random_spinning_top
+  layoutType: random
+  spinTop_randomWiggleAmount: 0.25  # [m]
+  t60: 0.2  # [s]
+  # t60: 0.0  # [s]
+  SROperNode: '[0]'  # [PPM]
+  # SROperNode: '[0, 100, 200]'  # [PPM]
+  # SROperNode: '[0, 0, 200]'  # [PPM]
+  # SROperNode: '[0, 200, 200]'  # [PPM]
+  # SROperNode: '[200, 0, 0]'  # [PPM]
+  nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[3, 3, 3]'
+  # nSensorPerNode: '[1, 1, 1]'
+  interSensorDist: 0.05
+  # interSensorDist: 0.1
+  # interSensorDist: 0.15
+  # interSensorDist: 0.2
+  # interSensorDist: 0.3
+  #
+  VADenergyDecrease_dB: 35
+  VADwinLength: 0.04
+  arrayGeometry: grid3d
+  baseSNR: 5
+  desiredSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
+  fs: 16000
+  generateRandomWASNwithSeed: 0
+  lenRIR: 1024
+  loadFrom: ''
+  minDistToWalls: 0.5
+  nDesiredSources: 1
+  nNodes: 3
+  nNoiseSources: 1
+  noiseSignalFile:
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
+  rd: '[5, 5, 5]'  # compact way to write lists/arrays (as a string)
+  referenceSensor: 0
+  topologyParams:
+    # Often used
+    topologyType: fully-connected
+    #
+    commDistance: 4.0
+    plotTopo: false
+    seed: 12348
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

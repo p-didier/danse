@@ -167,7 +167,7 @@ class TestParameters:
         np.random.seed(self.seed)  # set random seed
         random.seed(self.seed)  # set random seed
         #
-        self.testid = f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60)*1e3}ms'
+        self.testid = self.get_id()
         # Check consistency
         if self.danseParams.nodeUpdating == 'sym' and\
             any(self.wasnParams.SROperNode != 0):
@@ -180,6 +180,9 @@ class TestParameters:
         if not self.exportParams.conditionNumberPlot:
             # If condition number plot is not exported, don't compute it
             self.danseParams.saveConditionNumber = False
+
+    def get_id(self):
+        return f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60 * 1e3)}ms'
 
     def save(self, exportType='pkl'):
         """Saves dataclass to Pickle archive."""
@@ -201,7 +204,9 @@ class TestParameters:
         """Loads dataclass from YAML file."""
         self.loadedFromYaml = True  # flag to indicate that the object was loaded from YAML
         self.originYaml = path  # path to YAML file
-        return met.load_from_yaml(path, self)
+        out = met.load_from_yaml(path, self)
+        out.__post_init__()  # re-initialize
+        return out
     
     def save_yaml(self):
         """Saves dataclass to YAML file."""

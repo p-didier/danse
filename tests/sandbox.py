@@ -1,6 +1,5 @@
 
 import sys
-import numpy as np
 from pathlib import Path
 from siggen.classes import *
 import siggen.utils as sig_ut
@@ -13,13 +12,21 @@ from danse_toolbox.d_utils import wipe_folder
 PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sandbox_config.yaml'
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
-def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
+def main(
+        p: TestParameters=None,
+        plotASCearly=False,
+        cfgFilename: str=''
+    ) -> pp.DANSEoutputs:
     """Main function.
     
     Parameters:
     -----------
     p: TestParameters
         Test parameters.
+    plotASCearly: bool
+        If True, plot the ASC before running DANSE.
+    cfgFilename: str
+        Path to the config file to use. If empty, use the default one.
 
     Returns:
     --------
@@ -29,7 +36,8 @@ def main(p: TestParameters=None, plotASCearly=False) -> pp.DANSEoutputs:
     if p is None:
         # Load parameters from config file
         print('Loading parameters...')
-        p = TestParameters().load_from_yaml(PATH_TO_CONFIG_FILE)
+        pathToCfg = cfgFilename if cfgFilename else PATH_TO_CONFIG_FILE
+        p = TestParameters().load_from_yaml(pathToCfg)
         p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
         print('Parameters loaded.')
     else:
@@ -92,7 +100,8 @@ def danse_it_up(
     # Launch DANSE
     if p.is_fully_connected_wasn():  # Fully connected WASN case
         if p.is_batch():    # Batch DANSE
-            out, wasnUpdated = core.danse_batch(wasnObj, p.danseParams)
+            out = core.danse_batch(wasnObj, p.danseParams)
+            wasnUpdated = None
         else:               # Online DANSE
             out, wasnUpdated = core.danse(wasnObj, p.danseParams)
     else:  # Ad-hoc WASN topology case
@@ -106,10 +115,10 @@ def danse_it_up(
 
 
 def postprocess(
-    out: pp.DANSEoutputs,
-    wasnObj: WASN,
-    room: pra.room.ShoeBox,
-    p: TestParameters
+        out: pp.DANSEoutputs,
+        wasnObj: WASN,
+        room: pra.room.ShoeBox,
+        p: TestParameters
     ) -> pp.DANSEoutputs:
     """
     Defines the post-processing steps to be undertaken after a DANSE run.
@@ -155,74 +164,16 @@ def postprocess(
             Path(p.exportParams.exportFolder).mkdir(parents=True)
 
     if runit:
-        if not p.exportParams.bypassAllExports:
-            # Export filter coefficients norm plot
-            if p.exportParams.filterNormsPlot:
-                out.plot_filter_norms(
-                    p.exportParams.exportFolder,
-                    exportNormsAsPickle=p.exportParams.filterNorms  # boolean to export filter norms as pickle  
-                )
-
-            # Export condition number plot
-            if p.exportParams.conditionNumberPlot:
-                out.plot_cond(p.exportParams.exportFolder)
-
-            # Export convergence plot
-            if p.exportParams.convergencePlot:
-                out.plot_convergence(p.exportParams.exportFolder)
-
-            # Export .wav files
-            if p.exportParams.wavFiles:
-                out.export_sounds(wasnObj.wasn, p.exportParams.exportFolder)
-
-            # Plot (+ export) acoustic scenario (WASN)
-            if p.exportParams.acousticScenarioPlot:
-                pp.plot_asc(
-                    asc=room,
-                    p=p.wasnParams,
-                    folder=p.exportParams.exportFolder,
-                    usedAdjacencyMatrix=wasnObj.adjacencyMatrix,
-                    nodeTypes=[node.nodeType for node in wasnObj.wasn],
-                    originalAdjacencyMatrix=p.wasnParams.topologyParams.userDefinedTopo
-                )
-
-            # Plot SRO estimation performance
-            if p.exportParams.sroEstimPerfPlot:
-                fig = out.plot_sro_perf(
-                    Ns=p.danseParams.Ns,
-                    fs=p.wasnParams.fs,
-                    xaxistype='both'  # "both" == iterations [-] _and_ instants [s]
-                )
-                fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.png')
-                fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.pdf')
-
-        # Compute performance metrics (+ export if needed)
-        if p.exportParams.metricsPlot:
-            if p.exportParams.bypassAllExports:
-                exportFolder = None
-            else:
-                exportFolder = p.exportParams.exportFolder
-                out.plot_perf(
-                    wasnObj.wasn,
-                    exportFolder,
-                    p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots,
-                    snrYlimMax=p.snrYlimMax,
-                )
-
-        if not p.exportParams.bypassAllExports:
-            # Plot signals at specific nodes (+ export)
-            if p.exportParams.waveformsAndSpectrograms:
-                out.plot_sigs(wasnObj.wasn, p.exportParams.exportFolder)
-
-            # Save `DANSEoutputs` object after metrics computation
-            if p.exportParams.danseOutputsFile:
-                out.save(foldername=p.exportParams.exportFolder, light=True)
-            # Save `TestParameters` object
-            if p.exportParams.parametersFile:
-                if p.loadedFromYaml:
-                    p.save_yaml()   # save `TestParameters` object as YAML file
-                else:
-                    p.save()    # save `TestParameters` object as Pickle archive
+        if p.danseParams.simType == 'online'\
+            and isinstance(out, pp.DANSEoutputs):
+            # Export online DANSE outputs
+            pp.export_online_danse_outputs(out, wasnObj, room, p)
+        elif p.danseParams.simType == 'batch'\
+            and isinstance(out, pp.BatchDANSEoutputs):
+            # Export batch DANSE outputs
+            pp.export_batch_danse_outputs(out, p)
+        else:
+            raise TypeError('Unexpected type for `out`.')
 
     return out
 

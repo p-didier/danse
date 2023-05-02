@@ -17,11 +17,11 @@
 
 import time, datetime
 from pyinstrument import Profiler
-import danse_toolbox.d_base as base
 from danse_toolbox.d_sros import *
+import danse_toolbox.d_base as base
 from danse_toolbox.d_classes import *
-from danse_toolbox.d_post import DANSEoutputs
 from danse_toolbox.d_batch import BatchDANSEvariables
+from danse_toolbox.d_post import DANSEoutputs, BatchDANSEoutputs
 
 
 def danse_batch(
@@ -42,8 +42,6 @@ def danse_batch(
     -------
     out : DANSEoutputs object
         DANSE outputs.
-    wasnObj : `WASN` object
-        WASN under consideration, after batch DANSE.
     """
 
     # Initialize variables
@@ -61,41 +59,32 @@ def danse_batch(
     t0 = time.perf_counter()
 
     # Perform batch DANSE
-    for _ in range(p.maxBatchUpdates):
+    for ii in range(p.maxBatchUpdates):
         # Inform user
         if bdv.printoutsAndPlotting.printout_batch_updates:
-            print(f'Batch update {_ + 1}/{p.maxBatchUpdates}...')
+            print(f'Batch update {ii + 1}/{p.maxBatchUpdates}...')
         for k in range(bdv.nNodes):
             # Filter updates and desired signal estimates event
             bdv.batch_update_broadcast_signals()
             bdv.batch_update(k)
 
-    # Profiling
+    # Profilin
     if not is_interactive():
         profiler.stop()
         if bdv.printoutsAndPlotting.printout_profiler:
             profiler.print()
 
-    print('\nSimultaneous DANSE processing all done.')
+    print('\nBatch DANSE processing all done.')
     dur = time.perf_counter() - t0
-    print(f'{np.amax(bdv.timeInstants)}s of signal processed in \
-        {str(datetime.timedelta(seconds=dur))}.')
-    print(f'(Real-time processing factor: \
-        {np.round(np.amax(bdv.timeInstants) / dur, 4)})')
+    print(f'{np.amax(bdv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: {np.round(np.amax(bdv.timeInstants) / dur, 4)})')
 
     # Build output
-    out = DANSEoutputs()
+    out = BatchDANSEoutputs()
     out.import_params(p)
     out.from_variables(bdv)
-    # Update WASN object
-    for k in range(len(wasnObj.wasn)):
-        wasnObj.wasn[k].enhancedData = bdv.d[:, k]
-        if bdv.computeCentralised:
-            wasnObj.wasn[k].enhancedData_c = bdv.dCentr[:, k]
-        if bdv.computeLocal:
-            wasnObj.wasn[k].enhancedData_l = bdv.dLocal[:, k]
 
-    return out, wasnObj
+    return out
 
 
 def danse(
@@ -175,10 +164,8 @@ def danse(
 
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0
-    print(f'{np.amax(dv.timeInstants)}s of signal processed in \
-        {str(datetime.timedelta(seconds=dur))}.')
-    print(f'(Real-time processing factor: \
-        {np.round(np.amax(dv.timeInstants) / dur, 4)})')
+    print(f'{np.amax(dv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: {np.round(np.amax(dv.timeInstants) / dur, 4)})')
 
     # Build output
     out = DANSEoutputs()
@@ -309,10 +296,8 @@ def tidanse(
             profiler.print()
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0
-    print(f'{np.amax(tidv.timeInstants)}s of signal processed in \
-        {str(datetime.timedelta(seconds=dur))}.')
-    print(f'(Real-time processing factor: \
-        {np.round(np.amax(tidv.timeInstants) / dur, 4)})')
+    print(f'{np.amax(tidv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: {np.round(np.amax(tidv.timeInstants) / dur, 4)})')
 
     # Build output
     out = DANSEoutputs()
