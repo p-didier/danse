@@ -156,8 +156,12 @@ class DANSEparameters(Hyperparameters):
     Processing over Networks, vol. 3, no. 1, pp. 130-144, March 2017,
     doi: 10.1109/TSIPN.2016.2623095.
     """
-    DFTsize: int = 1024    # DFT size
-    WOLAovlp: float = .5   # WOLA window overlap [*100%]
+    # --- General
+    simType: str = 'batch'  # simulation type ("batch" or "online")
+    DFTsize: int = 1024     # DFT size
+        # (used iff `simType == 'online'`)
+    WOLAovlp: float = .5    # WOLA window overlap [*100%]
+        # (used iff `simType == 'online'`)
     nodeUpdating: str = 'seq'   # node-updating strategy
         # - "seq": round-robin updating [1]
         # - "sim": simultaneous updating [2]
@@ -296,6 +300,8 @@ class DANSEparameters(Hyperparameters):
             # no differentiating between external and
             # internal filters (bypass-studies).
             self.timeBtwExternalFiltUpdates = 0.
+        if self.simType not in ['batch', 'online']:
+            raise ValueError(f'Unknown simulation type: {self.simType}. Valid values: ["batch", "online"].')
 
     def get_wasn_info(self, wasnParams: WASNparameters):
         """Adds useful info to DANSEparameters object from WASNparameters
@@ -371,10 +377,39 @@ def prep_sigs_for_FFT(y, N, Ns, t):
     return yout, tout, nadd
 
 
+def check_clock_jitter(timeInstants: np.ndarray, nNodes: int):
+    """
+    Check for clock jitter and save sampling frequencies.
+
+    Parameters
+    ----------
+    timeInstants : [Nt x nNodes] np.ndarray (floats)
+        Time instants corresponding to the samples of each of the `nNodes` nodes.
+    nNodes : int
+        Number of nodes.
+
+    Returns
+    -------
+    fs : [Nn x 1] np.ndarray[float]
+        Sampling frequency at each node [Hz].
+    """
+    fs = np.zeros(nNodes)
+    for k in range(nNodes):
+        deltas = np.diff(timeInstants[:, k])
+        # vvv Allowing computer precision errors down to 1e-4*mean delta.
+        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e6))))
+        if len(np.unique(np.round(deltas, precision))) > 1:
+            raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: {len(np.unique(np.round(deltas, precision)))} different sample intervals detected for node {k + 1}.')
+        # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.
+        fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)
+
+    return fs
+
+
 def initialize_events(
     timeInstants: np.ndarray,
     p: DANSEparameters,
-    wasnObj=WASN
+    wasnObj: WASN = WASN()
     ) -> tuple[list[DANSEeventInstant], np.ndarray, list[WASN]]:
     """
     Returns the matrix the columns of which to loop over in SRO-affected
@@ -389,8 +424,8 @@ def initialize_events(
     p : DANSEparameters object
         Parameters.
     wasnObj : WASN class instance
-        WASN under consideration, state at WASN initialization (before any
-        pruning).
+        Only used for TI-DANSE: WASN under consideration, state at WASN
+        initialization (before any pruning to a tree topology).
 
     Returns
     -------
@@ -399,8 +434,8 @@ def initialize_events(
     fs : [Nn x 1] np.ndarray[float]
         Sampling frequency at each node [Hz].
     wasnObjList : list[WASN class instances]
-        List of the WASNs topologies that exist through the entire signal
-        duration.
+        Only used for TI-DANSE: List of the WASNs topologies that exist
+        through the entire signal duration.
     """
     
     # Make sure time stamps matrix is indeed a matrix, correctly oriented
@@ -416,24 +451,65 @@ def initialize_events(
     nNodes = timeInstants.shape[1]
 
     # Check for clock jitter and save sampling frequencies
-    fs = np.zeros(nNodes)
-    for k in range(nNodes):
-        deltas = np.diff(timeInstants[:, k])
-        # vvv Allowing computer precision errors down to 1e-4*mean delta.
-        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e6))))
-        if len(np.unique(np.round(deltas, precision))) > 1:
-            raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: {len(np.unique(np.round(deltas, precision)))} different sample intervals detected for node {k+1}.')
-        # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.
-        fs[k] = np.round(1 / np.unique(np.round(deltas, precision))[0], 3)
+    fs = check_clock_jitter(timeInstants, nNodes)
 
     # Check consistency
     if 'sim' in p.nodeUpdating and any(fs != fs[p.referenceSensor]):
-        raise ValueError('Simultaneous node-updating is impossible\
-            in the presence of SROs.')
+        raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
 
     # Total signal duration [s] per node (after truncation during sig. gen.).
     Ttot = timeInstants[-1, :]
 
+    # Prepare events matrix building
+    if p.simType == 'online':
+        prepOutput = prep_evmat_build_online(p, nNodes, wasnObj, fs, Ttot)
+    else:
+        raise ValueError(f'Unexpected `simType`: {p.simType} (should be "online" for online DANSE).')
+    
+    # Build event matrix
+    outputEvents = build_events_matrix(
+        up_t=prepOutput['upInstants'],
+        bc_t=prepOutput['bcInstants'],
+        nodeUpdating=p.nodeUpdating,
+        fuse_t=prepOutput['fuInstants'],
+        re_t=prepOutput['reInstants'],
+        tr_t=prepOutput['trInstantsArranged'],
+        leafToRootOrderings=prepOutput['leafToRootOrderings'],
+        firstUpdatingNode=p.seqUpdateStartNodeIdx
+    )
+
+    return outputEvents, fs, prepOutput['wasnObjList']
+
+
+def prep_evmat_build_online(
+        p: DANSEparameters,
+        nNodes: int,
+        wasnObj: WASN,
+        fs: np.ndarray,
+        Ttot: float
+    ):
+    """
+    Prepare for event matrix building in online DANSE.
+
+    Parameters
+    ----------
+    p : DANSEparameters object
+        Parameters.
+    nNodes : int
+        Number of nodes.
+    wasnObj : WASN class instance
+        Only used for TI-DANSE: WASN under consideration, state at WASN
+        initialization (before any pruning to a tree topology).
+    fs : [Nn x 1] np.ndarray[float]
+        Sampling frequency at each node [Hz].
+    Ttot : [Nn x 1] np.ndarray[float]
+        Total signal duration [s] per node (after truncation during sig. gen.).
+
+    Returns
+    -------
+    out : dict
+    """
+    
     # Expected number of DANSE update per node over total signal length
     numUpInTtot = np.floor(Ttot * fs / p.Ns)
     # Expected number of broadcasts per node over total signal length
@@ -541,20 +617,19 @@ def initialize_events(
                 ]
                 # ^ note that we start broadcasting sooner:
                 # when we have `L` samples, enough for linear convolution.
-    
-    # Build event matrix
-    outputEvents = build_events_matrix(
-        upInstants,
-        bcInstants,
-        p.nodeUpdating,
-        fuse_t=fuInstants,
-        re_t=reInstants,
-        tr_t=trInstantsArranged,
-        leafToRootOrderings=leafToRootOrderings,
-        firstUpdatingNode=p.seqUpdateStartNodeIdx
-    )
 
-    return outputEvents, fs, wasnObjList
+    # Create output dictionary
+    out = {
+        'upInstants': upInstants,
+        'fuInstants': fuInstants,
+        'bcInstants': bcInstants,
+        'reInstants': reInstants,
+        'trInstantsArranged': trInstantsArranged,
+        'leafToRootOrderings': leafToRootOrderings,
+        'wasnObjList': wasnObjList
+    }
+
+    return out
 
 
 def get_sequential_update_instants(
