@@ -86,7 +86,7 @@ def danse_batch(
     out.import_params(p)
     out.from_variables(bdv)
 
-    return out
+    return out, wasnObj
 
 
 def danse(

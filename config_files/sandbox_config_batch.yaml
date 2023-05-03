@@ -1,7 +1,7 @@
 seed: 12348
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230502_tests/tmp_batch  # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230503_tests/tmp_batch  # folder to export outputs
 danseParams:
   simType: batch  # 'batch' or 'online'
   maxBatchUpdates: 20
@@ -10,7 +10,7 @@ danseParams:
   computeLocal: true
   computeCentralised: true
 wasnParams:
-  sigDur: 7  # [s]
+  sigDur: 10  # [s]
   selfnoiseSNR: 30  # [dB]
   layoutType: random
   t60: 0.2  # [s]

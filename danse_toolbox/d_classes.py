@@ -137,6 +137,7 @@ class ExportParameters:
     sroEstimPerfPlot: bool = True  # if True, SRO estimation performance plot is exported
     metricsPlot: bool = True  # if True, metrics plot is exported
     waveformsAndSpectrograms: bool = True  # if True, waveforms and spectrograms are exported
+    mmsePerfPlot: bool = True  # if True, MMSE performance plot is exported (only used in batch mode)
     # vvv Files (not plots)
     danseOutputsFile: bool = True  # if True, DANSE outputs are exported as a pickle file
     parametersFile: bool = True  # if True, parameters are exported as a pickle file or a YAML file

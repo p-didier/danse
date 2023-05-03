@@ -22,6 +22,7 @@ class BatchDANSEvariables(base.DANSEparameters):
         for k in range(self.nNodes):
             t[:, k] = wasn[k].timeStamps
         self.timeInstants = t
+        self.fs = [wasn[k].fs for k in range(self.nNodes)]  # sampling frequencies
 
         self.yLocal = [node.data for node in wasn]  # local time-domain signals
         self.yLocal_s = [node.cleanspeech for node in wasn]  # speech only

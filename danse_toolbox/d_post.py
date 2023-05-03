@@ -490,9 +490,15 @@ class BatchDANSEoutputs(DANSEparameters):
         if self.computeLocal:
             self.filtersLocal: list[np.ndarray] = bdv.wLocal
 
-        self.desiredSigEstimates = np.array(bdv.dHat)
-        self.desiredSigEstCentr = np.array(bdv.dHatCentr)
-        self.desiredSigs = np.array([x[:, np.newaxis] for x in bdv.d])
+        self.TDdesiredSignals_est = np.array(bdv.dHat)
+        self.TDdesiredSignals_est_c = np.array(bdv.dHatCentr)
+        self.TDdesiredSignals_est_l = np.array(bdv.dHatLocal)
+        self.TDdesiredSignals = np.array([x[:, np.newaxis] for x in bdv.d])
+        self.noisySigs = np.array([
+            bdv.yLocal[k][:, self.referenceSensor] for k in range(self.nNodes)
+        ]).T
+
+        self.fs: list[float] = bdv.fs
 
         # Show initialised status
         self.initialised = True
@@ -503,6 +509,11 @@ class BatchDANSEoutputs(DANSEparameters):
         """Check if object is correctly initialised."""
         if not self.initialised:
             return ValueError('The DANSEoutputs object is empty.')
+        
+    def export_sounds(self, wasn, exportFolder):
+        """Export sounds to .wav files."""
+        self.check_init()  # check if object is correctly initialised
+        export_sounds(self, wasn, exportFolder)
         
     def plot_filters_evol(self):
         """Plot filters evolution through time, at each node in the network."""
@@ -564,10 +575,10 @@ class BatchDANSEoutputs(DANSEparameters):
         """
         # Compute MMSE cost
         mmse = np.mean(
-            np.abs(self.desiredSigs - self.desiredSigEstimates) ** 2, axis=1
+            np.abs(self.TDdesiredSignals - self.TDdesiredSignals_est) ** 2, axis=1
         )
         mmseCentr = np.mean(
-            np.abs(self.desiredSigs - self.desiredSigEstCentr) ** 2, axis=1
+            np.abs(self.TDdesiredSignals - self.TDdesiredSignals_est_c) ** 2, axis=1
         )
 
         fig, axes = plt.subplots(1,1)
@@ -582,9 +593,79 @@ class BatchDANSEoutputs(DANSEparameters):
         axes.set_xlim([0, mmse.shape[1]])
         axes.legend()
         axes.grid()
-        plt.tight_layout()	
-        plt.show()
-        stop = 1
+        plt.tight_layout()
+
+        return fig
+    
+    def plot_sigs(self, win=np.sqrt(np.hanning(1024)), ovlp=0.5):
+        """
+        Plot time-domain signals, at each node in the network.
+
+        Parameters
+        ----------
+        win : np.ndarray
+            Windowing function to apply to the signals before plotting.
+        ovlp : float
+            Overlap between windows.
+
+        Returns
+        -------
+        figs : list[matplotlib.figure.Figure]
+            List of figures, one per node.
+        """
+
+        nNodes = len(self.filters)  # Number of nodes in the network
+        
+        figs = []
+        # Plot per node
+        for k in range(nNodes):
+
+            # Common parameters (to be unpacked)
+            com = (self.fs[k], win, ovlp)
+            
+            # Get STFTs
+            d_k, f, t = get_stft(self.TDdesiredSignals[k, :, -1], *com)
+            dHat_k, _, _ = get_stft(self.TDdesiredSignals_est[k, :, -1], *com)
+            dHatCentr_k, _, _ = get_stft(self.TDdesiredSignals_est_c[k, :, -1], *com)
+            y_k, _, _ = get_stft(self.noisySigs[:, k], *com)
+
+            # Get color bar limits
+            limLow = 20 * np.log10(np.amin([
+                np.amin(np.abs(d_k)),
+                np.amin(np.abs(dHat_k)),
+                np.amin(np.abs(dHatCentr_k)),
+                np.amin(np.abs(y_k))
+            ]))
+            limHigh = 20 * np.log10(np.amax([
+                np.amax(np.abs(d_k)),
+                np.amax(np.abs(dHat_k)),
+                np.amax(np.abs(dHatCentr_k)),
+                np.amax(np.abs(y_k))
+            ]))
+
+            fig, axes = plt.subplots(2, 2)
+            fig.set_size_inches(8.5, 3.5)
+            stft_subplot(
+                axes[0, 0], t, f, 20 * np.log10(np.abs(np.squeeze(y_k))),
+                [limLow, limHigh], 'Noisy signal'
+            )
+            stft_subplot(
+                axes[0, 1], t, f, 20 * np.log10(np.abs(np.squeeze(d_k))),
+                [limLow, limHigh], 'Desired signal'
+            )
+            stft_subplot(
+                axes[1, 0], t, f, 20 * np.log10(np.abs(np.squeeze(dHat_k))),
+                [limLow, limHigh], 'DANSE estimate'
+            )
+            stft_subplot(
+                axes[1, 1], t, f, 20 * np.log10(np.abs(np.squeeze(dHatCentr_k))),
+                [limLow, limHigh], 'Centralized estimate'
+            )
+            fig.tight_layout()
+            figs.append(fig) 
+
+        return figs
+
 
 def compute_metrics(
         out: DANSEoutputs,
@@ -1670,8 +1751,12 @@ def plot_filter_norms(
         nSubplots += 1
     
     # Compute y-axis limits
-    maxNorm = np.amax([np.amax(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters])
-    minNorm = np.amin([np.amin(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters])
+    maxNorm = np.amax(
+        [np.amax(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters]
+    )
+    minNorm = np.amin(
+        [np.amin(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters]
+    )
 
     def _format_axes(myAx, ti, maxNorm, minNorm):
         """Format axes."""
@@ -1693,9 +1778,13 @@ def plot_filter_norms(
         myAx.grid(True)
 
     # Useful sensor to node index reference
-    sensorToNodeIndices = [[ii for _ in range(Mk)] for ii, Mk in enumerate(nSensorsPerNode)]
+    sensorToNodeIndices = [
+        [ii for _ in range(Mk)] for ii, Mk in enumerate(nSensorsPerNode)
+    ]
     # Flatten list
-    sensorToNodeIndices = [item for sublist in sensorToNodeIndices for item in sublist]
+    sensorToNodeIndices = [
+        item for sublist in sensorToNodeIndices for item in sublist
+    ]
 
     # Make one plot per node
     figs = []
@@ -1875,6 +1964,7 @@ def export_online_danse_outputs(
 
 def export_batch_danse_outputs(
         out: BatchDANSEoutputs,
+        wasnObj: WASN,
         p: TestParameters
     ):
     """
@@ -1884,6 +1974,8 @@ def export_batch_danse_outputs(
     ----------
     out : `danse.danse_toolbox.d_post.BatchDANSEoutputs` object
         Batch DANSE outputs.
+    wasnObj : `WASN` object
+        WASN under consideration, after DANSE processing.
     p : `TestParameters` object
         Test parameters.
 
@@ -1896,10 +1988,19 @@ def export_batch_danse_outputs(
     if not p.exportParams.bypassAllExports:
         # out.plot_filters_evol()  # TODO: figure out whether this is useful or not
 
-        out.plot_mmse_perf()
+        if p.exportParams.mmsePerfPlot:
+            fig = out.plot_mmse_perf()
+            fig.savefig(f'{p.exportParams.exportFolder}/mmseEvolution.png', dpi=300)
+            fig.savefig(f'{p.exportParams.exportFolder}/mmseEvolution.pdf')
 
-        # TODO: plot waveforms and spectrograms
-        raise NotImplementedError
-        out.plot_sigs()  
+        # Plot waveforms and spectrograms
+        if p.exportParams.waveformsAndSpectrograms:
+            figs = out.plot_sigs()
+            for k, fig in enumerate(figs):
+                fig.savefig(f'{p.exportParams.exportFolder}/waveforms_node{k + 1}.png', dpi=300)
+
+        # Export .wav files
+        if p.exportParams.wavFiles:
+            out.export_sounds(wasnObj.wasn, p.exportParams.exportFolder)
 
     return out
