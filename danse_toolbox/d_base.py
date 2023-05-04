@@ -1453,9 +1453,7 @@ def fill_buffers_td_few_samples(k, neighs, zBuffer, zLocalK, L):
 def events_parser(
         events: DANSEeventInstant,
         startUpdates,
-        printouts=False,
-        doNotPrintBCs=False,
-        nodeUpdating='seq'
+        p: DANSEparameters
     ):
     """
     Printouts to inform user of DANSE events.
@@ -1467,23 +1465,14 @@ def events_parser(
         `get_events_matrix` function.
     startUpdates : list of bools
         Node-specific flags to indicate whether DANSE updates have started. 
-    printouts : bool
-        If True, inform user about current events after parsing. 
-    doNotPrintBCs : bool
-        If True, do not print the broadcast events
-        (only used if `printouts == True`).
-    nodeUpdating : str
-        Type of node updating.
-            If 'seq', nodes are updated sequentially. 
-            If 'sim', nodes are updated simultaneously 
-            ('sim' only valid if there is no SRO in the WASN).
-            If 'asy', nodes are updated asynchronously.
+    p : `DANSEparameters` object
+        DANSE parameters.
     """
-    if printouts:
+    if p.printoutsAndPlotting.printout_eventsParser:
         if 'up' in events.type:
-            txt = f't={np.round(events.t, 3):.3f}s [{nodeUpdating}] -- '
+            txt = f'[{p.simType}] [{p.nodeUpdating}] t={np.round(events.t, 3):.3f}s -- '
             updatesTxt = 'Updating nodes: '
-            if doNotPrintBCs:
+            if p.printoutsAndPlotting.printout_eventsParserNoBC:
                 broadcastsTxt = ''
             else:
                 broadcastsTxt = 'Broadcasting nodes: '
@@ -1491,7 +1480,8 @@ def events_parser(
             flagCommaUpdating = False
             for idxEvent in range(len(events.type)):
                 k = int(events.nodes[idxEvent])   # node index
-                if events.type[idxEvent] == 'bc' and not doNotPrintBCs:
+                if events.type[idxEvent] == 'bc' and\
+                    not p.printoutsAndPlotting.printout_eventsParserNoBC:
                     if idxEvent > 0:
                         broadcastsTxt += ','
                     broadcastsTxt += f'{k + 1}'

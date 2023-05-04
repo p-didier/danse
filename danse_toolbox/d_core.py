@@ -69,13 +69,7 @@ def danse(
         events = eventInstants[idxInstant] 
 
         # Parse event matrix and inform user (if asked)
-        base.events_parser(
-            events,
-            dv.startUpdates,
-            dv.printoutsAndPlotting.printout_eventsParser,
-            dv.printoutsAndPlotting.printout_eventsParserNoBC,
-            nodeUpdating=p.nodeUpdating
-        )
+        base.events_parser(events, dv.startUpdates, p)
 
         for idxEventCurrInstant in range(events.nEvents):
             k = events.nodes[idxEventCurrInstant]  # node index
