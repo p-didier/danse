@@ -1,7 +1,7 @@
 seed: 12348
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230503_tests/tmp_batch  # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230503_tests/tmp_batch_wn  # folder to export outputs
 danseParams:
   simType: batch  # 'batch' or 'online'
   maxBatchUpdates: 20
@@ -21,9 +21,12 @@ wasnParams:
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
+  # noiseSignalFile:
+  # - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
+  # - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
   noiseSignalFile:
-  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
-  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/whitenoise_signal_1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/whitenoise_signal_2.wav
   rd: '[5, 5, 5]'  # compact way to write lists/arrays (as a string)
   topologyParams:
     topologyType: fully-connected
