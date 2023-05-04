@@ -482,10 +482,11 @@ def initialize_events(
     Ttot = timeInstants[-1, :]
 
     # Prepare events matrix building
-    if p.simType == 'online':
-        prepOutput = prep_evmat_build_online(p, nNodes, wasnObj, fs, Ttot)
-    else:
-        raise ValueError(f'Unexpected `simType`: {p.simType} (should be "online" for online DANSE).')
+    # TODO: cleanup line below
+    # if p.simType == 'online':
+    prepOutput = prep_evmat_build_online(p, nNodes, wasnObj, fs, Ttot)
+    # else:
+    #     raise ValueError(f'Unexpected `simType`: {p.simType} (should be "online" for online DANSE).')
     
     # Build event matrix
     outputEvents = build_events_matrix(
@@ -1256,11 +1257,6 @@ def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
     elif bd == 'wholeChunk':
         # `N - Ns` samples delay due to time-domain WOLA
         idxEnd = int(np.floor(np.round(t * fs, 5))) - (Ndft - Ns)
-    
-    # # FIXME: DEBUGGING ON 19.02.2023
-    # # FIXME: DEBUGGING ON 19.02.2023
-    # # FIXME: DEBUGGING ON 19.02.2023
-    # idxEnd = int(np.floor(np.round(t * fs, 5)))
 
     # vvv -- don't go into negative sample indices!
     idxBeg = np.amax([idxEnd - Ndft, 0])
@@ -2057,7 +2053,7 @@ def generate_graph_for_wasn(wasn: list[Node]) -> nx.Graph:
     return Gnx
 
 
-def get_stft(x, fs, win, ovlp):
+def get_stft(x, fs, win, ovlp, boundary='zeros'):
     """
     Derives time-domain signals' STFT representation
     given certain settings.
@@ -2072,6 +2068,8 @@ def get_stft(x, fs, win, ovlp):
         Analysis window.
     ovlp : float
         Amount of window overlap.
+    boundary : str
+        Boundary extension mode.
 
     Returns
     -------
@@ -2094,7 +2092,8 @@ def get_stft(x, fs, win, ovlp):
             window=win,
             nperseg=len(win),
             noverlap=int(ovlp * len(win)),
-            return_onesided=True
+            return_onesided=True,
+            boundary=boundary
         )
         if channel == 0:
             out = np.zeros(

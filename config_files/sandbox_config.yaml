@@ -1,19 +1,21 @@
 seed: 12348
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230504_tests/betas/betaSCM10_betaEXT10_TEXT0p25  # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230504_tests/batch/test2_asyNU_noGEVD # folder to export outputs
   onlySNRandESTOIinPlots: true
+  sroEstimPerfPlot: false
 danseParams:
   # For debug
   saveConditionNumber: true
   saveConditionNumberEvery: 100  # [iterations]
   performGEVD: true
   # Often used
-  simType: online  # 'batch' or 'online'
+  simType: batch  # 'batch' or 'online'
+  # simType: online  # 'batch' or 'online'
   nodeUpdating: asy
   # nodeUpdating: seq
   computeLocal: true
-  computeCentralised: true
+  computeCentralised: false
   #
   DFTsize: 1024
   # DFTsize: 2048
@@ -23,12 +25,12 @@ danseParams:
   t_expAvg50pExternalFilters: 10.
   timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
-    printout_profiler: false
+    printout_profiler: true
 referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Often used
-  sigDur: 15  # [s]
+  sigDur: 10  # [s]
   selfnoiseSNR: 30  # [dB]
   # layoutType: random_spinning_top
   layoutType: random

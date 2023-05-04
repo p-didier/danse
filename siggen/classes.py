@@ -191,7 +191,8 @@ class Node:
     neighborsIdx: list[int] = field(default_factory=list)
     downstreamNeighborsIdx: list[int] = field(default_factory=list)
     upstreamNeighborsIdx: list[int] = field(default_factory=list)
-    vad: np.ndarray = np.array([])
+    vad: np.ndarray = np.array([])          # VAD
+    vadPerFrame: np.ndarray = np.array([])  # VAD per frame
     beta: float = 1.    # exponential averaging (forgetting factor)
                         # for Ryy and Rnn updates at this node.
     betaWext: float = 1.    # exponential averaging (forgetting factor)
@@ -234,6 +235,8 @@ class WASN:
     leafToRootOrdering: list = field(default_factory=list)
         # ^ node ordering from leaf to root (elements can be `int`
         #   or `list[int]`).
+    vadPerFrameCentralized: np.ndarray = np.array([]) # centralized VAD
+        # ^ boolean array.
 
     def set_tree_root(self):
         """Sets the root of a tree-topology WASN."""
@@ -362,7 +365,6 @@ class WASN:
                     # 2nd utterance
                     durAfterMs = float(startComputeMetricsAt.split('_')[-1])
                     self.wasn[k].metricStartTime += durAfterMs / 1e3
-            
                 
     def orientate(self):
         """Orientate the tree-topology from leaves towards root."""
@@ -407,7 +409,6 @@ class WASN:
                 self.leafToRootOrdering.append(nextRootIndices)
         self.leafToRootOrdering.reverse()  # reverse to go from leaves to root
             
-
     def plot_me(self, ax=None, scatterSize=300):
         """
         Plots the WASN in 3D.
@@ -478,6 +479,30 @@ class WASN:
         ax.set_xlabel('$x$ [m]')
         ax.set_ylabel('$y$ [m]')
         ax.set_zlabel('$z$ [m]')
+    
+    def get_vad_per_frame(self, frameLen, frameShift):
+        """
+        Computes the VAD per frame for each node in the WASN.
+
+        Parameters
+        ----------
+        frameLen : int
+            Frame length [samples].
+        frameShift : int
+            Frame shift [samples].
+        """
+        for k in range(len(self.wasn)):  # for each node
+            vadCurrNode = self.wasn[k].vad
+            if len(vadCurrNode) == 0:
+                raise ValueError(f"Node {k} has no VAD.")
+            # Compute VAD per frame
+            vadPerFrame = np.zeros(len(vadCurrNode) // frameShift)
+            for ii in range(len(vadPerFrame)):
+                vadChunk = vadCurrNode[ii*frameShift:ii*frameShift+frameLen]
+                # VAD is 1 if more than half of the frame is active
+                vadPerFrame[ii] = float(sum(vadChunk) >= len(vadChunk) // 2)
+            # Save VAD per frame into `Node` object in WASN
+            self.wasn[k].vadPerFrame = vadPerFrame.astype(bool)
 
 
 def draw_3d_arrow(ax, coords, arrowOrientation, color="tab:gray"):

@@ -1873,14 +1873,14 @@ def plot_filter_norms(
     return figs, dataFigs
 
 
-def export_online_danse_outputs(
+def export_danse_outputs(
         out: DANSEoutputs,
         wasnObj: WASN,
         room: pra.room.ShoeBox,
         p: TestParameters
     ):
     """
-    Post-processing after an online DANSE run.
+    Post-processing after a DANSE run.
 
     Parameters
     ----------
@@ -1908,7 +1908,8 @@ def export_online_danse_outputs(
             )
 
         # Export condition number plot
-        if p.exportParams.conditionNumberPlot:
+        if p.exportParams.conditionNumberPlot\
+            and p.danseParams.simType == 'online':
             out.plot_cond(p.exportParams.exportFolder)
 
         # Export convergence plot

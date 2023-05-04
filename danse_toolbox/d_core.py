@@ -244,7 +244,7 @@ def tidanse(
     return out, wasnObj
 
 
-def check_params(p: TestParameters, wasnObj: WASN):
+def prep_for_danse(p: TestParameters, wasnObj: WASN):
     """
     Checks that all test parameters are up to date and updates the WASN object
     accordingly.
@@ -308,6 +308,12 @@ def check_params(p: TestParameters, wasnObj: WASN):
         )
         # Update WASN info in DANSE parameters
         p.danseParams.get_wasn_info(p.wasnParams)
+
+    # Compute VAD per STFT frame for each node
+    wasnObj.get_vad_per_frame(
+        frameLen=p.danseParams.DFTsize,
+        frameShift=p.danseParams.Ns
+    )
 
     return p, wasnObj
 

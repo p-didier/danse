@@ -183,6 +183,16 @@ class TestParameters:
         if not self.exportParams.conditionNumberPlot:
             # If condition number plot is not exported, don't compute it
             self.danseParams.saveConditionNumber = False
+        # Check if batch mode is possible
+        if self.danseParams.simType == 'batch' and\
+            any(self.wasnParams.SROperNode != 0):
+            ui = input('Batch mode not supported in the presence of SROs. Run online? [y/n]  ')
+            while ui not in ['y', 'n']:
+                ui = input(f'Invalid input "{ui}". Try again. Run online? [y/n]  ')
+            if ui == 'y':
+                self.danseParams.simType = 'online'
+            else:
+                raise ValueError('Batch mode not supported in the presence of SROs. Aborting.')
 
     def get_id(self):
         return f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60 * 1e3)}ms'
@@ -513,7 +523,7 @@ class DANSEvariables(base.DANSEparameters):
         self.nLocalMic = [node.data.shape[-1] for node in wasn]
         self.numUpdatesRyy = np.zeros(nNodes, dtype=int)
         self.numUpdatesRnn = np.zeros(nNodes, dtype=int)
-        self.oVADframes = [np.zeros(self.nIter) for _ in range(nNodes)]
+        self.oVADframes = [node.vadPerFrame for node in wasn]
         self.centrVADframes = np.full(self.nIter, fill_value=None)
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
@@ -587,6 +597,44 @@ class DANSEvariables(base.DANSEparameters):
             tuple([x for x in self.cleanNoiseSignalsAtNodes]),
             axis=-1
         )
+
+        # Variables only useful for batch mode
+        if self.simType == 'batch':
+            # Compute STFTs of microphone signals
+            self.yinSTFT = []
+            for k in range(nNodes):
+                self.yinSTFT.append(base.get_stft(
+                    x=self.yin[k],
+                    fs=wasn[k].fs,
+                    win=self.winWOLAanalysis,
+                    ovlp=self.Ns / self.DFTsize,
+                    boundary=None  # no padding to center frames at t=0s!
+                )[0])
+            # Compute centralized STFT
+            yCentrBatch = np.empty_like(self.yinSTFT[0])
+            for k in range(self.nNodes):
+                yCentrBatch = np.concatenate(
+                    (yCentrBatch, self.yinSTFT[k]),
+                    axis=2
+                )
+            # Compute the centralized VAD per frame - average of all nodes
+            # (active if at least 1 node is active)
+            vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
+            for k in range(len(wasn)):
+                vadPerFrameCentr += wasn[k].vadPerFrame
+            vadPerFrameCentr /= len(wasn)
+            vadPerFrameCentr = vadPerFrameCentr.astype(bool)
+            # Compute batch spatial covariance matrices for local and
+            # centralized processing
+            for k in range(self.nNodes):
+                self.Ryylocal[k], self.Rnnlocal[k] = update_covmats_batch(
+                    self.yinSTFT[k],  # use local pre-computed STFTs
+                    self.oVADframes[k]
+                )
+                self.Ryycentr[k], self.Rnncentr[k] = update_covmats_batch(
+                    yCentrBatch,
+                    vadPerFrameCentr
+                )
 
         # For debugging purposes
         initCNlist = [np.empty((self.nPosFreqs, 0)) for _ in range(nNodes)]
@@ -799,7 +847,7 @@ class DANSEvariables(base.DANSEparameters):
             for _ in range(len(self.neighbors[k]))]  # - speech-only for SNR computation
         self.zBuffer_n[k] = [np.array([])\
             for _ in range(len(self.neighbors[k]))]  # - noise-only for SNR computation
-        # Construct `\tilde{y}_k` in frequency domain and VAD at current frame
+        # Construct `\tilde{y}_k` in frequency domain
         self.build_ytilde(tCurr, fs, k)
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
@@ -823,6 +871,7 @@ class DANSEvariables(base.DANSEparameters):
         
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
+        
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)
 
@@ -857,37 +906,41 @@ class DANSEvariables(base.DANSEparameters):
         # Update iteration index
         self.i[k] += 1
 
-    def compute_vad(self, k):
-        """
-        Computes the local VAD for the current frame at node `k`.
+    # def compute_vad(self, k):
+    #     """
+    #     Computes the local VAD for all frames at node `k`.
         
-        Parameters
-        ----------
-        k : int
-            Node index.
-        """
-        def _compute_vad_curr_nodes(k):
-            """Helper function -- compute current-frame VAD at node `k`."""
-            # Compute VAD
-            VADinFrame = self.fullVAD[k][
-                np.amax([self.idxBegChunk, 0]):self.idxEndChunk
-            ]
-            # If there is a majority of "VAD = 1" in the frame,
-            # set the frame-wise VAD to 1.
-            return sum(VADinFrame == 0) <= len(VADinFrame) // 2
-            
-        self.oVADframes[k][self.i[k]] = _compute_vad_curr_nodes(k)
-        # Count number of spatial covariance matrices updates
-        if self.oVADframes[k][self.i[k]]:
-            self.numUpdatesRyy[k] += 1
-        else:
-            self.numUpdatesRnn[k] += 1
+    #     Parameters
+    #     ----------
+    #     k : int
+    #         Node index.
+    #     """
+    #     def _compute_vad_curr_nodes(k):
+    #         """Helper function -- compute current-frame VAD at node `k`."""
+    #         # Compute VAD
+    #         VADinFrame = self.fullVAD[k][
+    #             np.amax([self.idxBegChunk, 0]):self.idxEndChunk
+    #         ]
+    #         # If there is a majority of "VAD = 1" in the frame,
+    #         # set the frame-wise VAD to 1.
+    #         return sum(VADinFrame == 0) <= len(VADinFrame) // 2
 
-        # If needed, compute centralised VAD
-        if self.computeCentralised and self.centrVADframes[self.i[k]] is None:
-            self.centrVADframes[self.i[k]] = np.array([
-                _compute_vad_curr_nodes(k) for k in range(self.nNodes)
-            ]).all()
+    #     # vvv -- don't go into negative sample indices!
+    #     idxBeg = np.amax([idxEnd - Ndft, 0])
+            
+    #     self.oVADframes[k][self.i[k]] = _compute_vad_curr_nodes(k)
+
+    #     # Count number of spatial covariance matrices updates
+    #     if self.oVADframes[k][self.i[k]]:
+    #         self.numUpdatesRyy[k] += 1
+    #     else:
+    #         self.numUpdatesRnn[k] += 1
+
+    #     # If needed, compute centralised VAD
+    #     if self.computeCentralised and self.centrVADframes[self.i[k]] is None:
+    #         self.centrVADframes[self.i[k]] = np.array([
+    #             _compute_vad_curr_nodes(k) for k in range(self.nNodes)
+    #         ]).all()
 
 
     def check_covariance_matrices(self, k, tCurr):
@@ -942,27 +995,31 @@ class DANSEvariables(base.DANSEparameters):
                 else:
                     self.startUpdates[k] = True
 
-        # Centralised estimate
-        if self.computeCentralised and not self.startUpdatesCentr[k]\
-            and tCurr >= self.startUpdatesAfterAtLeast:
-            if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
-                self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
-                if self.performGEVD:
-                    if _check_validity_gevd(self.Rnncentr[k], self.Ryycentr[k]):
+        if self.simType == 'online':
+            # Centralised estimate
+            if self.computeCentralised and not self.startUpdatesCentr[k]\
+                and tCurr >= self.startUpdatesAfterAtLeast:
+                if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
+                    self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
+                    if self.performGEVD:
+                        if _check_validity_gevd(self.Rnncentr[k], self.Ryycentr[k]):
+                            self.startUpdatesCentr[k] = True
+                    else:
                         self.startUpdatesCentr[k] = True
-                else:
-                    self.startUpdatesCentr[k] = True
 
-        # Local estimate
-        if self.computeLocal and not self.startUpdatesLocal[k]\
-            and tCurr >= self.startUpdatesAfterAtLeast:
-            if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
-                self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
-                if self.performGEVD:
-                    if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
+            # Local estimate
+            if self.computeLocal and not self.startUpdatesLocal[k]\
+                and tCurr >= self.startUpdatesAfterAtLeast:
+                if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
+                    self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
+                    if self.performGEVD:
+                        if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
+                            self.startUpdatesLocal[k] = True
+                    else:
                         self.startUpdatesLocal[k] = True
-                else:
-                    self.startUpdatesLocal[k] = True
+        elif self.simType == 'batch':  
+            self.startUpdatesCentr[k] = True
+            self.startUpdatesLocal[k] = True
 
 
     def build_ycentr(self, tCurr, fs, k):
@@ -1300,9 +1357,6 @@ class DANSEvariables(base.DANSEparameters):
             Ns=self.Ns
         )
 
-        # Compute VAD
-        self.compute_vad(k)
-
         # Build full available observation vector
         yTildeCurr = np.concatenate((yLocalCurr, self.z[k]), axis=1)
         yTildeCurr_s = np.concatenate((yLocalCurr_s, self.z_s[k]), axis=1)
@@ -1408,8 +1462,33 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
 
-        def _update_covmats(Ryy, Rnn, y, vad, beta=self.expAvgBeta[k]):
-            """Helper function to perform exponential averaging."""
+        def _update_covmats_online(Ryy, Rnn, y, vad, beta=self.expAvgBeta[k]):
+            """
+            Helper function to perform exponential averaging (online
+            spatial covariance matrix estimate, VAD-based).
+            
+            Parameters
+            ----------
+            Ryy : ndarray (nFreqs x nMics x nMics)
+                Current spatial covariance matrix estimate.
+            Rnn : ndarray (nFreqs x nMics x nMics)
+                Current noise covariance matrix estimate.
+            y : ndarray (nFreqs x nMics)
+                Current noisy signal.
+            vad : bool
+                Current VAD frame flag.
+            beta : float
+                Exponential averaging constant.
+
+            Returns
+            -------
+            Ryy : ndarray (nFreqs x nMics x nMics)
+                Updated spatial covariance matrix estimate.
+            Rnn : ndarray (nFreqs x nMics x nMics)
+                Updated noise covariance matrix estimate.
+            yyH : ndarray (nFreqs x nMics x nMics)
+                Current outer product.
+            """
             yyH = np.einsum('ij,ik->ijk', y, y.conj())  # outer product
             if vad:
                 Ryy = beta * Ryy + (1 - beta) * yyH
@@ -1417,19 +1496,33 @@ class DANSEvariables(base.DANSEparameters):
                 Rnn = beta * Rnn + (1 - beta) * yyH
             return Ryy, Rnn, yyH
 
+        # Count number of spatial covariance matrices updates
+        if self.oVADframes[k][self.i[k]]:
+            self.numUpdatesRyy[k] += 1
+        else:
+            self.numUpdatesRnn[k] += 1
+        
         # Perform DANSE covariance matrices udpates
-        self.Ryytilde[k], self.Rnntilde[k], self.yyH[k][self.i[k], :, :, :] =\
-            _update_covmats(
-            self.Ryytilde[k],
-            self.Rnntilde[k],
-            y=self.yTildeHat[k][:, self.i[k], :],
-            vad=self.oVADframes[k][self.i[k]]
-        )  # update
+        if self.simType == 'online':
+            self.Ryytilde[k], self.Rnntilde[k], self.yyH[k][self.i[k], :, :, :] =\
+                _update_covmats_online(
+                self.Ryytilde[k],
+                self.Rnntilde[k],
+                y=self.yTildeHat[k][:, self.i[k], :],
+                vad=self.oVADframes[k][self.i[k]]
+            )  # update
+        elif self.simType == 'batch':  # batch mode --> using entire signals
+            # Update covariance matrices
+            self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
+                self.get_y_tilde_batch(k),
+                self.oVADframes[k]
+            )
+        # Consider condition number
         if self.saveConditionNumber and\
             self.i[k] - self.lastCondNumberSaveRyyTilde[k] >=\
                 self.saveConditionNumberEvery:  # save condition number
             # Inform user
-            print('Computing condition numbers (Ryy matrices)...')
+            print('Computing condition numbers of DANSE Ryy...')
             self.condNumbers.get_new_cond_number(
                 k,
                 self.Ryytilde[k],
@@ -1439,16 +1532,19 @@ class DANSEvariables(base.DANSEparameters):
             self.lastCondNumberSaveRyyTilde[k] = self.i[k]
         
         # Consider local estimates
-        if self.computeLocal:
-            self.Ryylocal[k], self.Rnnlocal[k], _ = _update_covmats(
+        if self.computeLocal and self.simType == 'online':   
+            self.Ryylocal[k], self.Rnnlocal[k], _ = _update_covmats_online(
                 self.Ryylocal[k],
                 self.Rnnlocal[k],
                 y=self.yHatLocal[k][:, self.i[k], :],
                 vad=self.oVADframes[k][self.i[k]]
             )  # update local
+            # Consider condition number
             if self.saveConditionNumber and\
                 self.i[k] - self.lastCondNumberSaveRyyLocal[k] >=\
                     self.saveConditionNumberEvery:  # save condition number
+            # Inform user
+                print('Computing condition numbers of centralized Ryy...')
                 self.condNumbers.get_new_cond_number(
                     k,
                     self.Ryylocal[k],
@@ -1458,16 +1554,19 @@ class DANSEvariables(base.DANSEparameters):
                 self.lastCondNumberSaveRyyLocal[k] = self.i[k]
         
         # Consider centralised estimates
-        if self.computeCentralised:
-            self.Ryycentr[k], self.Rnncentr[k], _ = _update_covmats(
+        if self.computeCentralised and self.simType == 'online':
+            self.Ryycentr[k], self.Rnncentr[k], _ = _update_covmats_online(
                 self.Ryycentr[k],
                 self.Rnncentr[k],
                 y=self.yHatCentr[k][:, self.i[k], :],
                 vad=self.centrVADframes[self.i[k]]
             )  # update centralised
+            # Consider condition number
             if self.saveConditionNumber and\
                 self.i[k] - self.lastCondNumberSaveRyyCentr[k] >=\
                     self.saveConditionNumberEvery:  # save condition number
+                # Inform user
+                print('Computing condition numbers of local Ryy...')
                 self.condNumbers.get_new_cond_number(
                     k,
                     self.Ryycentr[k],
@@ -1475,6 +1574,28 @@ class DANSEvariables(base.DANSEparameters):
                     type='centralised'
                 )
                 self.lastCondNumberSaveRyyCentr[k] = self.i[k]
+
+    def get_y_tilde_batch(self, k):
+        """
+        Compute complete yTilde for all nodes, all frames, using
+        current DANSE filters.
+        """
+        # Compute batch fused signals using current DANSE filters
+        zBatch = np.zeros((
+            self.yinSTFT[k].shape[0],
+            self.yinSTFT[k].shape[1],
+            len(self.neighbors[k])
+        ), dtype=complex)
+        for idxq in range(len(self.neighbors[k])):
+            q = self.neighbors[k][idxq]
+            zBatch[:, :, idxq] = np.einsum(
+                'ij,ikj->ik',
+                self.wTilde[q][:, self.i[q], :self.nSensorPerNode[q]].conj(),
+                self.yinSTFT[q]
+            )
+        # Construct yTilde
+        yTildeBatch = np.concatenate((self.yinSTFT[k], zBatch), axis=-1)
+        return yTildeBatch
 
     def perform_update(self, k):
         """
@@ -2364,6 +2485,40 @@ class TIDANSEvariables(DANSEvariables):
             else:
                 self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
 
+
+def update_covmats_batch(yAllFrames, vadAllFrames):
+    """
+    Batch spatial covariance matrix estimate.
+    
+    Parameters
+    ----------
+    yAllFrames : ndarray (nFreqs x nMics x nFrames)
+        Current signal (e.g., noisy or noise-only).
+    vadAllFrames : ndarray (nFrames)
+        VAD flags for all frames.
+
+    Returns
+    -------
+    Ryy : ndarray (nFreqs x nMics x nMics)
+        Updated spatial covariance matrix estimate, averaged over
+        all time frames - noisy.
+    Rnn : ndarray (nFreqs x nMics x nMics)
+        Updated spatial covariance matrix estimate, averaged over
+        all time frames - noise-only.
+    """
+    Ryy = np.mean(np.einsum(
+        'ikj,ikl->ikjl',
+        yAllFrames[:, vadAllFrames.astype(bool), :],  # only VAD frames with both speech and noise
+        yAllFrames[:, vadAllFrames.astype(bool), :].conj()
+    ), axis=1)
+    Rnn = np.mean(np.einsum(
+        'ikj,ikl->ikjl',
+        yAllFrames[:, ~vadAllFrames.astype(bool), :],  # only VAD frames with only noise
+        yAllFrames[:, ~vadAllFrames.astype(bool), :].conj()
+    ), axis=1)
+    return Ryy, Rnn
+
+
 # --------------------------------------------------------------------------- #
 # Jitted functions
 # --------------------------------------------------------------------------- #
@@ -2389,3 +2544,4 @@ def jit_update_gevd_endbit(Xmat, sigma, Evect, nFreqs, n, GEVDrank):
     w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
 
     return w
+

@@ -74,8 +74,8 @@ def main(
             plot3Dview=True
         )
 
-    # Parameters check for DANSE
-    p, wasnObj = core.check_params(p, wasnObj)
+    # Parameters check and pre-DANSE computations
+    p, wasnObj = core.prep_for_danse(p, wasnObj)
     
     # DANSE
     print(f'Running DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
@@ -99,16 +99,16 @@ def danse_it_up(
     """
     # Launch DANSE
     if p.is_fully_connected_wasn():  # Fully connected WASN case
-        if p.is_batch():    # Batch DANSE
-            out, wasnUpdated = core.danse_batch(wasnObj, p.danseParams)
-        else:               # Online DANSE
-            out, wasnUpdated = core.danse(wasnObj, p.danseParams)
+        # if p.is_batch():    # Batch DANSE
+        #     out, wasnUpdated = core.danse_batch(wasnObj, p.danseParams)
+        # else:               # Online DANSE
+        out, wasnUpdated = core.danse(wasnObj, p.danseParams)
     else:  # Ad-hoc WASN topology case
-        if p.is_batch():    # Batch TI-DANSE
-            raise NotImplementedError('Batch TI-DANSE not implemented yet.')
-            out, wasnUpdated = core.tidanse_batch(wasnObj, p.danseParams)
-        else:               # Online TI-DANSE
-            out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
+        # if p.is_batch():    # Batch TI-DANSE
+        #     raise NotImplementedError('Batch TI-DANSE not implemented yet.')
+        #     out, wasnUpdated = core.tidanse_batch(wasnObj, p.danseParams)
+        # else:               # Online TI-DANSE
+        out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
 
     return out, wasnUpdated
 
@@ -163,16 +163,14 @@ def postprocess(
             Path(p.exportParams.exportFolder).mkdir(parents=True)
 
     if runit:
-        if p.danseParams.simType == 'online'\
-            and isinstance(out, pp.DANSEoutputs):
-            # Export online DANSE outputs
-            pp.export_online_danse_outputs(out, wasnObj, room, p)
-        elif p.danseParams.simType == 'batch'\
-            and isinstance(out, pp.BatchDANSEoutputs):
-            # Export batch DANSE outputs
-            pp.export_batch_danse_outputs(out, wasnObj, p)
-        else:
-            raise TypeError('Unexpected type for `out`.')
+        # if p.danseParams.simType == 'online':  # TODO: cleanup
+        #     # Export online DANSE outputs
+        pp.export_danse_outputs(out, wasnObj, room, p)
+        # elif p.danseParams.simType == 'batch':
+        #     # Export batch DANSE outputs
+        #     pp.export_batch_danse_outputs(out, wasnObj, p)
+        # else:
+        #     raise TypeError('Unexpected type for `out`.')
 
     return out
 
