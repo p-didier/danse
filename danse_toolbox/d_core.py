@@ -123,7 +123,7 @@ def danse(
     def is_interactive():
         import __main__ as main
         return not hasattr(main, '__file__')
-    if not is_interactive():
+    if not is_interactive() and dv.printoutsAndPlotting.printout_profiler:
         profiler = Profiler()
         profiler.start()
     t0 = time.perf_counter()    # timing
@@ -160,10 +160,9 @@ def danse(
                 raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')
 
     # Profiling
-    if not is_interactive():
+    if not is_interactive() and dv.printoutsAndPlotting.printout_profiler:
         profiler.stop()
-        if dv.printoutsAndPlotting.printout_profiler:
-            profiler.print()
+        profiler.print()
 
     print('\nSimultaneous DANSE processing all done.')
     dur = time.perf_counter() - t0
