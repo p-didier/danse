@@ -1408,21 +1408,21 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
 
-        def _update_covmats(Ryy, Rnn, yyH, vad, beta=self.expAvgBeta[k]):
+        def _update_covmats(Ryy, Rnn, y, vad, beta=self.expAvgBeta[k]):
             """Helper function to perform exponential averaging."""
+            yyH = np.einsum('ij,ik->ijk', y, y.conj())  # outer product
             if vad:
                 Ryy = beta * Ryy + (1 - beta) * yyH
             else:
                 Rnn = beta * Rnn + (1 - beta) * yyH
-            return Ryy, Rnn
+            return Ryy, Rnn, yyH
 
         # Perform DANSE covariance matrices udpates
-        y = self.yTildeHat[k][:, self.i[k], :]  # concise renaming
-        yyH = np.einsum('ij,ik->ijk', y, y.conj())  # outer product
-        self.Ryytilde[k], self.Rnntilde[k] = _update_covmats(
+        self.Ryytilde[k], self.Rnntilde[k], self.yyH[k][self.i[k], :, :, :] =\
+            _update_covmats(
             self.Ryytilde[k],
             self.Rnntilde[k],
-            yyH,
+            y=self.yTildeHat[k][:, self.i[k], :],
             vad=self.oVADframes[k][self.i[k]]
         )  # update
         if self.saveConditionNumber and\
@@ -1437,17 +1437,13 @@ class DANSEvariables(base.DANSEparameters):
                 type='DANSE'
             )
             self.lastCondNumberSaveRyyTilde[k] = self.i[k]
-
-        self.yyH[k][self.i[k], :, :, :] = yyH  # saving for SRO estimation
         
         # Consider local estimates
         if self.computeLocal:
-            y = self.yHatLocal[k][:, self.i[k], :]  # concise renaming
-            yyH = np.einsum('ij,ik->ijk', y, y.conj())
-            self.Ryylocal[k], self.Rnnlocal[k] = _update_covmats(
+            self.Ryylocal[k], self.Rnnlocal[k], _ = _update_covmats(
                 self.Ryylocal[k],
                 self.Rnnlocal[k],
-                yyH,
+                y=self.yHatLocal[k][:, self.i[k], :],
                 vad=self.oVADframes[k][self.i[k]]
             )  # update local
             if self.saveConditionNumber and\
@@ -1463,12 +1459,10 @@ class DANSEvariables(base.DANSEparameters):
         
         # Consider centralised estimates
         if self.computeCentralised:
-            y = self.yHatCentr[k][:, self.i[k], :]  # concise renaming
-            yyH = np.einsum('ij,ik->ijk', y, y.conj())
-            self.Ryycentr[k], self.Rnncentr[k] = _update_covmats(
+            self.Ryycentr[k], self.Rnncentr[k], _ = _update_covmats(
                 self.Ryycentr[k],
                 self.Rnncentr[k],
-                yyH,
+                y=self.yHatCentr[k][:, self.i[k], :],
                 vad=self.centrVADframes[self.i[k]]
             )  # update centralised
             if self.saveConditionNumber and\
