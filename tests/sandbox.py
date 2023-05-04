@@ -95,7 +95,7 @@ def danse_it_up(
     p: TestParameters
     ) -> tuple[pp.DANSEoutputs, WASN]:
     """
-    Container function for prepping signals and launching the DANSE algorithm.
+    Container function for pr epping signals and launching the DANSE algorithm.
     """
     # Launch DANSE
     if p.is_fully_connected_wasn():  # Fully connected WASN case

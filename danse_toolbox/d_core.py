@@ -23,72 +23,6 @@ from danse_toolbox.d_classes import *
 from danse_toolbox.d_batch import BatchDANSEvariables
 from danse_toolbox.d_post import DANSEoutputs, BatchDANSEoutputs
 
-
-def danse_batch(
-    wasnObj: WASN,
-    p: base.DANSEparameters
-    ) -> tuple[DANSEoutputs, WASN]:
-    """
-    Fully connected batch-implementation DANSE main function.
-
-    Parameters
-    ----------
-    wasnObj : `WASN` object
-        WASN under consideration.
-    p : DANSEparameters object
-        Parameters.
-
-    Returns
-    -------
-    out : DANSEoutputs object
-        DANSE outputs.
-    """
-
-    # Initialize variables
-    bdv = BatchDANSEvariables()  # batch!
-    bdv.import_params(p)
-    bdv.init_from_wasn(wasnObj.wasn)
-
-    # Profiling
-    def is_interactive():
-        import __main__ as main
-        return not hasattr(main, '__file__')
-    if not is_interactive():
-        profiler = Profiler()
-        profiler.start()
-    t0 = time.perf_counter()
-
-    # Perform batch DANSE
-    for ii in range(p.maxBatchUpdates):
-        # Inform user
-        if bdv.printoutsAndPlotting.printout_batch_updates:
-            print(f'Batch update {ii + 1}/{p.maxBatchUpdates}...')
-        for k in range(bdv.nNodes):
-            # Filter updates and desired signal estimates event
-            bdv.batch_update_broadcast_signals()
-            bdv.batch_update(k)
-            bdv.batch_estimate(k)
-            bdv.i[k] += 1  # update DANSE iteration counter
-
-    # Profilin
-    if not is_interactive():
-        profiler.stop()
-        if bdv.printoutsAndPlotting.printout_profiler:
-            profiler.print()
-
-    print('\nBatch DANSE processing all done.')
-    dur = time.perf_counter() - t0
-    print(f'{np.amax(bdv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
-    print(f'(Real-time processing factor: {np.round(np.amax(bdv.timeInstants) / dur, 4)})')
-
-    # Build output
-    out = BatchDANSEoutputs()
-    out.import_params(p)
-    out.from_variables(bdv)
-
-    return out, wasnObj
-
-
 def danse(
     wasnObj: WASN,
     p: base.DANSEparameters
@@ -382,3 +316,73 @@ def check_params(p: TestParameters, wasnObj: WASN):
         p.danseParams.get_wasn_info(p.wasnParams)
 
     return p, wasnObj
+
+
+def danse_batch_td(
+    wasnObj: WASN,
+    p: base.DANSEparameters
+    ) -> tuple[DANSEoutputs, WASN]:
+    """
+    Fully connected batch-implementation DANSE main function with time-domain
+    linear combination of signals (beamforming-ish).
+    2023.05.04: no longer used, replaced by `danse_batch` (STFT-domain).
+
+    Parameters
+    ----------
+    wasnObj : `WASN` object
+        WASN under consideration.
+    p : DANSEparameters object
+        Parameters.
+
+    Returns
+    -------
+    out : DANSEoutputs object
+        DANSE outputs.
+    """
+
+    return InterruptedError('This function is no longer used. Use `danse_batch` instead.')
+
+    # Initialize variables
+    bdv = BatchDANSEvariables()  # batch!
+    bdv.import_params(p)
+    bdv.init_from_wasn(wasnObj.wasn)
+
+    # Profiling
+    def is_interactive():
+        import __main__ as main
+        return not hasattr(main, '__file__')
+    if not is_interactive():
+        profiler = Profiler()
+        profiler.start()
+    t0 = time.perf_counter()
+
+    # Perform batch DANSE
+    for ii in range(p.maxBatchUpdates):
+        # Inform user
+        if bdv.printoutsAndPlotting.printout_batch_updates:
+            print(f'Batch update {ii + 1}/{p.maxBatchUpdates}...')
+        for k in range(bdv.nNodes):
+            # Filter updates and desired signal estimates event
+            bdv.batch_update_broadcast_signals()
+            bdv.batch_update(k)
+            bdv.batch_estimate(k)
+            bdv.i[k] += 1  # update DANSE iteration counter
+
+    # Profilin
+    if not is_interactive():
+        profiler.stop()
+        if bdv.printoutsAndPlotting.printout_profiler:
+            profiler.print()
+
+    print('\nBatch DANSE processing all done.')
+    dur = time.perf_counter() - t0
+    print(f'{np.amax(bdv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: {np.round(np.amax(bdv.timeInstants) / dur, 4)})')
+
+    # Build output
+    out = BatchDANSEoutputs()
+    out.import_params(p)
+    out.from_variables(bdv)
+
+    return out, wasnObj
+
