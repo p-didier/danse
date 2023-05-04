@@ -145,6 +145,8 @@ class ExportParameters:
     # vvv Global
     bypassAllExports: bool = False  # if True, all exports are bypassed
     exportFolder: str = ''  # folder to export outputs
+    onlySNRandESTOIinPlots: bool = False   # if True, only include the SNR and
+        # the eSTOI in the metrics plot.
 
 @dataclass
 class TestParameters:
@@ -496,6 +498,7 @@ class DANSEvariables(base.DANSEparameters):
         self.downstreamNeighbors = [node.downstreamNeighborsIdx\
                                     for node in wasn]
         self.expAvgBeta = [node.beta for node in wasn]
+        self.expAvgBetaWext = [node.betaWext for node in wasn]
         self.firstDANSEupdateRefSensor = None  # init
         self.flagIterations = [[] for _ in range(nNodes)]
         self.flagInstants = [[] for _ in range(nNodes)]
@@ -1042,8 +1045,8 @@ class DANSEvariables(base.DANSEparameters):
             # Simultaneous or asynchronous node-updating
             if 'seq' not in self.nodeUpdating:
                 # Relaxed external filter update
-                self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
-                    (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
+                self.wTildeExt[k] = self.expAvgBetaWext[k] * self.wTildeExt[k] +\
+                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
                 # Update targets
                 if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
                     self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
@@ -1052,7 +1055,7 @@ class DANSEvariables(base.DANSEparameters):
                     # Update last external filter update instant [s]
                     self.lastExtFiltUp[k] = t
                     if self.printoutsAndPlotting.printout_externalFilterUpdate:    # inform user
-                        print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
+                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
             else:
                 self.wTildeExt[k] =\

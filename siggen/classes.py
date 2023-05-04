@@ -193,7 +193,9 @@ class Node:
     upstreamNeighborsIdx: list[int] = field(default_factory=list)
     vad: np.ndarray = np.array([])
     beta: float = 1.    # exponential averaging (forgetting factor)
-                        # for Ryy and Rnn updates at this node
+                        # for Ryy and Rnn updates at this node.
+    betaWext: float = 1.    # exponential averaging (forgetting factor)
+                            # for wEXT updates from wEXTtarget at this node.
     # Geometrical parameters
     sensorPositions: np.ndarray = np.array([])  # coordinates of each sensor
     nodePosition: np.ndarray = np.array([])     # global node coordinates

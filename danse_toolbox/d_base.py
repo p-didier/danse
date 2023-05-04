@@ -105,8 +105,6 @@ class PrintoutsAndPlotting:
     showWASNs : bool = False    # if True, shows a 3-D plot of the WASN every
         # time the topology changes (e.g., when a new tree is formed, or a new
         # root is set, in TI-DANSE).
-    onlySNRandESTOIinPlots : bool = False   # if True, only include the SNR and
-        # the eSTOI in the metrics plot.
     # Printouts
     printout_batch_updates: bool = True     # controls printouts of batch
                                             # updates.
@@ -200,9 +198,14 @@ class DANSEparameters(Hyperparameters):
         # filter updates.
     timeBtwExternalFiltUpdates: float = 1.  # [s] bw. external filter updates.
     alphaExternalFilters: float = .5    # exponential averaging constant
-                                        # for external filter target update.
-    t_expAvg50p: float = 2.     # [s] Time in the past at which the value is
-                                # weighted by 50% via exponential averaging.
+        # for external filter _target_ update using internal DANSE filters.
+    t_expAvg50pExternalFilters: float = 2.  # [s] Time in the past at which
+        # the target external asynchronous node-updating DANSE filters are
+        # weighted by 50% via exponential averaging to compute the external 
+        # DANSE filters (not target).
+    t_expAvg50p: float = 2.     # [s] Time in the past at which the spatial
+        # covariance matrices values are weighted by 50% via
+        # exponential averaging.
     filterInitType: str = 'selectFirstSensor'
         # type of complex filter vector initialization:
         # -- 'selectFirstSensor' == [1, 0, ..., 0]^T,
@@ -1452,7 +1455,7 @@ def events_parser(
         startUpdates,
         printouts=False,
         doNotPrintBCs=False,
-        batchMode=False
+        nodeUpdating='seq'
     ):
     """
     Printouts to inform user of DANSE events.
@@ -1469,15 +1472,16 @@ def events_parser(
     doNotPrintBCs : bool
         If True, do not print the broadcast events
         (only used if `printouts == True`).
-    batchMode : bool
-        If True, show "batch" in the printouts.
+    nodeUpdating : str
+        Type of node updating.
+            If 'seq', nodes are updated sequentially. 
+            If 'sim', nodes are updated simultaneously 
+            ('sim' only valid if there is no SRO in the WASN).
+            If 'asy', nodes are updated asynchronously.
     """
-    if batchMode:
-        doNotPrintBCs = True  # do not print broadcast events in batch mode
-
     if printouts:
         if 'up' in events.type:
-            txt = f't={np.round(events.t, 3)}s -- '
+            txt = f't={np.round(events.t, 3):.3f}s [{nodeUpdating}] -- '
             updatesTxt = 'Updating nodes: '
             if doNotPrintBCs:
                 broadcastsTxt = ''
@@ -1504,8 +1508,6 @@ def events_parser(
                         updatesTxt += f'{k + 1}'
             # Get ready to print
             fullTxt = txt + broadcastsTxt + '; ' + updatesTxt
-            if batchMode:
-                fullTxt += ' -- batch'
             if is_interactive():  # if we are running from a notebook
                 # Print on the same line
                 print(f"\r{fullTxt}", end="")

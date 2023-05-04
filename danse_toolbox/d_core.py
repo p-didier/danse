@@ -139,7 +139,8 @@ def danse(
             events,
             dv.startUpdates,
             dv.printoutsAndPlotting.printout_eventsParser,
-            dv.printoutsAndPlotting.printout_eventsParserNoBC
+            dv.printoutsAndPlotting.printout_eventsParserNoBC,
+            nodeUpdating=p.nodeUpdating
         )
 
         for idxEventCurrInstant in range(events.nEvents):
@@ -335,10 +336,35 @@ def check_params(p: TestParameters, wasnObj: WASN):
     wasnObj : `WASN` object
         WASN under consideration (updated).
     """
+    def _get_beta_from_t50p(t50p, fs, Ns):
+        """
+        Returns exponential averaging factor from 50% rise time.
+
+        Parameters
+        ----------
+        t50p : float
+            50% rise time.
+        fs : float
+            Sampling frequency.
+        Ns : int
+            Number of samples.
+
+        Returns
+        -------
+        beta : float
+            Exponential averaging factor.
+        """
+        return np.exp(np.log(0.5) / (t50p * fs / Ns))
+
     for k in range(p.wasnParams.nNodes):  # for each node
         # Derive exponential averaging factor for `Ryy` and `Rnn` updates
-        wasnObj.wasn[k].beta = np.exp(np.log(0.5) / \
-            (p.danseParams.t_expAvg50p * wasnObj.wasn[k].fs / p.danseParams.Ns))
+        params = (wasnObj.wasn[k].fs, p.danseParams.Ns)
+        wasnObj.wasn[k].beta = _get_beta_from_t50p(
+            p.danseParams.t_expAvg50p, *params
+        )
+        wasnObj.wasn[k].betaWext = _get_beta_from_t50p(
+            p.danseParams.t_expAvg50pExternalFilters, *params
+        )
     
     # If random-noise (unusable) signals have been added...
     if any(p.wasnParams.addedNoiseSignalsPerNode > 0):

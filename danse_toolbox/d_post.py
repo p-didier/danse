@@ -92,6 +92,8 @@ class DANSEoutputs(DANSEparameters):
         self.filters = dv.wTilde
         if self.computeCentralised:
             self.filtersCentr = dv.wCentr
+        else:
+            self.filtersCentr = None
         # Condition numbers
         if self.saveConditionNumber:
             self.condNumbers = dv.condNumbers
@@ -1745,21 +1747,28 @@ def plot_filter_norms(
     """
 
     # Get number of nodes in WASN
-    nSubplots = len(filters)
     nNodes = len(filters)
-    if filtersCentre is not None:
-        nSubplots += 1
     
     # Compute y-axis limits
-    maxNorm = np.amax(
-        [np.amax(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters]
-    )
-    minNorm = np.amin(
-        [np.amin(np.log10(np.mean(np.abs(filt), axis=0))) for filt in filters]
-    )
+    l = [np.log10(np.mean(np.abs(filt), axis=0)) for filt in filters]
+    maxNorm = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    minNorm = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
 
     def _format_axes(myAx, ti, maxNorm, minNorm):
-        """Format axes."""
+        """
+        Format axes.
+        
+        Parameters
+        ----------
+        myAx : matplotlib.axes._subplots.AxesSubplot
+            Axes handle.
+        ti : str
+            Axes title.
+        maxNorm : float
+            Maximum filter norm.
+        minNorm : float
+            Minimum filter norm.
+        """
         myAx.autoscale(enable=True, axis='x', tight=True)
         myAx.set(
             xlabel='STFT time frame index $i$',
@@ -1786,11 +1795,10 @@ def plot_filter_norms(
         item for sublist in sensorToNodeIndices for item in sublist
     ]
 
-    # Make one plot per node
+    # Plot filter norms for regular DANSE filters
     figs = []
     dataFigs = []
     for k in range(nNodes):
-        # Plot filter norms
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
         neighborIndices = [ii for ii in np.arange(nNodes) if ii != k]
         neighborCount = 0
@@ -1823,40 +1831,41 @@ def plot_filter_norms(
         dataFigs.append(dataPlot)  # Save data for later use
 
     
-    # Plot filter norms
-    for k in range(nNodes):
-        fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-        nodeCount = 0
-        idxCurrNodeSensor = 0
-        dataFig = np.zeros_like(filtersCentre[k][0, :, :], dtype=float)
-        for m in range(filtersCentre[k].shape[2]):        
-            # Get label for legend
-            lab = f'$m={m + 1}$, Node {nodeCount + 1}'
-            if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
-                lab += ' (reference)'
-            # Mean over frequency bins
-            dataFig[:, m] = np.log10(
-                np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0)
-            )
-            ax.plot(
-                dataFig[:, m],
-                f'C{nodeCount}-',
-                alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
-                label=lab,
-            )
-            # Increment node count
-            if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
-                nodeCount += 1
-                idxCurrNodeSensor = 0  # Reset sensor count
-            else:
-                idxCurrNodeSensor += 1  # Increment sensor count
-        # Set title
-        ti = f'Centralized filters at node $k={k + 1}$'
-        # Format axes
-        _format_axes(ax, ti, maxNorm, minNorm)
-        fig.tight_layout()
-        figs.append((f'filtnorms_c{k + 1}', fig))
-        dataFigs.append(dataFig)  # Save data for later use
+    if filtersCentre is not None:
+        # Plot filter norms for ``centralized'' (== no-fusion DANSE) filters
+        for k in range(nNodes):
+            fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+            nodeCount = 0
+            idxCurrNodeSensor = 0
+            dataFig = np.zeros_like(filtersCentre[k][0, :, :], dtype=float)
+            for m in range(filtersCentre[k].shape[2]):        
+                # Get label for legend
+                lab = f'$m={m + 1}$, Node {nodeCount + 1}'
+                if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
+                    lab += ' (reference)'
+                # Mean over frequency bins
+                dataFig[:, m] = np.log10(
+                    np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0)
+                )
+                ax.plot(
+                    dataFig[:, m],
+                    f'C{nodeCount}-',
+                    alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
+                    label=lab,
+                )
+                # Increment node count
+                if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
+                    nodeCount += 1
+                    idxCurrNodeSensor = 0  # Reset sensor count
+                else:
+                    idxCurrNodeSensor += 1  # Increment sensor count
+            # Set title
+            ti = f'Centralized filters at node $k={k + 1}$'
+            # Format axes
+            _format_axes(ax, ti, maxNorm, minNorm)
+            fig.tight_layout()
+            figs.append((f'filtnorms_c{k + 1}', fig))
+            dataFigs.append(dataFig)  # Save data for later use
 
     # Transform to dict
     figs = dict(figs)
@@ -1903,8 +1912,9 @@ def export_online_danse_outputs(
             out.plot_cond(p.exportParams.exportFolder)
 
         # Export convergence plot
-        if p.exportParams.convergencePlot:
-            out.plot_convergence(p.exportParams.exportFolder)
+        if p.exportParams.convergencePlot and p.danseParams.computeCentralised:
+            print('Not plotting convergence plot -- needs to be improved first [TODO]')
+            # out.plot_convergence(p.exportParams.exportFolder)  # TODO:
 
         # Export .wav files
         if p.exportParams.wavFiles:
@@ -1940,7 +1950,7 @@ def export_online_danse_outputs(
             out.plot_perf(
                 wasnObj.wasn,
                 exportFolder,
-                p.danseParams.printoutsAndPlotting.onlySNRandESTOIinPlots,
+                p.exportParams.onlySNRandESTOIinPlots,
                 snrYlimMax=p.snrYlimMax,
             )
 
