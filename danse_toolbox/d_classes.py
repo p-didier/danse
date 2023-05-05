@@ -525,7 +525,6 @@ class DANSEvariables(base.DANSEparameters):
         self.numUpdatesRyy = np.zeros(nNodes, dtype=int)
         self.numUpdatesRnn = np.zeros(nNodes, dtype=int)
         self.oVADframes = [node.vadPerFrame for node in wasn]
-        self.centrVADframes = np.full(self.nIter, fill_value=None)
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
         self.lastBroadcastInstant = np.zeros(nNodes)
@@ -602,6 +601,14 @@ class DANSEvariables(base.DANSEparameters):
             axis=-1
         )
 
+        # Compute the centralized VAD per frame - average of all nodes
+        # (active if at least 1 node is active)
+        vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
+        for k in range(len(wasn)):
+            vadPerFrameCentr += wasn[k].vadPerFrame
+        vadPerFrameCentr /= len(wasn)
+        self.centrVADframes = vadPerFrameCentr.astype(bool)
+
         # Variables for batch mode
         if self.simType == 'batch':
             # Compute STFTs of microphone signals
@@ -619,13 +626,6 @@ class DANSEvariables(base.DANSEparameters):
             # Compute centralized STFT
             arraysSequence = tuple([x for x in self.yinSTFT])
             yCentrBatch = np.concatenate(arraysSequence, axis=2)
-            # Compute the centralized VAD per frame - average of all nodes
-            # (active if at least 1 node is active)
-            vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
-            for k in range(len(wasn)):
-                vadPerFrameCentr += wasn[k].vadPerFrame
-            vadPerFrameCentr /= len(wasn)
-            vadPerFrameCentr = vadPerFrameCentr.astype(bool)
             # Compute batch spatial covariance matrices for local and
             # centralized processing
             for k in range(self.nNodes):
@@ -635,7 +635,7 @@ class DANSEvariables(base.DANSEparameters):
                 )
                 self.Ryycentr[k], self.Rnncentr[k] = update_covmats_batch(
                     yCentrBatch,
-                    vadPerFrameCentr
+                    self.centrVADframes
                 )
 
         # For debugging purposes
@@ -946,43 +946,6 @@ class DANSEvariables(base.DANSEparameters):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
-
-    # def compute_vad(self, k):
-    #     """
-    #     Computes the local VAD for all frames at node `k`.
-        
-    #     Parameters
-    #     ----------
-    #     k : int
-    #         Node index.
-    #     """
-    #     def _compute_vad_curr_nodes(k):
-    #         """Helper function -- compute current-frame VAD at node `k`."""
-    #         # Compute VAD
-    #         VADinFrame = self.fullVAD[k][
-    #             np.amax([self.idxBegChunk, 0]):self.idxEndChunk
-    #         ]
-    #         # If there is a majority of "VAD = 1" in the frame,
-    #         # set the frame-wise VAD to 1.
-    #         return sum(VADinFrame == 0) <= len(VADinFrame) // 2
-
-    #     # vvv -- don't go into negative sample indices!
-    #     idxBeg = np.amax([idxEnd - Ndft, 0])
-            
-    #     self.oVADframes[k][self.i[k]] = _compute_vad_curr_nodes(k)
-
-    #     # Count number of spatial covariance matrices updates
-    #     if self.oVADframes[k][self.i[k]]:
-    #         self.numUpdatesRyy[k] += 1
-    #     else:
-    #         self.numUpdatesRnn[k] += 1
-
-    #     # If needed, compute centralised VAD
-    #     if self.computeCentralised and self.centrVADframes[self.i[k]] is None:
-    #         self.centrVADframes[self.i[k]] = np.array([
-    #             _compute_vad_curr_nodes(k) for k in range(self.nNodes)
-    #         ]).all()
-
 
     def check_covariance_matrices(self, k, tCurr):
         """
