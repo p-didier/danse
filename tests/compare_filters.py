@@ -11,13 +11,16 @@ from pathlib import Path
 
 BASE_PATH_TO_RESULTS = f'{Path(__file__).parent.parent}/out'
 
+# RUNS = [
+#     f'{BASE_PATH_TO_RESULTS}/20230505_tests/batch/test1_seqNU',
+#     f'{BASE_PATH_TO_RESULTS}/20230505_tests/batch/test2_asyNU',
+# ]
 RUNS = [
-    f'{BASE_PATH_TO_RESULTS}/20230505_tests/batch/test1_seqNU_noGEVD',
-    f'{BASE_PATH_TO_RESULTS}/20230505_tests/batch/test2_asyNU_noGEVD',
+    f'{BASE_PATH_TO_RESULTS}/20230505_tests/batch/centr/test3_ssnodes_seq',
 ]
 
 FREQ_BIN_IDX = 100
-ITERATION_IDX = 20
+ITERATION_IDX = 120
 
 def main():
     """Main function (called by default when running script)."""
@@ -35,8 +38,18 @@ def main():
 
         # Print last filter coefficients
         for k in range(len(filterObj)):
-            print(f'Filter coefficients node {k + 1}, freq. bin #{FREQ_BIN_IDX}, iter. #{ITERATION_IDX}:\
-                {np.round(filterObj[k][FREQ_BIN_IDX, ITERATION_IDX, :], 3)}')
+            print(f'Filter coefficients node {k + 1}, freq. bin #{FREQ_BIN_IDX}, iter. #{ITERATION_IDX}: {np.round(filterObj[k][FREQ_BIN_IDX, ITERATION_IDX, :], 3)}')
+
+        # Check if centralized filters have been computed and exported
+        filterCentrPickleFile = f'{path}/filters.pkl.gz'
+        if Path(filterCentrPickleFile).exists():
+            # Load filter
+            print(f'Loading centralized filter from {filterCentrPickleFile}...')
+            filterObj = pickle.load(gzip.open(filterCentrPickleFile, 'r'))
+
+            # Print last filter coefficients
+            for k in range(len(filterObj)):
+                print(f'Centralized filter coefficients node {k + 1}, freq. bin #{FREQ_BIN_IDX}, iter. #{ITERATION_IDX}: {np.round(filterObj[k][FREQ_BIN_IDX, ITERATION_IDX, :], 3)}')
 
 if __name__ == '__main__':
     sys.exit(main())
