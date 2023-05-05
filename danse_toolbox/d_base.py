@@ -292,7 +292,7 @@ class DANSEparameters(Hyperparameters):
         else:
             raise ValueError(f'Unknown synthesis window type: {self.winWOLAsynthesisType}')
         #
-        self.normFactWOLA: float = sum(self.winWOLAanalysis)  # (I)FFT normalization factor
+        self.normFactWOLA: float = self.Ns / sum(self.winWOLAanalysis)  # WOLA normalization factor -- see, e.g., https://de.mathworks.com/help/dsp/ref/dsp.istft.html#mw_6c14e754-02d8-4416-b20c-776b065aef98
         # ---- T(z)-approximation | Sample-wise broadcasts
         if self.broadcastType == 'wholeChunk':
             self.broadcastLength = self.Ns
@@ -321,67 +321,65 @@ class DANSEparameters(Hyperparameters):
         #
         self.wasnInfoInitiated = True
     
-def prep_sigs_for_FFT(y, N, Ns, t):
-    """
-    Zero-padding and signals length adaptation to ensure correct
-    FFT/IFFT operation. Based on FFT implementation by `scipy.signal` module.
-    -- Based on `prep_for_ffts` by Paul Didier
-    (`01_algorithms/01_NR/02_distributed/danse_utilities/setup.py`).
+# def prep_sigs_for_FFT(y, N, Ns, t):
+#     """
+#     Zero-padding and signals length adaptation to ensure correct
+#     FFT/IFFT operation. Based on FFT implementation by `scipy.signal` module.
+#     -- Based on `prep_for_ffts` by Paul Didier
+#     (`01_algorithms/01_NR/02_distributed/danse_utilities/setup.py`).
     
-    Parameters
-    ----------
-    y : [Nt x Nsensors] np.ndarray (float)
-        The microphone signals.
-    N : int
-        WOLA-DANSE frame size [samples].
-    Ns : int
-        Number of new samples per frame (`N * (1 - ovlp)`,
-        with `ovlp` the WOLA window overlap) [samples].
-    t : [N x 1] np.ndarray (float)
-        Sensor-specific time stamps vector.
+#     Parameters
+#     ----------
+#     y : [Nt x Nsensors] np.ndarray (float)
+#         The microphone signals.
+#     N : int
+#         WOLA-DANSE frame size [samples].
+#     Ns : int
+#         Number of new samples per frame (`N * (1 - ovlp)`,
+#         with `ovlp` the WOLA window overlap) [samples].
+#     t : [N x 1] np.ndarray (float)
+#         Sensor-specific time stamps vector.
 
-    Returns
-    -------
-    yout : np.ndarray (float)
-        Prepped signals.
-    tout : np.ndarray (float)
-        Corresponding time stamps.
-    nadd : int
-        Number of zeros added at the of signal after
-        frame-extension (step 2 below).
-    """
+#     Returns
+#     -------
+#     yout : np.ndarray (float)
+#         Prepped signals.
+#     tout : np.ndarray (float)
+#         Corresponding time stamps.
+#     nadd : int
+#         Number of zeros added at the of signal after
+#         frame-extension (step 2 below).
+#     """
 
-    # 1) Extend signal on both ends to ensure that the first frame is centred
-    # at t = 0 -- see <scipy.signal.stft>'s `boundary` argument
-    # (default: `zeros`).
-    y = zero_ext(y, N // 2, axis=0)
-    # --- Also adapt timeInstants vector
-    # TODO: what if clock jitter?
-    dt = np.diff(t)[0]   # delta t between each time instant
-    tpre = np.linspace(start=-dt*(N//2), stop=-dt, num=N//2)
-    tpost = np.linspace(start=t[-1]+dt, stop=t[-1]+dt*(N//2), num=N//2)
-    t = np.concatenate((tpre, t, tpost), axis=0)
+#     # 1) Extend signal on both ends to ensure that the first frame is centred
+#     # at t = 0 -- see <scipy.signal.stft>'s `boundary` argument
+#     # (default: `zeros`).
+#     y = zero_ext(y, N // 2, axis=0)
+#     # --- Also adapt timeInstants vector
+#     dt = np.diff(t)[0]   # delta t between each time instant
+#     tpre = np.linspace(start=-dt*(N//2), stop=-dt, num=N//2)
+#     tpost = np.linspace(start=t[-1]+dt, stop=t[-1]+dt*(N//2), num=N//2)
+#     t = np.concatenate((tpre, t, tpost), axis=0)
 
-    # 2) Zero-pad signal if necessary to include an
-    # integer number of frames in the signal.
-    nadd = 0
-    if not (y.shape[0] - N) % Ns == 0:
-        # vvv See <scipy.signal.stft>'s `padded` argument (default: `True`)
-        nadd = (-(y.shape[0] - N) % Ns) % N
-        print(f'Padding {nadd} zeros to the signals in order to fit FFT size')
-        y = np.concatenate((y, np.zeros([nadd, y.shape[-1]])), axis=0)
-        # Adapt time vector too
-        # TODO: what if clock jitter?
-        tzp = np.linspace(start=t[-1] + dt, stop=t[-1] + dt * nadd, num=nadd)
-        t = np.concatenate((t, tzp), axis=0)
-        if not (y.shape[0] - N) % Ns == 0:   # double-check
-            raise ValueError('There is a problem with the zero-padding...')
+#     # 2) Zero-pad signal if necessary to include an
+#     # integer number of frames in the signal.
+#     nadd = 0
+#     if not (y.shape[0] - N) % Ns == 0:
+#         # vvv See <scipy.signal.stft>'s `padded` argument (default: `True`)
+#         nadd = (-(y.shape[0] - N) % Ns) % N
+#         print(f'Padding {nadd} zeros to the signals in order to fit FFT size')
+#         y = np.concatenate((y, np.zeros([nadd, y.shape[-1]])), axis=0)
+#         # Adapt time vector too
+#         tzp = np.linspace(start=t[-1] + dt, stop=t[-1] + dt * nadd, num=nadd)
+#         t = np.concatenate((t, tzp), axis=0)
+#         if not (y.shape[0] - N) % Ns == 0:   # double-check
+#             raise ValueError('There is a problem with the zero-padding...')
 
-    # Prepare for output 
-    yout = copy.copy(y)
-    tout = copy.copy(t)
+#     # Prepare for output 
+#     yout = copy.copy(y)
+#     tout = copy.copy(t)
 
-    return yout, tout, nadd
+#     return yout, tout, nadd
 
 
 def check_clock_jitter(timeInstants: np.ndarray, nNodes: int):
@@ -1184,14 +1182,14 @@ def events_groupping_check(evIdx, numEv, ev_t, nodes: list, evTypes: list):
     return evIdx, nodes, evTypes
 
 
-def local_chunk_for_broadcast(y, t, fs, N):
+def local_chunk_for_broadcast(y: np.ndarray, t, fs, DFTsize):
     """
     Extract correct chunk of local signals for broadcasting.
     
     Parameters
     ----------
     y : [Ntot x Mk] np.ndarray (float)
-        Time-domain locally recorded signal (at `Mk` sensors).
+        Time-domain locally recorded signal at `Mk` sensors.
     t : float
         Current time instant [s].
     fs : int or float
@@ -1207,14 +1205,16 @@ def local_chunk_for_broadcast(y, t, fs, N):
 
     # vvv -- np.round() used to avoid issues with previous
     # rounding/precision errors (see Word journal week 32, THU, 2022).
-    idxEnd = int(np.floor(np.round(t * fs, 5)))
+    # idxEnd = int(np.floor(np.round(t * fs, 5)))  # COMMENTED AGAIN ON 2023.05.05
+    idxEnd = int(np.floor(t * fs))
     # vvv -- don't go into negative sample indices!
-    idxBeg = np.amax([idxEnd - N, 0])
+    idxBeg = np.amax([idxEnd - DFTsize, 0])
     chunk = y[idxBeg:idxEnd, :]
     # Pad zeros at beginning if needed
-    if idxEnd - idxBeg < N:
+    if idxEnd - idxBeg < DFTsize:
         chunk = np.concatenate((
-            np.zeros((N - chunk.shape[0], chunk.shape[1])), chunk
+            np.zeros((DFTsize - chunk.shape[0], chunk.shape[1])),
+            chunk
         ))
 
     return chunk
@@ -1252,11 +1252,13 @@ def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
     # Broadcast scheme: block-wise, in freq.-domain
     # <or> Broadcast scheme: few samples at a time, in time-domain
     if bd == 'fewSamples':
-        idxEnd = int(np.floor(np.round(t * fs, 5)))
+        # idxEnd = int(np.floor(np.round(t * fs, 5)))  # COMMENTED AGAIN ON 2023.05.05
+        idxEnd = int(np.floor(t * fs))
     # Broadcast scheme: block-wise, in time-domain
     elif bd == 'wholeChunk':
-        # `N - Ns` samples delay due to time-domain WOLA
-        idxEnd = int(np.floor(np.round(t * fs, 5))) - (Ndft - Ns)
+        # `N - Ns` samples delay due to WOLA
+        # idxEnd = int(np.floor(np.round(t * fs, 5))) - (Ndft - Ns)    # COMMENTED AGAIN ON 2023.05.05
+        idxEnd = int(np.floor(t * fs)) - (Ndft - Ns)
 
     # vvv -- don't go into negative sample indices!
     idxBeg = np.amax([idxEnd - Ndft, 0])
@@ -1312,8 +1314,8 @@ def back_to_time_domain(x, n, axis=0):
     x[-1, :] = x[-1, :].real    # Set Nyquist to real value
     x = np.concatenate((x, np.flip(x[:-1, :].conj(), axis=0)[:-1, :]), axis=0)
     
-    # vvv -- important to go back to original input dimensionalitybefore FFT
-    # (bias of np.fft.fft with (n,1)-dimensioned input).
+    # vvv -- go back to original input dimensionality before FFT
+    # (bias of np.fft.fft with (n, 1)-dimensioned input).
     if flagSingleton:
         x = np.squeeze(x)
 
@@ -1322,49 +1324,8 @@ def back_to_time_domain(x, n, axis=0):
 
     if axis == 1:
         xout = xout.T
-
-    # Check before output
-    # if not np.allclose(np.fft.fft(xout, n, axis=0), x):  # COMMENTED OUT ON 04.04.2023 TODO:TODO:TODO:TODO:
-    #     raise ValueError('Issue in return to time-domain')
-
-    return xout
-
-
-def fill_buffers_whole_chunk(k, neighs, zBuffer, zLocalK):
-    """
-    Fills neighbors nodes' buffers, using frequency domain data.
-    Data comes from compression via function `danse_compression_freq_domain`.
     
-        Parameters
-    ----------
-    k : int
-        Current node index.
-    neighs : [numNodes x 1] list of [nNeighbours[n] x 1] lists (int)
-        Network indices of neighbours, per node.
-    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] ...
-            ... lists of [variable length] np.ndarrays (complex)
-        Compressed signals buffers for each node and its neighbours.
-    zLocal : [N x 1] np.ndarray (float)
-        Latest compressed local signals to be broadcasted from node `k`.
-
-    Returns
-    -------
-    zBuffer : [numNodes x 1] list of [nNeighbours[n] x 1] ...
-            ... lists of [N x 1] np.ndarrays (complex)
-        Updated compressed signals buffers for each node and its neighbours.
-    """
-
-    # Loop over neighbors of `k`
-    for idxq in range(len(neighs[k])):
-        # Network-wide index of node `q` (one of node `k`'s neighbors)
-        q = neighs[k][idxq]
-        idxKforNeighborQ = [i for i, x in enumerate(neighs[q]) if x == k]
-        # Node `k`'s "neighbor index", from node `q`'s perspective
-        idxKforNeighborQ = idxKforNeighborQ[0]
-        # Fill in neighbor's buffer
-        zBuffer[q][idxKforNeighborQ] = zLocalK
-        
-    return zBuffer
+    return xout
 
 
 def extract_few_samples_from_convolution(idDesired, a, b):
@@ -1581,7 +1542,14 @@ def is_interactive():  # https://stackoverflow.com/a/22424821
     return not hasattr(main, '__file__')
 
 
-def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
+def danse_compression_whole_chunk(
+        yq,
+        wHat,
+        h,
+        f,
+        zqPrevious=None,
+        Ns=None
+    ):
     """Performs local signals compression in the frequency domain.
 
     Parameters
@@ -1596,6 +1564,8 @@ def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
         WOLA synthesis window (WOLA-domain to time-domain).
     zqPrevious : [N x 1] np.ndarray (float)
         Previous time-domain chunk of compressed signal.
+    Ns : int
+        WOLA hop size (number of samples).
 
     Returns
     -------
@@ -1604,6 +1574,16 @@ def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
     zq : [N x 1] np.ndarray (float)
         Time-domain latest WOLA chunk of compressed signal (after OLA).
     """
+    
+    # Useful variables
+    DFTsize = len(yq)
+    normFactWOLA = Ns / sum(f)  # normalization factor for WOLA
+
+    # Checking input arguments
+    if Ns is None:
+        # Assume 50% overlap 
+        print("WARNING: `Ns` not specified. Assuming 50 percent WOLA overlap.")
+        Ns = DFTsize // 2
 
     # Check for single-sensor case
     flagSingleSensor = False
@@ -1611,43 +1591,44 @@ def danse_compression_whole_chunk(yq, wHat, h, f, zqPrevious=None):
         wHat = np.squeeze(wHat)
         yq = np.squeeze(yq)
         flagSingleSensor = True
-    
-    # Transfer local observations to frequency domain
-    n = len(yq)     # DFT order
 
     # WOLA analysis stage
     if flagSingleSensor:
-        yqHat = np.fft.fft(np.squeeze(yq) * h, n, axis=0)
+        yqHat = np.fft.fft(
+            np.squeeze(yq) * h, DFTsize, axis=0
+        )
         # Keep only positive frequencies
-        yqHat = yqHat[:int(n/2 + 1)]
+        yqHat = yqHat[:int(DFTsize // 2 + 1)]
         # Apply linear combination to form compressed signal.
         # -- single sensor = simple element-wise multiplication.
         zqHat = wHat.conj() * yqHat
     else:
-        yqHat = np.fft.fft(np.squeeze(yq) * h[:, np.newaxis], n, axis=0)
+        yqHat = np.fft.fft(
+            np.squeeze(yq) * h[:, np.newaxis], DFTsize, axis=0
+        )
         # Keep only positive frequencies
-        yqHat = yqHat[:int(n/2 + 1), :]
+        yqHat = yqHat[:int(DFTsize // 2 + 1), :]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', wHat.conj(), yqHat)
 
     # WOLA synthesis stage
     if zqPrevious is not None:
         # IDFT
-        zqCurr = back_to_time_domain(zqHat, n, axis=0)
+        zqCurr = back_to_time_domain(zqHat, DFTsize, axis=0)
         zqCurr = np.real_if_close(zqCurr)
         zqCurr *= f    # multiply by synthesis window
+        zqCurr *= normFactWOLA    # multiply by WOLA normalization factor
 
         if not np.any(zqPrevious):
             # No previous frame, keep current frame
             zq = zqCurr
         else:
             # Overlap-add
-            zq = np.zeros(n)
-            # TODO: consider case with multiple neighbor nodes
-            # (`len(zqPrevious) > 1`).
-            zq[:(n // 2)] = zqPrevious[-(n // 2):]
+            zq = np.zeros(DFTsize)
+            zq[:(DFTsize - Ns)] = zqPrevious[-(DFTsize - Ns):]
             zq += zqCurr
     else:
+        print('Cannot compute time-domain overlap-added chunk of local compressed signal.')
         zq = None
     
     return zqHat, zq

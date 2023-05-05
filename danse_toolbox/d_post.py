@@ -130,32 +130,58 @@ class DANSEoutputs(DANSEparameters):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder)
 
-    def plot_filter_norms(self, exportFolder=None, exportNormsAsPickle=False):
-        """Plots a visualization of the evolution of filter norms in DANSE."""
+    def plot_filter_evol(
+            self,
+            exportFolder=None,
+            exportNormsAsPickle=False,
+            plots=['norm']
+        ):
+        """
+        Plots a visualization of the evolution of filters in DANSE.
+
+        Parameters
+        ----------
+        exportFolder : str, optional
+            Folder to export figures to. If None, figures are not exported.
+        exportNormsAsPickle : bool, optional
+            If True, export filters norms as Pickle files.
+        plots : list of str, optional
+            List of plots to export. Possible values are:
+            - 'norm' : plot of the norm of each filter
+            vvv TODO vvv
+            - 'real-imag' : plot of the real and imaginary parts of each filter
+            - 'amp-phase' : plot of the amplitude and phase of each filter
+        """
         self.check_init()  # check if object is correctly initialised
-        figs, dataFigs = plot_filter_norms(
-            self.filters,
-            self.filtersCentr,
-            self.nSensorPerNode,
-            refSensorIdx=self.referenceSensor
-        )
-        # Export figures
-        if exportFolder is not None:
-            for title, fig in figs.items():
-                fullExportFolder = f'{exportFolder}/filtNorms'
-                if not os.path.exists(fullExportFolder):
-                    os.makedirs(fullExportFolder)
-                fig.savefig(f'{fullExportFolder}/{title}.png', dpi=300)
-                fig.savefig(f'{fullExportFolder}/{title}.pdf')
-        else:
-            plt.close(fig)
-        # Export data
-        if exportNormsAsPickle:
-            fullExportFolder = f'{exportFolder}/filtNorms'
-            if not os.path.exists(fullExportFolder):
-                os.makedirs(fullExportFolder)
-            with open(f'{fullExportFolder}/filtNorms.pkl', 'wb') as f:
-                pickle.dump(dataFigs, f)
+        for ii in range(len(plots)):
+            if plots[ii] not in ['norm', 'real-imag', 'amp-phase']:
+                raise ValueError(f'Unknown plot type {plots[ii]}')
+            
+            if plots[ii] == 'norm':
+                # Plot figures
+                figs, dataFigs = plot_filter_norms(
+                    self.filters,
+                    self.filtersCentr,
+                    self.nSensorPerNode,
+                    refSensorIdx=self.referenceSensor
+                )
+                # Export figures
+                if exportFolder is not None:
+                    for title, fig in figs.items():
+                        fullExportFolder = f'{exportFolder}/filtNorms'
+                        if not os.path.exists(fullExportFolder):
+                            os.makedirs(fullExportFolder)
+                        fig.savefig(f'{fullExportFolder}/{title}.png', dpi=300)
+                        fig.savefig(f'{fullExportFolder}/{title}.pdf')
+                else:
+                    plt.close(fig)
+                # Export data
+                if exportNormsAsPickle:
+                    fullExportFolder = f'{exportFolder}/filtNorms'
+                    if not os.path.exists(fullExportFolder):
+                        os.makedirs(fullExportFolder)
+                    with open(f'{fullExportFolder}/filtNorms.pkl', 'wb') as f:
+                        pickle.dump(dataFigs, f)
 
     def plot_cond(self, exportFolder=None):
         """Plots a visualization of the condition numbers in DANSE."""
@@ -1177,7 +1203,7 @@ def plot_asc(
             curr = np.amax(asc.mic_array.R[:, sensorIndices] - \
                 meanpos[:, np.newaxis])
         else:
-            curr = 0.1
+            curr = 0.025 * np.amin(asc.shoebox_dim[0])
         if curr > nodeRadius:
             nodeRadius = copy.copy(curr)
 
@@ -1406,9 +1432,10 @@ def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
             win=out.winWOLAanalysis,
             ovlp=out.WOLAovlp
         )
-        axForTitle.set_title(
-            f'Node {k + 1}, {out.nSensorPerNode[k]} sensor(s) ($\\beta$={np.round(out.beta[k], 4)})'
-        )
+        ti = f'Node {k + 1}, {out.nSensorPerNode[k]} sensor(s)'
+        if out.simType == 'online':
+            ti += f'(online: $\\beta$={np.round(out.beta[k], 4)})'
+        axForTitle.set_title(ti)
         plt.tight_layout()
         figs.append(fig)
 
@@ -1750,7 +1777,8 @@ def plot_filter_norms(
     nNodes = len(filters)
     
     # Compute y-axis limits
-    l = [np.log10(np.mean(np.abs(filt), axis=0)) for filt in filters]
+    l = [np.log10(np.mean(np.abs(filt), axis=0))\
+        for filt in filters + filtersCentre]  # concatenate `filters` and `filtersCentre`
     maxNorm = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     minNorm = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
 
@@ -1830,7 +1858,6 @@ def plot_filter_norms(
         figs.append((f'filtnorms_n{k + 1}', fig))
         dataFigs.append(dataPlot)  # Save data for later use
 
-    
     if filtersCentre is not None:
         # Plot filter norms for ``centralized'' (== no-fusion DANSE) filters
         for k in range(nNodes):
@@ -1900,9 +1927,19 @@ def export_danse_outputs(
     """
         
     if not p.exportParams.bypassAllExports:
+
+        # Export filter coefficients
+        if p.exportParams.filters:
+            fullPath = f'{p.exportParams.exportFolder}/filters.pkl.gz'
+            pickle.dump(out.filters, gzip.open(fullPath, 'wb'))
+            if p.danseParams.computeCentralised:
+                fullPath = f'{p.exportParams.exportFolder}/filtersCentr.pkl.gz'
+                pickle.dump(out.filtersCentr, gzip.open(fullPath, 'wb'))
+            print('Exported complex filters.')
+            
         # Export filter coefficients norm plot
         if p.exportParams.filterNormsPlot:
-            out.plot_filter_norms(
+            out.plot_filter_evol(
                 p.exportParams.exportFolder,
                 exportNormsAsPickle=p.exportParams.filterNorms  # boolean to export filter norms as pickle  
             )

@@ -1,23 +1,27 @@
-seed: 12348
+seed: 12350
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230504_tests/batch/test2_asyNU_noGEVD # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230505_tests/batch/normFact/test3_75pOvlp # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
+  filters: true
 danseParams:
   # For debug
+  noExternalFilterRelaxation: true
   saveConditionNumber: true
   saveConditionNumberEvery: 100  # [iterations]
   performGEVD: true
   # Often used
   simType: batch  # 'batch' or 'online'
   # simType: online  # 'batch' or 'online'
-  nodeUpdating: asy
-  # nodeUpdating: seq
+  # nodeUpdating: asy
+  nodeUpdating: seq
   computeLocal: true
-  computeCentralised: false
+  computeCentralised: true
   #
   DFTsize: 1024
+  # WOLAovlp: 0.5
+  WOLAovlp: 0.75
   # DFTsize: 2048
   GEVDrank: 1
   startComputeMetricsAt: after_beginning_2nd_utterance_200
@@ -29,16 +33,20 @@ danseParams:
 referenceSensor: 0
 snrYlimMax: null
 wasnParams:
+  # rd: '[5, 5, 5]'
+  rd: '[0.05, 0.05, 0.05]'
+  minDistToWalls: 0.0
   # Often used
-  sigDur: 10  # [s]
+  sigDur: 5  # [s]
   selfnoiseSNR: 30  # [dB]
   # layoutType: random_spinning_top
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
-  t60: 0.2  # [s]
-  # t60: 0.0  # [s]
+  # t60: 0.2  # [s]
+  t60: 0.0  # [s]
   SROperNode: '[0]'  # [PPM]
-  nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[1, 2, 3]'
+  nSensorPerNode: '[1, 1, 1]'
   interSensorDist: 0.05
   #
   baseSNR: 5
@@ -49,7 +57,6 @@ wasnParams:
   nNoiseSources: 1
   noiseSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
-  rd: '[5, 5, 5]'  # compact way to write lists/arrays (as a string)
   referenceSensor: 0
   topologyParams:
     topologyType: fully-connected

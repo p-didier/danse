@@ -306,7 +306,7 @@ def build_room(p: classes.WASNparameters):
         
         room.add_microphone_array(micArray.T)
 
-
+    # Compute RIRs
     room.compute_rir()
     room.simulate()
 
@@ -422,7 +422,7 @@ def plot_asc_3d(
     ax.set_title('Room layout (3D)')
 
 
-def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
+def get_vad(rirs, xdry, p: classes.WASNparameters):
     """
     Compute all node- and desired-source-specific VADs.
 
@@ -434,8 +434,8 @@ def get_vad(rirs, xdry, p: classes.AcousticScenarioParameters):
         and each source.
     xdry : [N x Nsources] np.ndarray (float)
         Dry (latent) source signals.
-    p : AcousticScenarioParameters object
-        Acoustic scenario parameters.
+    p : WASNparameters object
+        WASN parameters.
 
     Returns
     -------
@@ -607,7 +607,7 @@ def export_asc(room: pra.room.ShoeBox, path):
 
 
 
-def oracleVAD(x,tw,thrs,Fs):
+def oracleVAD(x, tw, thrs, Fs):
     """
     Oracle Voice Activity Detection (VAD) function. Returns the
     oracle VAD for a given speech (+ background noise) signal <x>.
@@ -645,19 +645,18 @@ def oracleVAD(x,tw,thrs,Fs):
 
     # VAD window length
     if tw > 0:
-        Nw = tw*Fs
+        Nw = int(tw * Fs)
     else:
         Nw = 1
 
     # Compute VAD
     oVAD = np.zeros(n)
     for ii in range(n):
-        chunk_x = np.zeros(int(Nw))
-        if Nw == 1:
-            chunk_x[0] = x[ii]
-        else:
-            chunk_x = x[np.arange(ii,int(min(ii+Nw, len(x))))]
-        oVAD[ii] = compute_VAD(chunk_x,thrs)
+        # Extract chunk
+        idxBeg = int(np.amax([ii - Nw // 2, 0]))
+        idxEnd = int(np.amin([ii + Nw // 2, len(x)]))
+        # Compute VAD frame
+        oVAD[ii] = compute_VAD(x[idxBeg:idxEnd], thrs)
 
     # Time vector
     t = np.arange(n)/Fs
@@ -675,9 +674,9 @@ def compute_VAD(chunk_x,thrs):
     ------------------------------------
     """
     # Compute short-term signal energy
-    E = np.mean(np.abs(chunk_x)**2)
+    energy = np.mean(np.abs(chunk_x)**2)
     # Assign VAD value
-    if E > thrs:
+    if energy > thrs:
         VADout = 1
     else:
         VADout = 0

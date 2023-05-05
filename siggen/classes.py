@@ -48,7 +48,7 @@ class AcousticScenarioParameters:
     baseSNR: int = 5                        # [dB] SNR between dry desired signals and dry noise
     # vvv VAD parameters vvv
     VADenergyDecrease_dB: float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
-    VADwinLength: float = 40e-3     # [s] VAD window length
+    VADwinLength: float = 20e-3     # [s] VAD window length
     #
     nNodes: int = 0        # number of nodes in scenario
     nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node
@@ -498,7 +498,12 @@ class WASN:
             # Compute VAD per frame
             vadPerFrame = np.zeros(len(vadCurrNode) // frameShift)
             for ii in range(len(vadPerFrame)):
-                vadChunk = vadCurrNode[ii*frameShift:ii*frameShift+frameLen]
+                idxBeg = ii*frameShift
+                idxEnd = ii*frameShift+frameLen
+                if idxEnd > len(vadCurrNode):
+                    vadPerFrame = vadPerFrame[:ii + 1]  # crop (no VAD if frame is incomplete)
+                    break
+                vadChunk = vadCurrNode[idxBeg:idxEnd]
                 # VAD is 1 if more than half of the frame is active
                 vadPerFrame[ii] = float(sum(vadChunk) >= len(vadChunk) // 2)
             # Save VAD per frame into `Node` object in WASN

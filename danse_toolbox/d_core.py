@@ -83,6 +83,7 @@ def danse(
                     fs[k],
                     k,
                     events.bypassUpdate[idxEventCurrInstant]
+                    # True  # debugging
                 )
             else:
                 raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')

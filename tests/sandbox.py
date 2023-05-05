@@ -163,14 +163,7 @@ def postprocess(
             Path(p.exportParams.exportFolder).mkdir(parents=True)
 
     if runit:
-        # if p.danseParams.simType == 'online':  # TODO: cleanup
-        #     # Export online DANSE outputs
         pp.export_danse_outputs(out, wasnObj, room, p)
-        # elif p.danseParams.simType == 'batch':
-        #     # Export batch DANSE outputs
-        #     pp.export_batch_danse_outputs(out, wasnObj, p)
-        # else:
-        #     raise TypeError('Unexpected type for `out`.')
 
     return out
 
