@@ -1217,7 +1217,7 @@ def local_chunk_for_broadcast(y: np.ndarray, t, fs, DFTsize):
             chunk
         ))
 
-    return chunk
+    return chunk, idxBeg, idxEnd
 
 
 def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
@@ -1617,7 +1617,7 @@ def danse_compression_whole_chunk(
         zqCurr = back_to_time_domain(zqHat, DFTsize, axis=0)
         zqCurr = np.real_if_close(zqCurr)
         zqCurr *= f    # multiply by synthesis window
-        zqCurr *= normFactWOLA    # multiply by WOLA normalization factor
+        # zqCurr *= normFactWOLA    # multiply by WOLA normalization factor
 
         if not np.any(zqPrevious):
             # No previous frame, keep current frame

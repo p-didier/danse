@@ -82,6 +82,8 @@ class DANSEoutputs(DANSEparameters):
             self.STFTfiltSpeech_l = dv.dHatLocal_s
             self.TDfiltNoise_l = dv.dLocal_n
             self.STFTfiltNoise_l = dv.dHatLocal_n
+        # DANSE fused signals
+        self.TDfusedSignals = dv.zFullTD
         # SROs
         self.SROgroundTruth = dv.SROsppm
         self.SROsEstimates = dv.SROsEstimates
@@ -1091,6 +1093,17 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
                 f'{folder}/wav/enhanced_N{k + 1}.wav',
                 int(wasn[k].fs), data
             )
+            if out.broadcastType == 'wholeChunk':
+                # Export the fused signals too
+                if not Path(f'{folder}/wav/fused').is_dir():
+                    Path(f'{folder}/wav/fused').mkdir()
+                data = normalize_toint16(out.TDfusedSignals[k])
+                wavfile.write(
+                    f'{folder}/wav/fused/z_N{k + 1}.wav',
+                    int(wasn[k].fs), data
+                )
+            else:
+                print('Fused signals not exported (not yet implemented for per-sample broadcasting).')
         # vvv if enhancement has been performed and centralised estimate computed
         if out.computeCentralised:
             if len(out.TDdesiredSignals_est_c[:, k]) > 0:

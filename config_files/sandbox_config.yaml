@@ -1,16 +1,16 @@
 seed: 12350
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230505_tests/batch/normFact/test3_75pOvlp # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230505_tests/batch/simplest/test3 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: true
 danseParams:
   # For debug
-  noExternalFilterRelaxation: true
+  noExternalFilterRelaxation: false
   saveConditionNumber: true
   saveConditionNumberEvery: 100  # [iterations]
-  performGEVD: true
+  performGEVD: false
   # Often used
   simType: batch  # 'batch' or 'online'
   # simType: online  # 'batch' or 'online'
@@ -19,9 +19,9 @@ danseParams:
   computeLocal: true
   computeCentralised: true
   #
+  WOLAovlp: 0.5
+  # WOLAovlp: 0.75
   DFTsize: 1024
-  # WOLAovlp: 0.5
-  WOLAovlp: 0.75
   # DFTsize: 2048
   GEVDrank: 1
   startComputeMetricsAt: after_beginning_2nd_utterance_200
@@ -34,11 +34,13 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # rd: '[5, 5, 5]'
+  # minDistToWalls: 0.5
   rd: '[0.05, 0.05, 0.05]'
   minDistToWalls: 0.0
   # Often used
-  sigDur: 5  # [s]
+  sigDur: 10  # [s]
   selfnoiseSNR: 30  # [dB]
+  # selfnoiseSNR: 999  # [dB]
   # layoutType: random_spinning_top
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
