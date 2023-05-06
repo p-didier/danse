@@ -149,11 +149,13 @@ def postprocess(
         if Path(p.exportParams.exportFolder).is_dir():
             # Check whether the folder contains something
             if Path(p.exportParams.exportFolder).stat().st_size > 0:
-                inp = input(f'The folder\n"{p.exportParams.exportFolder}"\ncontains data. Overwrite? [y/[n]]:  ')
-                if inp not in ['y', 'Y']:
+                inp = input(f'The folder\n"{p.exportParams.exportFolder}"\ncontains data. Overwrite? [y/n]:  ')
+                while inp not in ['y', 'n']:
+                    inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
+                if inp == 'n':
                     runit = False   # don't run
                     print('Aborting figures and sounds export.')
-                else:
+                elif inp == 'y':
                     print('Wiping folder before new figures and sounds exports.')
                     wipe_folder(p.exportParams.exportFolder)
         else:

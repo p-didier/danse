@@ -1,5 +1,5 @@
 # Often-used
-seed: 12348
+seed: 12350
 setThoseSensorsToNoise: []
 #
 exportParams:
@@ -26,12 +26,14 @@ danseParams:
   saveConditionNumber: true
   saveConditionNumberEvery: 9999
   performGEVD: true
-  t_expAvg50p: 10
+  t_expAvg50p: 30
+  t_expAvg50pExternalFilters: 50.
+  timeBtwExternalFiltUpdates: 0.25
   # t_expAvg50p: 2
   #
-  # DFTsize: 1024
+  DFTsize: 1024
   # DFTsize: 2048
-  DFTsize: 4096
+  # DFTsize: 4096
   GEVDrank: 1
   WOLAovlp: 0.5
   alphaExternalFilters: 0.5
@@ -83,7 +85,6 @@ danseParams:
   # startComputeMetricsAt: beginning_2nd_utterance
   # startComputeMetricsAt: beginning_1st_utterance
   # startComputeMetricsAt: end_1st_utterance
-  timeBtwExternalFiltUpdates: 1
   treeFormationAlgorithm: prim
   upTDfilterEvery: 1.0
   winWOLAanalysisType: sqrthann
@@ -97,7 +98,8 @@ wasnParams:
   # layoutType: random_spinning_top
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
-  t60: 0.2  # [s]
+  t60: 0.0  # [s]
+  # t60: 0.2  # [s]
   SROperNode: '[0]'  # [PPM]
   nSensorPerNode: '[1, 2, 3]'
   interSensorDist: 0.05
@@ -107,8 +109,8 @@ wasnParams:
   arrayGeometry: grid3d
   baseSNR: 5
   desiredSignalFile:
-  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech1.wav
   fs: 16000
   generateRandomWASNwithSeed: 0
   lenRIR: 1024

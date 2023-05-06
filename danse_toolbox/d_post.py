@@ -1790,8 +1790,10 @@ def plot_filter_norms(
     nNodes = len(filters)
     
     # Compute y-axis limits
+    np.seterr(divide = 'ignore')    # avoid annoying warnings
     l = [np.log10(np.mean(np.abs(filt), axis=0))\
         for filt in filters + filtersCentre]  # concatenate `filters` and `filtersCentre`
+    np.seterr(divide = 'warn')      # reset warnings
     maxNorm = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     minNorm = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
 
@@ -1853,9 +1855,11 @@ def plot_filter_norms(
                 lab += f' (Node $k={neighborIndices[neighborCount] + 1}$)'
                 neighborCount += 1
             # Mean over frequency bins
+            np.seterr(divide = 'ignore')   # avoid annoying warnings
             dataPlot[:, m] = np.log10(
                 np.mean(np.abs(filters[k][:, :, m]), axis=0)
             )
+            np.seterr(divide = 'warn')     # reset warnings
             ax.plot(
                 dataPlot[:, m],
                 label=lab,

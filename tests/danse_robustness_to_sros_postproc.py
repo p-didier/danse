@@ -14,7 +14,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-FOLDER = f'{Path(__file__).parent.parent}/out/20230503_tests/sros_effect/run2_beta10s_N4096'
+FOLDER = f'{Path(__file__).parent.parent}/out/20230505_tests/sros_effect/run1'
 RELATIVE_PATH_TO_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder
 SROS_REF_FILENAME = 'srosConsidered.pkl'  # file containing the SROs used for each test in `FOLDER`
 LOOK_AT_THE_LAST_N_ITERATIONS = 100  # number of iterations to consider for computing the average filter norms

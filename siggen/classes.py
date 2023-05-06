@@ -56,8 +56,8 @@ class AcousticScenarioParameters:
     loadFrom: str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))')
 
     def __post_init__(self):
-        if self.interSensorDist < np.amin(self.rd):
-            raise ValueError('`interSensorDist` must be greater than the minimum room dimension.')
+        if self.interSensorDist >= np.amin(self.rd) / 3:
+            raise ValueError('`interSensorDist` must be smaller than the minimum room dimension divided by 3.')
 
 @dataclass
 class TopologyParameters:
