@@ -1888,9 +1888,11 @@ def plot_filter_norms(
                 if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
                     lab += ' (reference)'
                 # Mean over frequency bins
+                np.seterr(divide = 'ignore')   # avoid annoying warnings
                 dataFig[:, m] = np.log10(
                     np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0)
                 )
+                np.seterr(divide = 'warn')     # reset warnings
                 ax.plot(
                     dataFig[:, m],
                     f'C{nodeCount}-',
