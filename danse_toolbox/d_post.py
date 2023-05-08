@@ -128,9 +128,9 @@ class DANSEoutputs(DANSEparameters):
         """Loads dataclass to Pickle archive in folder `foldername`."""
         return met.load(self, foldername, silent=True, dataType=dataType)
 
-    def export_sounds(self, wasn, exportFolder):
+    def export_sounds(self, wasn, exportFolder, fullyConnected=True):
         self.check_init()  # check if object is correctly initialised
-        export_sounds(self, wasn, exportFolder)
+        export_sounds(self, wasn, exportFolder, fullyConnected)
 
     def plot_filter_evol(
             self,
@@ -1055,7 +1055,12 @@ def metrics_subplot(numNodes, ax, barWidth, data):
         )
 
 
-def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
+def export_sounds(
+        out: DANSEoutputs,
+        wasn: list[Node],
+        folder: str,
+        fullyConnected: bool=True
+    ):
     """
     Exports the enhanced, noisy, and desired signals as WAV files.
 
@@ -1067,6 +1072,8 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
         WASN under consideration.
     folder : str
         Folder where to create the "wav" folder where to export files.
+    fullyConnected : bool, optional
+        Whether the WASN is fully connected or not. The default is True.
     """
 
     folderShort = met.shorten_path(folder)
@@ -1093,7 +1100,7 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
                 f'{folder}/wav/enhanced_N{k + 1}.wav',
                 int(wasn[k].fs), data
             )
-            if out.broadcastType == 'wholeChunk':
+            if out.broadcastType == 'wholeChunk' and fullyConnected:
                 # Export the fused signals too
                 if not Path(f'{folder}/wav/fused').is_dir():
                     Path(f'{folder}/wav/fused').mkdir()
@@ -1102,8 +1109,10 @@ def export_sounds(out: DANSEoutputs, wasn: list[Node], folder):
                     f'{folder}/wav/fused/z_N{k + 1}.wav',
                     int(wasn[k].fs), data
                 )
-            else:
+            elif out.broadcastType != 'wholeChunk':
                 print('Fused signals not exported (not yet implemented for per-sample broadcasting).')
+            elif not fullyConnected:
+                print('Fused signals not exported (not implemented for non-fully connected WASNs).')
         # vvv if enhancement has been performed and centralised estimate computed
         if out.computeCentralised:
             if len(out.TDdesiredSignals_est_c[:, k]) > 0:
@@ -1133,7 +1142,7 @@ def plot_asc(
     plot3Dview=False,
     ):
     """
-    Plots an acoustic scenario nicely.
+    Plots an acoustic scenario.
 
     Parameters
     ----------
@@ -1975,7 +1984,11 @@ def export_danse_outputs(
 
         # Export .wav files
         if p.exportParams.wavFiles:
-            out.export_sounds(wasnObj.wasn, p.exportParams.exportFolder)
+            out.export_sounds(
+                wasnObj.wasn,
+                p.exportParams.exportFolder,
+                p.is_fully_connected_wasn()
+            )
 
         # Plot (+ export) acoustic scenario (WASN)
         if p.exportParams.acousticScenarioPlot:

@@ -2128,13 +2128,7 @@ class TIDANSEvariables(DANSEvariables):
                 zForSynthesis=self.zLocalPrimeBuffer_n[k]
             )
             
-            # _, self.zLocalPrimeBuffer[k] = base.danse_compression_whole_chunk(
-            #     ykFrame,
-            #     self.wTildeExt[k][:, :ykFrame.shape[-1]],
-            #     h=self.winWOLAanalysis,
-            #     f=self.winWOLAsynthesis,
-            #     zqPrevious=self.zLocalPrimeBuffer[k]
-            # )
+            stop = 1
         else:
             raise NotImplementedError  # TODO:
     
@@ -2235,8 +2229,8 @@ class TIDANSEvariables(DANSEvariables):
 
         # Construct `\tilde{y}_k` in frequency domain
         self.ti_build_ytilde(k, tCurr, fs)
-        # Compute current VAD
-        self.compute_vad(k)
+        # # Compute current VAD
+        # self.compute_vad(k)
         
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
@@ -2269,8 +2263,9 @@ class TIDANSEvariables(DANSEvariables):
         # if not skipUpdate:
         # If covariance matrices estimates are full-rank, update filters
         if not bypassUpdateEventMat:
+            # vvv !! depends on outcome of `check_covariance_matrices()` !!
             self.perform_update(k)
-            # ^^^ depends on outcome of `check_covariance_matrices()`.
+            # ^^^ !! depends on outcome of `check_covariance_matrices()` !!
         else:
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
@@ -2361,6 +2356,13 @@ class TIDANSEvariables(DANSEvariables):
             (yLocalCurr_n, self.etaMk_n[k][:, np.newaxis]),
             axis=1
         )
+
+        # if k == 0 and self.oVADframes[k][self.i[k]]:
+        #     plt.close('all')
+        #     plt.figure()
+        #     plt.plot(yTildeCurr_s)
+        #     stop = 1
+
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
         self.yTilde_s[k][:, self.i[k], :] = yTildeCurr_s
         self.yTilde_n[k][:, self.i[k], :] = yTildeCurr_n
@@ -2388,7 +2390,12 @@ class TIDANSEvariables(DANSEvariables):
         self.yTildeHat_s[k][:, self.i[k], :] = yTildeHatCurr_s[:self.nPosFreqs, :]
         self.yTildeHat_n[k][:, self.i[k], :] = yTildeHatCurr_n[:self.nPosFreqs, :]
 
-    def ti_compression_whole_chunk(self, k, yq: np.ndarray, zForSynthesis: np.ndarray):
+    def ti_compression_whole_chunk(
+            self,
+            k: int,
+            yq: np.ndarray,
+            zForSynthesis: np.ndarray
+        ):
         """
         Performs local signals compression in the frequency domain
         for TI-DANSE.
@@ -2411,15 +2418,12 @@ class TIDANSEvariables(DANSEvariables):
         """
 
         # Transfer local observations to frequency domain
-        DFTorder = yq.shape[0]  # DFT order
-
         yqHat = np.fft.fft(
-            yq * self.winWOLAanalysis[:, np.newaxis], DFTorder, axis=0
+            yq * self.winWOLAanalysis[:, np.newaxis], self.DFTsize, axis=0
         )
         # Keep only positive frequencies
-        yqHat = yqHat[:int(DFTorder/2 + 1), :]
+        yqHat = yqHat[:int(self.DFTsize // 2 + 1), :]
         # Compute compression vector
-        # allIdx = np.arange(self.wTildeExt[k].shape[-1])
         if not self.startUpdates[k]:
             p = self.wTildeExt[k][:, :yq.shape[-1]]
         else:
@@ -2427,14 +2431,13 @@ class TIDANSEvariables(DANSEvariables):
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
             p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
-            # p = self.wTildeExt[k][:, :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 
         # WOLA synthesis stage
         if zForSynthesis is not None:
             # IDFT
-            zqCurr = base.back_to_time_domain(zqHat, DFTorder, axis=0)
+            zqCurr = base.back_to_time_domain(zqHat, self.DFTsize, axis=0)
             zqCurr = np.real_if_close(zqCurr)
             zqCurr *= self.winWOLAsynthesis    # multiply by synthesis window
 
@@ -2443,10 +2446,8 @@ class TIDANSEvariables(DANSEvariables):
                 zq = zqCurr
             else:
                 # Overlap-add
-                zq = np.zeros(DFTorder)
-                # TODO: consider case with multiple neighbor nodes
-                # (`len(zqPrevious) > 1`).
-                zq[:(DFTorder // 2)] = zForSynthesis[-(DFTorder // 2):]
+                zq = np.zeros(self.DFTsize)
+                zq[:(self.DFTsize - self.Ns)] = zForSynthesis[-(self.DFTsize - self.Ns):]
                 zq += zqCurr
         else:
             zq = None
@@ -2476,8 +2477,8 @@ class TIDANSEvariables(DANSEvariables):
             # Simultaneous or asynchronous node-updating
             if 'seq' not in self.nodeUpdating:
                 # Relaxed external filter update
-                self.wTildeExt[k] = self.expAvgBeta[k] * self.wTildeExt[k] +\
-                    (1 - self.expAvgBeta[k]) *  self.wTildeExtTarget[k]
+                self.wTildeExt[k] = self.expAvgBetaWext[k] * self.wTildeExt[k] +\
+                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
                 # Update targets
                 if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
                     self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\

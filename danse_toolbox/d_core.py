@@ -144,6 +144,8 @@ def tidanse(
         p=p,
         wasnObj=wasnObj
     )
+    # Update WASN object as the one at the start of the simulation
+    wasnObj = wasnObjList[0]
 
     # Profiling
     def is_interactive():  # if file is run from notebook
@@ -165,7 +167,7 @@ def tidanse(
         scatterSize, ax = None, None
 
     # Loop over event instants
-    for instantIdx, currEvents in enumerate(eventInstants):
+    for _, currEvents in enumerate(eventInstants):
 
         # Parse event matrix and inform user (if asked)
         if tidv.printoutsAndPlotting.printout_eventsParser:

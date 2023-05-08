@@ -269,7 +269,7 @@ class DANSEparameters(Hyperparameters):
     # ---- Debugging
     saveConditionNumber: bool = False   # if True, save condition numbers of
         # relevant covariance matrices.
-    saveConditionNumberEvery: int = 1    # [iter] bw. condition number saves.
+    saveConditionNumberEvery: int = 999    # [iter] bw. condition number saves.
     wasnInfoInitiated: bool = False     # if True, the WASN info has been
         # initiated (i.e. the WASN has been created).
     startUpdatesAfterAtLeast: float = 0.   # [s] min. time before starting
@@ -480,12 +480,8 @@ def initialize_events(
     Ttot = timeInstants[-1, :]
 
     # Prepare events matrix building
-    # TODO: cleanup line below
-    # if p.simType == 'online':
-    prepOutput = prep_evmat_build_online(p, nNodes, wasnObj, fs, Ttot)
-    # else:
-    #     raise ValueError(f'Unexpected `simType`: {p.simType} (should be "online" for online DANSE).')
-    
+    prepOutput = prep_evmat_build(p, nNodes, wasnObj, fs, Ttot)
+
     # Build event matrix
     outputEvents = build_events_matrix(
         up_t=prepOutput['upInstants'],
@@ -574,7 +570,7 @@ def initialize_events_batch(
     return outputEvents, fs, wasnObjList
 
 
-def prep_evmat_build_online(
+def prep_evmat_build(
         p: DANSEparameters,
         nNodes: int,
         wasnObj: WASN,
@@ -582,7 +578,8 @@ def prep_evmat_build_online(
         Ttot: float
     ):
     """
-    Prepare for event matrix building in online DANSE.
+    Prepare for event matrix building in online DANSE
+    (also used for batch DANSE).
 
     Parameters
     ----------
@@ -630,8 +627,17 @@ def prep_evmat_build_online(
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             # Expected DANSE update instants
+            # upInstants = [
+            #     np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
+            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            # ]
+
+            # Edit on 2023.05.08 we only start updating when we have enough
+            # samples so that the first update is not affected by the WOLA
+            # analysis window (no "fading in" of the data) -- see journal 2023
+            # week19 MON entry --------vvvv--------
             upInstants = [
-                np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
+                np.arange(np.ceil(2 * p.DFTsize / p.Ns),
                 int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
             ]
             # ^ note that we only start updating when we have enough samples.
