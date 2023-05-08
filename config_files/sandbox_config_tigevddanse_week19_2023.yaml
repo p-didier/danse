@@ -14,7 +14,7 @@ exportParams:
   conditionNumberPlot: false
 danseParams:
   # For debug
-  performGEVD: true
+  performGEVD: false
   # simType: batch  # 'batch' or 'online'
   simType: online  # 'batch' or 'online'
   nodeUpdating: asy

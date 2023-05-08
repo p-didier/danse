@@ -214,7 +214,7 @@ class TestParameters:
     def is_batch(self):
         return self.danseParams.simType == 'batch'
     
-    def load_from_yaml(self, path):
+    def load_from_yaml(self, path) -> 'TestParameters':
         """Loads dataclass from YAML file."""
         self.loadedFromYaml = True  # flag to indicate that the object was loaded from YAML
         self.originYaml = path  # path to YAML file
