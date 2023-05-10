@@ -25,9 +25,10 @@ danseParams:
   simType: online
   saveConditionNumber: true
   saveConditionNumberEvery: 9999
-  performGEVD: true
+  # performGEVD: true
+  performGEVD: false
   t_expAvg50p: 30
-  t_expAvg50pExternalFilters: 50.
+  t_expAvg50pExternalFilters: 30.
   timeBtwExternalFiltUpdates: 0.25
   # t_expAvg50p: 2
   #

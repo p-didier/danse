@@ -5,7 +5,6 @@
 # (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
 
 import sys
-import pickle, gzip
 from pathlib import Path
 import matplotlib.pyplot as plt
 import tests.sandbox as sandbox
@@ -27,7 +26,11 @@ TEST_PARAMS = {
     'tau': [2, 10, 30],  # time constant for exponential averaging [s]
 }
 
-def main(testParams=TEST_PARAMS):
+def main(
+        testParams=TEST_PARAMS,
+        outputFolder=OUTPUT_FOLDER,
+        baseConfigFile=BASE_CONFIG_FILE_PATH,
+    ):
     """Main function (called by default when running script)."""
     
     nTestsRemaining = len(testParams['t60']) * len(testParams['Mk']) * len(testParams['SRO']) * len(testParams['tau'])
@@ -65,26 +68,36 @@ def main(testParams=TEST_PARAMS):
 
         # Skip test if already run
         if SKIP_IF_ALREADY_RUN:
-            if Path(f'{OUTPUT_FOLDER}/out_{testName}.pkl.gz').exists():
+            if Path(f'{outputFolder}/{testName}').is_dir():
                 print(f'Skipping test {testName} because it has already been run.')
                 continue
 
         # Run test
-        out = run_test(tau, sros, nSensorPerNode, rt, testName)
-                    
-        # Save output as Pickle archive
-        print(f'Saving outputs to {OUTPUT_FOLDER}...')
-        with gzip.open(f'{OUTPUT_FOLDER}/out_{testName}.pkl.gz', 'wb') as f:
-            pickle.dump(out, f)
-    
+        run_test(
+            tau,
+            sros,
+            nSensorPerNode,
+            rt,
+            testName,
+            outputFolder,
+            baseConfigFile
+        )
 
 
-def run_test(tau, sros, nSensorPerNode, rt, testName):
+def run_test(
+        tau,
+        sros,
+        nSensorPerNode,
+        rt,
+        testName,
+        outputFolder,
+        baseConfigFile
+    ):
     """Run a single test."""
 
     # Load parameters from config file
     print('Loading parameters...')
-    p = TestParameters().load_from_yaml(BASE_CONFIG_FILE_PATH)
+    p = TestParameters().load_from_yaml(baseConfigFile)
     print('Parameters loaded.')
 
     # Update parameters
@@ -94,7 +107,7 @@ def run_test(tau, sros, nSensorPerNode, rt, testName):
     p.wasnParams.nSensorPerNode = nSensorPerNode
     p.wasnParams.t60 = rt
     p.wasnParams.__post_init__()  # re-initialize WASN parameters
-    p.exportParams.exportFolder = f'{OUTPUT_FOLDER}/{testName}'
+    p.exportParams.exportFolder = f'{outputFolder}/{testName}'
     p.__post_init__()  # re-initialize WASN parameters
     p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
     p.danseParams.printoutsAndPlotting.verbose = False  # disable verbose mode
@@ -105,9 +118,7 @@ def run_test(tau, sros, nSensorPerNode, rt, testName):
     plt.close('all')
 
     # Run test
-    outPostProc = sandbox.main(p=p)
-
-    return outPostProc
+    sandbox.main(p=p)
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@ exportParams:
   conditionNumberPlot: false
 danseParams:
   # For debug
+  # performGEVD: true
   performGEVD: false
   # simType: batch  # 'batch' or 'online'
   simType: online  # 'batch' or 'online'
@@ -22,7 +23,8 @@ danseParams:
   computeLocal: true
   computeCentralised: true
   filterInitType: selectFirstSensor_andFixedValue
-  filterInitFixedValue: 0.01
+  # filterInitFixedValue: 0.01
+  filterInitFixedValue: 1
   #
   WOLAovlp: 0.5
   # WOLAovlp: 0.75

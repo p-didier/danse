@@ -124,7 +124,7 @@ class DANSEoutputs(DANSEparameters):
         else:
             met.save(self, foldername, exportType=exportType)
 
-    def load(self, foldername, dataType='pkl'):
+    def load(self, foldername, dataType='pkl') -> 'DANSEoutputs':
         """Loads dataclass to Pickle archive in folder `foldername`."""
         return met.load(self, foldername, silent=True, dataType=dataType)
 
@@ -824,23 +824,23 @@ def plot_metrics(
         fig1 = plt.figure(figsize=(12,3))
     
     ax = fig1.add_subplot(1, nCols, 1)   # Unweighted SNR
-    metrics_subplot(out.nNodes, ax, barWidth, out.metrics.snr)
+    metrics_subplot(ax, barWidth, out.metrics.snr)
     ax.set(title='SNR', ylabel='[dB]')
     if snrYlimMax is not None:
         ax.set_ylim([0, snrYlimMax])
     #
     ax = fig1.add_subplot(1, nCols, 2)   # STOI
-    metrics_subplot(out.nNodes, ax, barWidth, out.metrics.stoi)
+    metrics_subplot(ax, barWidth, out.metrics.stoi)
     ax.set(title='eSTOI')
     ax.set_ylim([0, 1])
     #
     if not onlySNRandESTOIinPlots:
         ax = fig1.add_subplot(1, nCols, 3)   # fwSNRseg
-        metrics_subplot(out.nNodes, ax, barWidth, out.metrics.fwSNRseg)
+        metrics_subplot(ax, barWidth, out.metrics.fwSNRseg)
         ax.set(title='fwSNRseg', ylabel='[dB]')
         #
         ax = fig1.add_subplot(1, nCols, 4)   # PESQ
-        metrics_subplot(out.nNodes, ax, barWidth, out.metrics.pesq)
+        metrics_subplot(ax, barWidth, out.metrics.pesq)
         ax.set(title='PESQ')
     #
     ax.legend(bbox_to_anchor=(1, 0), loc="lower left")
@@ -906,13 +906,11 @@ def plot_metrics(
     return fig1, fig2
 
 
-def metrics_subplot(numNodes, ax, barWidth, data):
+def metrics_subplot(ax, barWidth=1, data=None):
     """Helper function for <Results.plot_enhancement_metrics()>.
     
     Parameters
     ----------
-    numNodes : int
-        Number of nodes in network.
     ax : Axes handle
         Axes handle to plot on.
     barWidth : float
@@ -921,6 +919,8 @@ def metrics_subplot(numNodes, ax, barWidth, data):
             of np.ndarrays of [3 x 1] lists of floats
         Speech enhancement metric(s) per node.
     """
+
+    numNodes = len(data)  # number of nodes in network
 
     flagZeroBar = False  # flag for plotting a horizontal line at `metric = 0`
 

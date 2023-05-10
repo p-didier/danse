@@ -19,13 +19,13 @@ RELATIVE_PATH_TO_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder
 SROS_REF_FILENAME = 'srosConsidered.pkl'  # file containing the SROs used for each test in `FOLDER`
 LOOK_AT_THE_LAST_N_ITERATIONS = 100  # number of iterations to consider for computing the average filter norms
 
-def main():
+def main(folder=FOLDER):
     """Main function (called by default when running script)."""
-    figs = plot_results(*import_results(folder=FOLDER))
+    figs = plot_results(*import_results(folder))
 
     for fig in figs:
-        fig.savefig(f'{FOLDER}/{fig.get_label()}.png', dpi=300)
-        fig.savefig(f'{FOLDER}/{fig.get_label()}.pdf')
+        fig.savefig(f'{folder}/{fig.get_label()}.png', dpi=300)
+        fig.savefig(f'{folder}/{fig.get_label()}.pdf')
 
 
 def import_results(folder: str):

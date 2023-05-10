@@ -385,6 +385,10 @@ class DANSEvariables(base.DANSEparameters):
                 fixedValue=self.filterInitFixedValue
             ))
             if tidanseFlag:
+                # In TI-DANSE, `wTildeExt` and `wTildeExtTarget` must have the
+                # same shape as `wTilde` (i.e., `M_k + 1` coefficients), unlike
+                # in the fully connected regular DANSE case, because we need to 
+                # compute the fusion vector `p` as $w_{kk}/g_\eta$.
                 wTildeExt.append(base.init_complex_filter(
                     (self.nPosFreqs, dimYTilde[k]),
                     self.referenceSensor,
@@ -1605,23 +1609,46 @@ class DANSEvariables(base.DANSEparameters):
     def get_y_tilde_batch(self, k):
         """
         Compute complete yTilde for all nodes, all frames, using
-        current (external) DANSE filters.
+        current (external) DANSE filters. Works for both fully connected
+        DANSE and TI-DANSE.
         """
-        # Compute batch fused signals using current (external) DANSE filters
-        zBatch = np.zeros((
-            self.yinSTFT[k].shape[0],
-            self.yinSTFT[k].shape[1],
-            len(self.neighbors[k])
-        ), dtype=complex)
-        for idxq in range(len(self.neighbors[k])):
-            q = self.neighbors[k][idxq]  # neighbor node index in the WASN
-            zBatch[:, :, idxq] = np.einsum(
-                'ij,ikj->ik',
-                self.wTildeExt[q].conj(),
-                self.yinSTFT[q]
+        if hasattr(self, 'eta'):
+            # TI-DANSE case
+            etaMkBatch = np.zeros((
+                self.yinSTFT[k].shape[0],
+                self.yinSTFT[k].shape[1]
+            ), dtype=complex)
+            for idxq in range(len(self.neighbors[k])):
+                q = self.neighbors[k][idxq]
+                p = self.wTildeExt[q][:, :self.nSensorPerNode[q]] /\
+                    self.wTildeExt[q][:, -1:]  # fusion vector
+                etaMkBatch += np.einsum(   # <-- `+=` is important
+                    'ij,ikj->ik',
+                    p.conj(),
+                    self.yinSTFT[q]
+                )
+            # Construct yTilde
+            yTildeBatch = np.concatenate(
+                (self.yinSTFT[k], etaMkBatch[:, :, np.newaxis]),
+                axis=-1
             )
-        # Construct yTilde
-        yTildeBatch = np.concatenate((self.yinSTFT[k], zBatch), axis=-1)
+        else:
+            # Compute batch fused signals using current (external) DANSE filters
+            zBatch = np.zeros((
+                self.yinSTFT[k].shape[0],
+                self.yinSTFT[k].shape[1],
+                len(self.neighbors[k])
+            ), dtype=complex)
+            for idxq in range(len(self.neighbors[k])):
+                q = self.neighbors[k][idxq]  # neighbor node index in the WASN
+                zBatch[:, :, idxq] = np.einsum(
+                    'ij,ikj->ik',
+                    self.wTildeExt[q].conj(),
+                    self.yinSTFT[q]
+                )
+            # Construct yTilde
+            yTildeBatch = np.concatenate((self.yinSTFT[k], zBatch), axis=-1)
+        
         return yTildeBatch
 
     def perform_update(self, k):
@@ -2142,11 +2169,6 @@ class TIDANSEvariables(DANSEvariables):
             Node index.
         """
         # Process WOLA buffer: use the valid part of the overlap-added signal
-        # # TODO: this is for whole-chunk broadcasting only
-        # if self.i[k] == 0:
-        #     self.zLocalPrime[k] = copy.deepcopy(self.zLocalPrimeBuffer[k])
-        # else:
-
         self.zLocalPrime[k] = np.concatenate((
             self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
             self.zLocalPrimeBuffer[k][:self.Ns]
@@ -2170,7 +2192,7 @@ class TIDANSEvariables(DANSEvariables):
                 self.zLocal_s[k] += self.zLocal_s[l]
                 self.zLocal_n[k] += self.zLocal_n[l]
 
-        # At the root, the sum is not partial, it is complete
+        # At the root, the sum is complete
         if len(self.downstreamNeighbors[k]) == 0:
             self.eta[k] = copy.deepcopy(self.zLocal[k])
             self.eta_s[k] = copy.deepcopy(self.zLocal_s[k])
@@ -2257,6 +2279,7 @@ class TIDANSEvariables(DANSEvariables):
 
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
+
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)
 
@@ -2357,11 +2380,11 @@ class TIDANSEvariables(DANSEvariables):
             axis=1
         )
 
-        # if k == 0 and self.oVADframes[k][self.i[k]]:
-        #     plt.close('all')
-        #     plt.figure()
-        #     plt.plot(yTildeCurr_s)
-        #     stop = 1
+        if k == 0 and self.oVADframes[k][self.i[k]]:
+            plt.close('all')
+            plt.figure()
+            plt.plot(yTildeCurr)
+            stop = 1
 
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
         self.yTilde_s[k][:, self.i[k], :] = yTildeCurr_s
@@ -2447,7 +2470,8 @@ class TIDANSEvariables(DANSEvariables):
             else:
                 # Overlap-add
                 zq = np.zeros(self.DFTsize)
-                zq[:(self.DFTsize - self.Ns)] = zForSynthesis[-(self.DFTsize - self.Ns):]
+                zq[:(self.DFTsize - self.Ns)] =\
+                    zForSynthesis[-(self.DFTsize - self.Ns):]
                 zq += zqCurr
         else:
             zq = None

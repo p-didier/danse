@@ -1,22 +1,23 @@
 seed: 12350
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230506_tests/DFTsize/n1024_benchmark # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230510_tests/batchTIDANSE/asy_ssnodes # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
   # For debug
-  saveConditionNumberEvery: 100  # [iterations]
-  performGEVD: true
-  # Often used
-  # simType: batch  # 'batch' or 'online'
-  simType: online  # 'batch' or 'online'
+  performGEVD: false
+  # performGEVD: true
+  simType: batch  # 'batch' or 'online'
+  # simType: online  # 'batch' or 'online'
   nodeUpdating: asy
   # nodeUpdating: seq
   computeLocal: true
   computeCentralised: true
+  filterInitType: selectFirstSensor_andFixedValue
+  filterInitFixedValue: 1
   #
   WOLAovlp: 0.5
   # WOLAovlp: 0.75
@@ -25,8 +26,8 @@ danseParams:
   # DFTsize: 4096
   GEVDrank: 1
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 10.
-  t_expAvg50pExternalFilters: 10.
+  t_expAvg50p: 30.
+  t_expAvg50pExternalFilters: 30.
   timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
     printout_profiler: true
@@ -38,7 +39,7 @@ wasnParams:
   # rd: '[0.05, 0.05, 0.05]'
   # minDistToWalls: 0.0
   # Often used
-  sigDur: 15  # [s]
+  sigDur: 10  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   # layoutType: random_spinning_top
@@ -47,8 +48,8 @@ wasnParams:
   # t60: 0.2  # [s]
   t60: 0.0  # [s]
   SROperNode: '[0]'  # [PPM]
-  nSensorPerNode: '[1, 2, 3]'
-  # nSensorPerNode: '[1, 1, 1]'
+  # nSensorPerNode: '[1, 2, 3]'
+  nSensorPerNode: '[1, 1, 1]'
   interSensorDist: 0.05
   #
   baseSNR: 5
@@ -61,4 +62,7 @@ wasnParams:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
   referenceSensor: 0
   topologyParams:
-    topologyType: fully-connected
+    topologyType: user-defined
+    commDistance: 4.0
+    plotTopo: false
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists
