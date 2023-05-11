@@ -125,6 +125,7 @@ wasnParams:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
   rd: '[5, 5, 5]'  # compact way to write lists/arrays (as a string)
   referenceSensor: 0
+  vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
     # Often used
     topologyType: fully-connected

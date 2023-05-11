@@ -49,6 +49,8 @@ class AcousticScenarioParameters:
     # vvv VAD parameters vvv
     VADenergyDecrease_dB: float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
     VADwinLength: float = 20e-3     # [s] VAD window length
+    enableVADloadFromFile: bool = True  # if True, loads VAD from file
+    vadFilesFolder: str = ''    # folder containing VAD files
     #
     nNodes: int = 0        # number of nodes in scenario
     nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node

@@ -29,7 +29,7 @@ TEST_PARAMS = {
 def main(
         testParams=TEST_PARAMS,
         outputFolder=OUTPUT_FOLDER,
-        baseConfigFile=BASE_CONFIG_FILE_PATH,
+        cfgFilename=BASE_CONFIG_FILE_PATH,
     ):
     """Main function (called by default when running script)."""
     
@@ -80,7 +80,7 @@ def main(
             rt,
             testName,
             outputFolder,
-            baseConfigFile
+            cfgFilename
         )
 
 

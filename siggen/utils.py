@@ -135,49 +135,6 @@ def build_room(p: classes.WASNparameters):
         yOffset = np.random.uniform(
             p.minDistToWalls + circRmin, p.rd[1] - circRmin - p.minDistToWalls
         )
-
-        def _random_point_on_line(az, el, xOffset=0, yOffset=0):
-            """
-            Helper function to generate a random point on a line.
-            
-            Parameters
-            ----------
-            az : float
-                Azimuth angle of the line.
-            el : float
-                Elevation angle of the line.
-            xOffset : float, optional
-                Offset on the x axis.
-            yOffset : float, optional
-                Offset on the y axis.
-
-            Returns
-            -------
-            x : float
-                x coordinate of the point.
-            y : float
-                y coordinate of the point.
-            z : float
-                z coordinate of the point.
-            """
-            # Ensure the points are in the room
-            cond1, cond2, cond3 = True, True, True
-            x, y, z = -1, -1, -1
-            while cond1 or cond2 or cond3:
-                r = np.random.uniform(
-                    p.minDistToWalls,
-                    maxR - p.minDistToWalls
-                )
-                x = r * np.cos(az) * np.sin(el)
-                y = r * np.sin(az) * np.sin(el)
-                x += xOffset
-                y += yOffset
-                z = r * np.cos(el)
-                # Update conditions
-                cond1 = x > p.rd[0] - p.minDistToWalls or x < p.minDistToWalls
-                cond2 = y > p.rd[1] - p.minDistToWalls or y < p.minDistToWalls
-                cond3 = z > p.rd[2] - p.minDistToWalls or z < p.minDistToWalls
-            return x, y, z
         
         # Generate node and sensor positions
         validNodePos = False
@@ -193,7 +150,7 @@ def build_room(p: classes.WASNparameters):
             desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
             for ii in range(p.nDesiredSources):
                 # Generate random point on the line
-                x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
+                x, y, z = random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
                 # Add source
                 sourceSig = _get_source_signal(p.desiredSignalFile[ii])
                 desiredSignalsRaw[:, ii] = sourceSig  # save (for VAD computation)
@@ -207,7 +164,7 @@ def build_room(p: classes.WASNparameters):
             noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
             for ii in range(p.nNoiseSources):
                 # Generate random point on the line
-                x, y, z = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
+                x, y, z = random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
                 # Add source
                 sourceSig = _get_source_signal(p.noiseSignalFile[ii])
                 sourceSig *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
@@ -220,7 +177,7 @@ def build_room(p: classes.WASNparameters):
                 room.add_soundsource(ssrc)
             
             # Generate random circle center
-            cx, cy, cz = _random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
+            cx, cy, cz = random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
             # Compute maximal circle radius based on room dimension
             if 'random' in p.layoutType:
                 refDistCenterCircle = np.sqrt(
@@ -287,18 +244,6 @@ def build_room(p: classes.WASNparameters):
                 np.any(micArray < p.minDistToWalls):
                 validNodePos = False
                 attemptsCount += 1
-                
-                if 0:  # debug
-                    fig = plt.figure()
-                    fig.set_size_inches(3.5, 3.5)
-                    ax = fig.add_subplot(projection='3d')
-                    # Temporarily add mics to room for plot
-                    room.add_microphone_array(micArray.T)
-                    plot_asc_3d(ax, room, p, cx, cy, cz, plotSourcesLine=True)
-                    # Delete mics from room after plot
-                    delattr(room, 'mic_array')
-                    plt.draw()
-                    time.sleep(0.1)
                 if attemptsCount > maxNumAttempts:
                     raise ValueError("Could not find valid node positions.")
             else:
@@ -335,7 +280,8 @@ def build_room(p: classes.WASNparameters):
     _, wetNoises = get_vad(
         rirsNoiseSources,
         noiseSignalsRaw,
-        p
+        p,
+        bypassVADcomputation=True  # save computation time
     )
 
     return room, vad, wetSpeeches, wetNoises
@@ -422,7 +368,12 @@ def plot_asc_3d(
     ax.set_title('Room layout (3D)')
 
 
-def get_vad(rirs, xdry, p: classes.WASNparameters):
+def get_vad(
+        rirs,
+        xdry: np.ndarray,
+        p: classes.WASNparameters,
+        bypassVADcomputation=False
+    ):
     """
     Compute all node- and desired-source-specific VADs.
 
@@ -436,6 +387,8 @@ def get_vad(rirs, xdry, p: classes.WASNparameters):
         Dry (latent) source signals.
     p : WASNparameters object
         WASN parameters.
+    bypassVADcomputation : bool
+        If True, bypass VAD computation and return None instead of `vad`.
 
     Returns
     -------
@@ -446,7 +399,9 @@ def get_vad(rirs, xdry, p: classes.WASNparameters):
     """
 
     vad = np.zeros((xdry.shape[0], len(rirs), len(rirs[0][0])))
-    wetsigs = [np.zeros((len(rirs[k]), xdry.shape[0], len(rirs[k][0]))) for k in range(len(rirs))]
+    wetsigs = [np.zeros((len(rirs[k]), xdry.shape[0], len(rirs[k][0])))\
+        for k in range(len(rirs))]
+
     for k in range(len(rirs)):  # for each node
         for m in range(len(rirs[k])):  # for each microphone
             for ii in range(len(rirs[k][m])):  # for each desired source
@@ -455,21 +410,69 @@ def get_vad(rirs, xdry, p: classes.WASNparameters):
                 wetsigs[k][m, :, ii] = wetsig[:xdry.shape[0]]  # truncate
 
         for ii in range(len(rirs[k][p.referenceSensor])):  # for each desired source
-            thrsVAD = np.amax(wetsigs[k][p.referenceSensor, :, ii] ** 2) /\
-                p.VADenergyFactor
-            # Inform user
-            print(f'Computing VAD for node {k + 1}/{len(rirs)} and desired source {ii + 1}/{len(rirs[k][p.referenceSensor])}...')
-            vad[:, k, ii], _ = oracleVAD(
-                wetsigs[k][p.referenceSensor, :, ii],
-                tw=p.VADwinLength,
-                thrs=thrsVAD,
-                Fs=p.fs
-            )
-
+            if bypassVADcomputation:
+                vad = None
+            else:
+                # Inform user
+                print(f'Computing VAD for node {k + 1}/{len(rirs)} and desired source {ii + 1}/{len(rirs[k][p.referenceSensor])}...')
+                vad[:, k, ii] = get_or_load_vad(
+                    x=wetsigs[k][p.referenceSensor, :, ii],
+                    eFact=p.VADenergyFactor,
+                    Nw=p.VADwinLength,
+                    fs=p.fs,
+                    loadIfPossible=p.enableVADloadFromFile,
+                    vadFilesFolder=p.vadFilesFolder
+                )
+            
+    
     # Sum wet signals over sources
     wetsigs = [np.sum(wetsig, axis=-1) for wetsig in wetsigs]
 
     return vad, wetsigs
+
+
+def get_or_load_vad(x, eFact, Nw, fs, loadIfPossible=True, vadFilesFolder='.'):
+    """
+    Compute or load VAD.
+
+    Parameters
+    ----------
+    x : [N x 1] np.ndarray (float)
+        Signal.
+    eFact : float
+        Energy factor.
+    Nw : int
+        Window length in samples.
+    fs : float
+        Sampling frequency in Hz.
+    loadIfPossible : bool
+        If True, try to load VAD from file.
+    vadFilesFolder : str
+        Folder where VAD files are stored.
+
+    Returns
+    -------
+    vad : [N x 1] np.ndarray (bool or int [0 or 1])
+        VAD.
+    """
+    # Compute VAD threshold
+    thrsVAD = np.amax(x ** 2) / eFact
+    # Compute VAD filename
+    vadFilename = f'{vadFilesFolder}/vad_{array_id(x)}_thrs_{dot_to_p(np.round(thrsVAD, 3))}_Nw_{int(Nw)}_fs_{dot_to_p(fs)}.npy'
+    # Check if VAD can be loaded from file
+    if loadIfPossible and os.path.isfile(vadFilename):
+        # Load VAD from file
+        vad = np.load(vadFilename)
+    else:
+        # Compute VAD
+        vad, _ = oracleVAD(
+            x,
+            tw=Nw,
+            thrs=thrsVAD,
+            Fs=fs
+        )
+        np.save(vadFilename, vad)
+    return vad
 
 
 def plot_mic_sigs(room: pra.room.ShoeBox, vad=None):
@@ -1156,3 +1159,104 @@ def rotate_array_yx(array, targetVector=None):
     # Recentre array
     array = array + targetVector
     return array
+
+
+def random_point_on_line(
+        az,
+        el,
+        minDistToWalls,
+        maxR,
+        rd,
+        xOffset=0,
+        yOffset=0,
+    ):
+    """
+    Generate a random point on a line.
+    
+    Parameters
+    ----------
+    az : float
+        Azimuth angle of the line.
+    el : float
+        Elevation angle of the line.
+    minDistToWalls : float
+        Minimum distance to the walls [m].
+    maxR : float
+        Maximum distance to the origin.
+    rd : [3 x 1] list (or np.ndarray) (float)l
+        Room dimensions ([x, y, z]) [m].
+    xOffset : float, optional
+        Offset on the x axis.
+    yOffset : float, optional
+        Offset on the y axis.
+
+    Returns
+    -------
+    x : float
+        x coordinate of the point.
+    y : float
+        y coordinate of the point.
+    z : float
+        z coordinate of the point.
+    """
+    # Ensure the points are in the room
+    cond1, cond2, cond3 = True, True, True
+    x, y, z = -1, -1, -1
+    while cond1 or cond2 or cond3:
+        r = np.random.uniform(
+            minDistToWalls,
+            maxR - minDistToWalls
+        )
+        x = r * np.cos(az) * np.sin(el)
+        y = r * np.sin(az) * np.sin(el)
+        x += xOffset
+        y += yOffset
+        z = r * np.cos(el)
+        # Update conditions
+        cond1 = x > rd[0] - minDistToWalls or x < minDistToWalls
+        cond2 = y > rd[1] - minDistToWalls or y < minDistToWalls
+        cond3 = z > rd[2] - minDistToWalls or z < minDistToWalls
+    return x, y, z
+
+
+def array_id(
+        a: np.ndarray, *,
+        include_dtype=False,
+        include_shape=False,
+        algo = 'xxhash'
+    ):
+    """
+    Computes a unique ID for a numpy array.
+    From: https://stackoverflow.com/a/64756069
+
+    Parameters
+    ----------
+    a : np.ndarray
+        The array to compute the ID for.
+    include_dtype : bool, optional
+        Whether to include the dtype in the ID.
+    include_shape : bool, optional
+    """
+    data = bytes()
+    if include_dtype:
+        data += str(a.dtype).encode('ascii')
+    data += b','
+    if include_shape:
+        data += str(a.shape).encode('ascii')
+    data += b','
+    data += a.tobytes()
+    if algo == 'sha256':
+        import hashlib
+        return hashlib.sha256(data).hexdigest().upper()
+    elif algo == 'xxhash':
+        import xxhash
+        return xxhash.xxh3_64(data).hexdigest().upper()
+    else:
+        assert False, algo
+
+
+def dot_to_p(x):
+    """
+    Converts a float to a string with a 'p' instead of a '.'.
+    """
+    return str(x).replace('.', 'p')

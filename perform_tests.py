@@ -23,13 +23,14 @@ def main():
 
     t0 = time.time()
 
-    tests.sandbox.main(
-        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-    )
-
-    # tests.benchmark_tigevddanse.main(
-    #     outputFolder=f'{Path(__file__).parent}/out/20230510_tests/tidanse_w1dots1',
+    # tests.sandbox.main(
+    #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
     # )
+
+    tests.benchmark_tigevddanse.main(
+        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config_danse_week19_2023.yaml',
+        outputFolder=f'{Path(__file__).parent}/out/20230511_tests/danse_oldVAD',
+    )
     # tests.benchmark_tigevddanse_postproc.main()
 
     # tests.danse_robustness_to_sros.main()
