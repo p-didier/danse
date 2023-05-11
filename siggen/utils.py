@@ -457,6 +457,8 @@ def get_vad(rirs, xdry, p: classes.WASNparameters):
         for ii in range(len(rirs[k][p.referenceSensor])):  # for each desired source
             thrsVAD = np.amax(wetsigs[k][p.referenceSensor, :, ii] ** 2) /\
                 p.VADenergyFactor
+            # Inform user
+            print(f'Computing VAD for node {k + 1}/{len(rirs)} and desired source {ii + 1}/{len(rirs[k][p.referenceSensor])}...')
             vad[:, k, ii], _ = oracleVAD(
                 wetsigs[k][p.referenceSensor, :, ii],
                 tw=p.VADwinLength,

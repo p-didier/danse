@@ -627,19 +627,19 @@ def prep_evmat_build(
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             # Expected DANSE update instants
-            # upInstants = [
-            #     np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
-            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-            # ]
+            upInstants = [
+                np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
+                int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            ]
 
             # Edit on 2023.05.08 we only start updating when we have enough
             # samples so that the first update is not affected by the WOLA
             # analysis window (no "fading in" of the data) -- see journal 2023
             # week19 MON entry --------vvvv--------
-            upInstants = [
-                np.arange(np.ceil(2 * p.DFTsize / p.Ns),
-                int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-            ]
+            # upInstants = [
+            #     np.arange(np.ceil(2 * p.DFTsize / p.Ns),
+            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            # ]
             # ^ note that we only start updating when we have enough samples.
             fuInstants = [
                 np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
@@ -1841,13 +1841,13 @@ def get_desired_sig_chunk(
         # Compute desired signal chunk estimate using WOLA
         dhatCurr = np.einsum('ij,ij->i', w.conj(), y)
         # Transform back to time domain (WOLA processing)
-        dChunCurr = normFactWOLA * win *\
+        dChunkCurr = normFactWOLA * win *\
             back_to_time_domain(dhatCurr, len(win))
         # Overlap and add construction of output time-domain signal
         if len(dChunk) < len(win):
-            dChunk += np.real_if_close(dChunCurr[-len(dChunk):])
+            dChunk += np.real_if_close(dChunkCurr[-len(dChunk):])
         else:
-            dChunk += np.real_if_close(dChunCurr)
+            dChunk += np.real_if_close(dChunkCurr)
 
     elif desSigProcessingType == 'conv':
         # Compute desired signal chunk estimate using T(z) approximation

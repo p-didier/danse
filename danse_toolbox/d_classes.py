@@ -457,61 +457,29 @@ class DANSEvariables(base.DANSEparameters):
         self.d = np.zeros(
             (wasn[self.referenceSensor].data.shape[0], nNodes)
         )
-        self.d_s = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
-        self.d_n = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
-        self.dCentr = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
-        self.dCentr_s = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
-        self.dCentr_n = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
-        self.dLocal = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
-        self.dLocal_s = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
-        self.dLocal_n = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
-        )
+        self.d_s = np.zeros_like(self.d)
+        self.d_n = np.zeros_like(self.d)
+        self.dCentr = np.zeros_like(self.d)
+        self.dCentr_s = np.zeros_like(self.d)
+        self.dCentr_n = np.zeros_like(self.d)
+        self.dLocal = np.zeros_like(self.d)
+        self.dLocal_s = np.zeros_like(self.d)
+        self.dLocal_n = np.zeros_like(self.d)
         self.i = np.zeros(nNodes, dtype=int)
         self.dimYTilde = dimYTilde
         self.dhat = np.zeros(
             (self.nPosFreqs, self.nIter, nNodes), dtype=complex
         )
-        self.dhat_s = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
-        self.dhat_n = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
-        self.dHatCentr = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
-        self.dHatCentr_s = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
-        self.dHatCentr_n = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
-        self.dHatLocal = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
-        self.dHatLocal_s = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
-        self.dHatLocal_n = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
-        )
+        self.dhat_s = np.zeros_like(self.dhat)
+        self.dhat_n = np.zeros_like(self.dhat)
+        self.dHatCentr = np.zeros_like(self.dhat)
+        self.dHatCentr_s = np.zeros_like(self.dhat)
+        self.dHatCentr_n = np.zeros_like(self.dhat)
+        self.dHatLocal = np.zeros_like(self.dhat)
+        self.dHatLocal_s = np.zeros_like(self.dhat)
+        self.dHatLocal_n = np.zeros_like(self.dhat)
         self.downstreamNeighbors = [node.downstreamNeighborsIdx\
-                                    for node in wasn]
+            for node in wasn]
         self.expAvgBeta = [node.beta for node in wasn]
         self.expAvgBetaWext = [node.betaWext for node in wasn]
         self.firstDANSEupdateRefSensor = None  # init
@@ -1389,9 +1357,9 @@ class DANSEvariables(base.DANSEparameters):
 
         # if k == 0 and self.startUpdates[k] and self.oVADframes[k][self.i[k]]:
         # if k == 0 and self.i[k] > 50 and self.oVADframes[k][self.i[k]]:
-        # # if k == 0 and self.oVADframes[k][self.i[k]]:
+        # if k == 0 and self.oVADframes[k][self.i[k]]:
         #     plt.figure()
-        #     plt.plot(yTildeCurr_s)
+        #     plt.plot(yTildeCurr)
         #     plt.show()
         #     stop = 1
 
@@ -1620,8 +1588,9 @@ class DANSEvariables(base.DANSEparameters):
             ), dtype=complex)
             for idxq in range(len(self.neighbors[k])):
                 q = self.neighbors[k][idxq]
+                # TI-DANSE fusion vector
                 p = self.wTildeExt[q][:, :self.nSensorPerNode[q]] /\
-                    self.wTildeExt[q][:, -1:]  # fusion vector
+                    self.wTildeExt[q][:, -1:]
                 etaMkBatch += np.einsum(   # <-- `+=` is important
                     'ij,ikj->ik',
                     p.conj(),
@@ -1647,7 +1616,10 @@ class DANSEvariables(base.DANSEparameters):
                     self.yinSTFT[q]
                 )
             # Construct yTilde
-            yTildeBatch = np.concatenate((self.yinSTFT[k], zBatch), axis=-1)
+            yTildeBatch = np.concatenate(
+                (self.yinSTFT[k], zBatch),
+                axis=-1
+            )
         
         return yTildeBatch
 
@@ -1662,8 +1634,9 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
         def _update_w(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx):
-            """Helper function for regular MWF-like
-            DANSE filter update."""
+            """
+            Helper function for regular MWF-like  DANSE filter update.
+            """
             # Reference sensor selection vector
             Evect = np.zeros(Ryy.shape[-1])
             Evect[refSensorIdx] = 1
@@ -1673,11 +1646,14 @@ class DANSEvariables(base.DANSEparameters):
             # Update node-specific parameters of node k
             Ryyinv = np.linalg.inv(Ryy)
             w = np.matmul(Ryyinv, ryd[:, :, np.newaxis])
+            if np.isnan(w).any():
+                stop =1
             return w[:, :, 0]  # get rid of singleton dimension
 
         def _update_w_gevd(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx):
-            """Helper function for GEVD-based MWF-like
-            DANSE filter update."""
+            """
+            Helper function for GEVD-based MWF-like DANSE filter update.
+            """
             n = Ryy.shape[-1]
             nFreqs = Ryy.shape[0]
             # Reference sensor selection vector 
@@ -2380,11 +2356,11 @@ class TIDANSEvariables(DANSEvariables):
             axis=1
         )
 
-        if k == 0 and self.oVADframes[k][self.i[k]]:
-            plt.close('all')
-            plt.figure()
-            plt.plot(yTildeCurr)
-            stop = 1
+        # if k == 0 and self.oVADframes[k][self.i[k]] and self.i[k] == 7:
+        #     plt.close('all')
+        #     plt.figure()
+        #     plt.plot(yTildeCurr)
+        #     stop = 1
 
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
         self.yTilde_s[k][:, self.i[k], :] = yTildeCurr_s

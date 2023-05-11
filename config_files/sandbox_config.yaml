@@ -1,17 +1,19 @@
-seed: 12350
+# seed: 12350
+seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230510_tests/batchTIDANSE/asy_ssnodes # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230511_tests/compUOLum3/test3_sameVAD # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
+  noExternalFilterRelaxation: false
   # For debug
   performGEVD: false
   # performGEVD: true
-  simType: batch  # 'batch' or 'online'
-  # simType: online  # 'batch' or 'online'
+  # simType: batch  # 'batch' or 'online'
+  simType: online  # 'batch' or 'online'
   nodeUpdating: asy
   # nodeUpdating: seq
   computeLocal: true
@@ -28,19 +30,24 @@ danseParams:
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 30.
   t_expAvg50pExternalFilters: 30.
-  timeBtwExternalFiltUpdates: 0.25
+  timeBtwExternalFiltUpdates: 1
+  # timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
     printout_profiler: true
 referenceSensor: 0
 snrYlimMax: null
 wasnParams:
+  VADenergyDecrease_dB: 35
+  VADwinLength: 0.04  # [s]
   rd: '[5, 5, 5]'
   minDistToWalls: 0.5
   # rd: '[0.05, 0.05, 0.05]'
+  # rd: '[0.5, 0.5, 0.5]'
   # minDistToWalls: 0.0
   # Often used
-  sigDur: 10  # [s]
-  selfnoiseSNR: 30  # [dB]
+  sigDur: 15  # [s]
+  # selfnoiseSNR: 50  # [dB]
+  selfnoiseSNR: 99  # [dB]
   # selfnoiseSNR: 999  # [dB]
   # layoutType: random_spinning_top
   layoutType: random
@@ -63,6 +70,8 @@ wasnParams:
   referenceSensor: 0
   topologyParams:
     topologyType: user-defined
+    seed: 12347
+    # topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists
