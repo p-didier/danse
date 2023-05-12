@@ -2211,25 +2211,13 @@ class TIDANSEvariables(DANSEvariables):
             If true, bypass filter udpate.
             (but still compute the desired signal estimate!)
         """
-        
         if self.firstDANSEupdateRefSensor is None and\
             self.nInternalFilterUps[k] == 0:
             # Save first update instant (for, e.g., SRO plot)
             self.firstDANSEupdateRefSensor = tCurr
 
-        # vvvvvvvvvvvv TODO? vvvvvvvvvvvv
-        # # Process buffers
-        # self.process_incoming_signals_buffers(k, tCurr)
-        # # Wipe local buffers
-        # self.zBuffer[k] = [np.array([])\
-        #     for _ in range(len(self.neighbors[k]))]
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
         # Construct `\tilde{y}_k` in frequency domain
         self.ti_build_ytilde(k, tCurr, fs)
-        # # Compute current VAD
-        # self.compute_vad(k)
-        
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
             self.build_ycentr(tCurr, fs, k)
@@ -2283,7 +2271,6 @@ class TIDANSEvariables(DANSEvariables):
         # Update external filters (for broadcasting)
         self.ti_update_external_filters(k, tCurr)
         # self.update_external_filters(k, tCurr)
-
         # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
         # # Update SRO estimates
         # self.update_sro_estimates(k, fs)
@@ -2291,10 +2278,8 @@ class TIDANSEvariables(DANSEvariables):
         # if self.compensateSROs:
         #     self.build_phase_shifts_for_srocomp(k)
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
         # Compute desired signal chunk estimate
         self.get_desired_signal(k)
-
         # Update iteration index
         self.i[k] += 1
 
@@ -2486,7 +2471,9 @@ class TIDANSEvariables(DANSEvariables):
                         self.wTilde[k][:, self.i[k] + 1, :]
                     # Update last external filter update instant [s]
                     self.lastExtFiltUp[k] = t
-                    if self.printoutsAndPlotting.printout_externalFilterUpdate:    # inform user
+                    # Inform user
+                    if self.printoutsAndPlotting.verbose and\
+                        self.printoutsAndPlotting.printout_externalFilterUpdate:
                         print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
             else:

@@ -34,13 +34,15 @@ danseParams:
   GEVDrank: 1
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 10.
-  t_expAvg50pExternalFilters: 10.
+  t_expAvg50pExternalFilters: 20.
   timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
     printout_profiler: true
 referenceSensor: 0
 snrYlimMax: null
 wasnParams:
+  VADenergyDecrease_dB: 35
+  VADwinLength: 0.04  # [s]
   rd: '[5, 5, 5]'
   minDistToWalls: 0.5
   # rd: '[0.05, 0.05, 0.05]'
@@ -73,6 +75,7 @@ wasnParams:
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
     topologyType: user-defined
+    # topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     seed: 12348

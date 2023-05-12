@@ -2,7 +2,7 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230511_tests/compUOLum3/test3_sameVAD # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230512_tests/TIDANSEonline/test2_wExtUpEvery250ms # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -30,8 +30,8 @@ danseParams:
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 30.
   t_expAvg50pExternalFilters: 30.
-  timeBtwExternalFiltUpdates: 1
-  # timeBtwExternalFiltUpdates: 0.25
+  # timeBtwExternalFiltUpdates: 1
+  timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
     printout_profiler: true
 referenceSensor: 0
@@ -46,14 +46,13 @@ wasnParams:
   # minDistToWalls: 0.0
   # Often used
   sigDur: 15  # [s]
-  # selfnoiseSNR: 50  # [dB]
-  selfnoiseSNR: 99  # [dB]
+  selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   # layoutType: random_spinning_top
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
-  # t60: 0.2  # [s]
-  t60: 0.0  # [s]
+  t60: 0.2  # [s]
+  # t60: 0.0  # [s]
   SROperNode: '[0]'  # [PPM]
   # nSensorPerNode: '[1, 2, 3]'
   nSensorPerNode: '[1, 1, 1]'

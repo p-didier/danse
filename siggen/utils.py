@@ -414,7 +414,7 @@ def get_vad(
                 vad = None
             else:
                 # Inform user
-                print(f'Computing VAD for node {k + 1}/{len(rirs)} and desired source {ii + 1}/{len(rirs[k][p.referenceSensor])}...')
+                print(f'Computing/loading VAD for node {k + 1}/{len(rirs)} and desired source {ii + 1}/{len(rirs[k][p.referenceSensor])}...')
                 vad[:, k, ii] = get_or_load_vad(
                     x=wetsigs[k][p.referenceSensor, :, ii],
                     eFact=p.VADenergyFactor,
@@ -423,7 +423,6 @@ def get_vad(
                     loadIfPossible=p.enableVADloadFromFile,
                     vadFilesFolder=p.vadFilesFolder
                 )
-            
     
     # Sum wet signals over sources
     wetsigs = [np.sum(wetsig, axis=-1) for wetsig in wetsigs]
@@ -458,7 +457,7 @@ def get_or_load_vad(x, eFact, Nw, fs, loadIfPossible=True, vadFilesFolder='.'):
     # Compute VAD threshold
     thrsVAD = np.amax(x ** 2) / eFact
     # Compute VAD filename
-    vadFilename = f'{vadFilesFolder}/vad_{array_id(x)}_thrs_{dot_to_p(np.round(thrsVAD, 3))}_Nw_{int(Nw)}_fs_{dot_to_p(fs)}.npy'
+    vadFilename = f'{vadFilesFolder}/vad_{array_id(x)}_thrs_{dot_to_p(np.round(thrsVAD, 3))}_Nw_{dot_to_p(np.round(Nw, 3))}_fs_{dot_to_p(fs)}.npy'
     # Check if VAD can be loaded from file
     if loadIfPossible and os.path.isfile(vadFilename):
         # Load VAD from file

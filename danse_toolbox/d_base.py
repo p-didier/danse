@@ -1470,9 +1470,9 @@ def events_parser(
 
 
 def events_parser_ti_danse(
-    events: DANSEeventInstant,
-    startUpdates,
-    doNotPrintBCs=False):
+        events: DANSEeventInstant,
+        startUpdates,
+    ):
     """
     Printouts to inform user of TI-DANSE events.
     
@@ -1483,9 +1483,6 @@ def events_parser_ti_danse(
         `get_events_matrix` function.
     startUpdates : list of bools
         Node-specific flags to indicate whether DANSE updates have started.
-    doNotPrintBCs : bool
-        If True, do not print the broadcast events
-        (only used if `printouts == True`).
     """
     # Hard-coded
     strCodes = dict([

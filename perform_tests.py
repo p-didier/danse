@@ -13,8 +13,8 @@ import tests.danse_robustness_to_sros_postproc
 import tests.write_yaml_template
 import tests.useless_microphones
 import tests.useless_microphones_postproc
-import tests.benchmark_tigevddanse
-import tests.benchmark_tigevddanse_postproc
+import tests.benchmark_danse
+import tests.benchmark_danse_postproc
 import out.format_adjustement_scripts.ylim_adjust_barplots as ylim_adjust_barplots
 
 CONFIG_FILES_FOLDER = f'{Path(__file__).parent}/config_files'
@@ -27,11 +27,14 @@ def main():
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
     # )
 
-    tests.benchmark_tigevddanse.main(
-        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config_danse_week19_2023.yaml',
-        outputFolder=f'{Path(__file__).parent}/out/20230511_tests/danse_oldVAD',
+    # tests.benchmark_danse.main(
+    #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config_tigevddanse_week19_2023.yaml',
+    #     outputFolder=f'{Path(__file__).parent}/out/20230512_tests/tidanse_battery',
+    # )
+    tests.benchmark_danse_postproc.main(
+        resultsFolder=f'{Path(__file__).parent}/out/20230512_tests/tidanse_battery',
+        suptitlePrefix='TI-DANSE',
     )
-    # tests.benchmark_tigevddanse_postproc.main()
 
     # tests.danse_robustness_to_sros.main()
     # tests.danse_robustness_to_sros_postproc.main(

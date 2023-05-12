@@ -170,11 +170,11 @@ def tidanse(
     for _, currEvents in enumerate(eventInstants):
 
         # Parse event matrix and inform user (if asked)
-        if tidv.printoutsAndPlotting.printout_eventsParser:
+        if tidv.printoutsAndPlotting.verbose and\
+            tidv.printoutsAndPlotting.printout_eventsParser:
             base.events_parser_ti_danse(
                 currEvents,
-                tidv.startUpdates,
-                tidv.printoutsAndPlotting.printout_eventsParserNoBC
+                tidv.startUpdates
             )
 
         for idxEventCurrInstant in range(currEvents.nEvents):

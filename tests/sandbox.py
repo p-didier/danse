@@ -78,9 +78,7 @@ def main(
     p, wasnObj = core.prep_for_danse(p, wasnObj)
     
     # DANSE
-    print(f'Running DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
     out, wasnObjUpdated = danse_it_up(wasnObj, p)
-    print('DANSE run complete.')
 
     # Post-process results (save, export, plot...)
     print('Post-processing...')
@@ -99,16 +97,12 @@ def danse_it_up(
     """
     # Launch DANSE
     if p.is_fully_connected_wasn():  # Fully connected WASN case
-        # if p.is_batch():    # Batch DANSE
-        #     out, wasnUpdated = core.danse_batch(wasnObj, p.danseParams)
-        # else:               # Online DANSE
+        print(f'Running DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         out, wasnUpdated = core.danse(wasnObj, p.danseParams)
     else:  # Ad-hoc WASN topology case
-        # if p.is_batch():    # Batch TI-DANSE
-        #     raise NotImplementedError('Batch TI-DANSE not implemented yet.')
-        #     out, wasnUpdated = core.tidanse_batch(wasnObj, p.danseParams)
-        # else:               # Online TI-DANSE
+        print(f'Running TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
+    print('DANSE run complete.')
 
     return out, wasnUpdated
 

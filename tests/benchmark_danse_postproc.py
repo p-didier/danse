@@ -15,6 +15,12 @@ REPO_ROOT_PATH = f'{Path(__file__).parent.parent}'  # Path to the root of the re
 RESULTS_FOLDER = f'{REPO_ROOT_PATH}/out/20230508_tests/tigevddanse'  # Path to the output folder
 
 METRIC_TO_PLOT = 'snr'  # Metric to plot
+REVERB_SETTING = {
+    'anechoic': 0,
+    'rt200ms': 200
+}  # Reverb settings to plot
+
+FORCED_YLIMITS = [0, 35]  # Force y-axis limits for all plots
 
 # Format: 1st column: single-sensor nodes, 2nd column: multi-sensor nodes
 FIGURES_FORMAT = [
@@ -58,46 +64,59 @@ def main(
         folders = [
             f for f in subdirs if re.findall(r'\d+', f.name)[0] == currTauLab
         ]
-        fig = plot_for_curr_tau(folders, suptitlePrefix)
+        figs = plot_for_curr_tau(folders, suptitlePrefix)
 
         # Save figure
         if not Path(f'{resultsFolder}/pp').exists():
             Path(f'{resultsFolder}/pp').mkdir()
-        fig.savefig(
-            f'{resultsFolder}/pp/tau_{currTauLab}s_{METRIC_TO_PLOT}.png',
-            dpi=300
-        )
-        plt.close(fig)
+        for ii, fig in enumerate(figs):
+            fig.savefig(
+                f'{resultsFolder}/pp/tau_{currTauLab}s_{METRIC_TO_PLOT}_{list(REVERB_SETTING.keys())[ii]}.png',
+                dpi=300
+            )
+            plt.close(fig)
 
 
 def plot_for_curr_tau(folders: list[WindowsPath], suptitlePrefix=''):
+    """
+    Plot for the given folders.
+    """
     
-    dataToPlot = select_data_to_plot(folders, format=FIGURES_FORMAT)
-
-    nRows = len(dataToPlot)
-    nCols = len(dataToPlot[0])
-
-    tau = re.findall(r"\d+", folders[0].name)[0]
-
-    fig, axes = plt.subplots(nRows, nCols, sharex=True, sharey=True)
-    fig.set_size_inches(8, 8)
-    fig.suptitle(
-        f'{suptitlePrefix} (tau = {tau} s) -- Metric: {METRIC_TO_PLOT}'
-    )
-    for idxRow, currRow in enumerate(dataToPlot):
-        for idxCol, currFolder in enumerate(currRow):
-            # Load data
-            data = load_data(currFolder)
-            # Plot data
-            metrics_subplot(ax=axes[idxRow, idxCol], data=data)
-            axes[idxRow, idxCol].set_title(currFolder.name)
-            axes[idxRow, idxCol].legend(
-                bbox_to_anchor=(1, 0),
-                loc="lower left"
-            )
-    fig.tight_layout()
+    figs = []
+    for revTime in REVERB_SETTING.values():
     
-    return fig
+        dataToPlot = select_data_to_plot(
+            folders,
+            format=FIGURES_FORMAT,
+            revTime=revTime
+        )
+
+        nRows = len(dataToPlot)
+        nCols = len(dataToPlot[0])
+
+        tau = re.findall(r"\d+", folders[0].name)[0]
+
+        fig, axes = plt.subplots(nRows, nCols, sharex=True, sharey=True)
+        fig.set_size_inches(8, 8)
+        fig.suptitle(
+            f'{suptitlePrefix} (tau = {tau} s) -- Metric: {METRIC_TO_PLOT}'
+        )
+        for idxRow, currRow in enumerate(dataToPlot):
+            for idxCol, currFolder in enumerate(currRow):
+                # Load data
+                data = load_data(currFolder)
+                # Plot data
+                metrics_subplot(ax=axes[idxRow, idxCol], data=data)
+                axes[idxRow, idxCol].set_title(currFolder.name)
+                axes[idxRow, idxCol].legend(
+                    bbox_to_anchor=(1, 0),
+                    loc="lower left"
+                )
+                axes[idxRow, idxCol].set_ylim(FORCED_YLIMITS)
+        fig.tight_layout()
+        figs.append(fig)
+    
+    return figs
 
 
 def load_data(folder: WindowsPath):
@@ -108,16 +127,20 @@ def load_data(folder: WindowsPath):
 
 def select_data_to_plot(
         folders: list[WindowsPath],
-        format: list[list[str]]
+        format: list[list[str]],
+        revTime: int = 200  # [ms]
     ) -> list[list[WindowsPath]]:
     """
     Select data to plot from the given folders, following the given format.
     """
+    
     dataToPlot = []
     for currRowFormats in format:
         dataToPlot.append([])
         for currColFormat in currRowFormats:
             keys = currColFormat.split('_')
+            revTimeKey = f'rt{revTime}ms'
+            keys.append(revTimeKey)  # Add reverb time key
             for currFolder in folders:
                 # Append `currFolder` if it matches the `currColFormat`
                 if all([key in currFolder.name for key in keys]):
