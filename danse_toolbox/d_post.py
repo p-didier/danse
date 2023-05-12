@@ -733,8 +733,8 @@ def compute_metrics(
     for k in range(out.nNodes):
         # Derive starting sample for metrics computations
         startIdx[k] = int(np.floor(wasn[k].metricStartTime * wasn[k].fs))
-        print(f"Node {k+1}: computing speech enhancement metrics from the {startIdx[k] + 1}'th sample on (t_start = {wasn[k].metricStartTime} s --> avoid bias due to initial filters guesses in first iterations)...")
-        print(f'Computing signal enhancement evaluation metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
+        print(f"Node {k+1}: computing metrics from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s --> discard early filters updates)...")
+        print(f'Computing metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
         # Compute starting indices for centralised and local estimates
         TDdesiredSignals_est_c, TDdesiredSignals_est_l = None, None
@@ -744,12 +744,12 @@ def compute_metrics(
             TDdesiredSignals_est_c = out.TDdesiredSignals_est_c[:, k]
             TDfilteredSpeech_c = out.TDfiltSpeech_c[:, k]
             TDfilteredNoise_c = out.TDfiltNoise_c[:, k]
-            print(f"Node {k+1}: computing speech enhancement metrics for CENTRALISED PROCESSING from the {startIdx[k] + 1}'th sample on (t_start = {wasn[k].metricStartTime} s).")
+            print(f"Node {k+1}: computing metrics for CENTRALISED PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
         if out.computeLocal:
             TDdesiredSignals_est_l = out.TDdesiredSignals_est_l[:, k]
             TDfilteredSpeech_l = out.TDfiltSpeech_l[:, k]
             TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
-            print(f"Node {k+1}: computing speech enhancement metrics for LOCAL PROCESSING from the {startIdx[k] + 1}'th sample on (t_start = {wasn[k].metricStartTime} s).")
+            print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
 
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
@@ -1110,9 +1110,9 @@ def export_sounds(
                     int(wasn[k].fs), data
                 )
             elif out.broadcastType != 'wholeChunk':
-                print('Fused signals not exported (not yet implemented for per-sample broadcasting).')
+                print('Node {k+1}: Fused signals not exported (not yet implemented for per-sample broadcasting).')
             elif not fullyConnected:
-                print('Fused signals not exported (not implemented for non-fully connected WASNs).')
+                print(f'Node {k+1}: Fused signals not exported (not implemented for non-fully connected WASNs).')
         # vvv if enhancement has been performed and centralised estimate computed
         if out.computeCentralised:
             if len(out.TDdesiredSignals_est_c[:, k]) > 0:
