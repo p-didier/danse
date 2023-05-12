@@ -20,7 +20,7 @@ REVERB_SETTING = {
     'rt200ms': 200
 }  # Reverb settings to plot
 
-FORCED_YLIMITS = [0, 35]  # Force y-axis limits for all plots
+FORCED_YLIMITS = [0, 40]  # Force y-axis limits for all plots
 
 # Format: 1st column: single-sensor nodes, 2nd column: multi-sensor nodes
 FIGURES_FORMAT = [

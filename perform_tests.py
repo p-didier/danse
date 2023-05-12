@@ -29,11 +29,11 @@ def main():
 
     # tests.benchmark_danse.main(
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config_tigevddanse_week19_2023.yaml',
-    #     outputFolder=f'{Path(__file__).parent}/out/20230512_tests/tidanse_battery',
+    #     outputFolder=f'{Path(__file__).parent}/out/20230512_tests/tigevddanse_battery',
     # )
     tests.benchmark_danse_postproc.main(
-        resultsFolder=f'{Path(__file__).parent}/out/20230512_tests/tidanse_battery',
-        suptitlePrefix='TI-DANSE',
+        resultsFolder=f'{Path(__file__).parent}/out/20230512_tests/tigevddanse_battery',
+        suptitlePrefix='TI-GEVD-DANSE',
     )
 
     # tests.danse_robustness_to_sros.main()

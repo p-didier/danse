@@ -23,8 +23,8 @@ TEST_PARAMS = {
     'Mk_label': ['ss', 'ms'],       # label for number of sensor per node
     'SRO': [[0, 0, 0], [0, 50, 100], [0, 200, 400]],  # per-node sampling rate offsets [PPM]
     'SRO_label': ['noSROs', 'mediumSROs', 'largeSROs'],  # label for per-node sampling rate offsets
-    # 'tau': [2, 10, 30],  # time constant for exponential averaging [s]
-    'tau': [2, 30],  # time constant for exponential averaging [s]
+    'tau': [2, 10, 30],  # time constant for exponential averaging [s]
+    # 'tau': [2, 30],  # time constant for exponential averaging [s]
 }
 
 def main(
