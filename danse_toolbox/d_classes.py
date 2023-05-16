@@ -194,6 +194,17 @@ class TestParameters:
                 self.danseParams.simType = 'online'
             else:
                 raise ValueError('Batch mode not supported in the presence of SROs. Aborting.')
+        # Check that the SRO compensation strategy used corresponds to the
+        # topology.
+        if self.is_fully_connected_wasn() and\
+            self.danseParams.compensationStrategy == 'network-wide':
+            ui = input('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Use node-specific compensation? [y/n]  ')
+            while ui not in ['y', 'n']:
+                ui = input(f'Invalid input "{ui}". Try again. Use node-specific compensation? [y/n]  ')
+            if ui == 'y':
+                self.danseParams.compensationStrategy = 'node-specific'
+            else:
+                raise ValueError('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Aborting.')
 
     def get_id(self):
         return f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60 * 1e3)}ms'
@@ -261,7 +272,7 @@ class DANSEvariables(base.DANSEparameters):
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
         # Check for TI-DANSE case
-        tidanseFlag = not check_if_fully_connected(wasn)
+        self.tidanseFlag = not check_if_fully_connected(wasn)
 
         avgProdResiduals = []   # average residuals product coming out of
                                 # filter-shift processing (SRO estimation).
@@ -318,20 +329,27 @@ class DANSEvariables(base.DANSEparameters):
                 )
         
         for k in range(nNodes):
-            nNeighbors = len(wasn[k].neighborsIdx)
-            #
-            avgProdResiduals.append(np.zeros(
-                (self.DFTsize, nNeighbors),dtype=complex
-                ))
-            # init all buffer flags at 0 (assuming no over- or under-flow)
-            bufferFlags.append(np.zeros((self.nIter, nNeighbors)))    
-            #
-            if tidanseFlag:
-                dimYTilde[k] = wasn[k].nSensors + 1
+            # Set number of received signal channels, on top of local signals
+            if self.tidanseFlag:
+                nReceivedChannels = 1
             else:
-                dimYTilde[k] = wasn[k].nSensors + nNeighbors
+                nReceivedChannels = len(wasn[k].neighborsIdx)
+            dimYTilde[k] = wasn[k].nSensors + nReceivedChannels   
+            # ------- SRO-related variables -------
+            if self.compensationStrategy == 'node-specific':
+                nSROestimates = len(wasn[k].neighborsIdx)
+            elif self.compensationStrategy == 'network-wide':
+                nSROestimates = 1
+            avgProdResiduals.append(np.zeros(
+                (self.DFTsize, nSROestimates), dtype=complex
+            ))
+            # init all buffer flags at 0 (assuming no over- or under-flow)
+            bufferFlags.append(np.zeros((self.nIter, dimYTilde[k])))    
             # initiate phase shift factors as 0's (no phase shift)
-            phaseShiftFactors.append(np.zeros(dimYTilde[k]))   
+            phaseShiftFactors.append(np.zeros(dimYTilde[k]))
+            SROsEstimates.append(np.zeros((self.nIter, nSROestimates)))
+            SROsResiduals.append(np.zeros((self.nIter, nSROestimates)))
+            # ------- Covariance matrices initialization -------
             #
             if not self.covMatSameInitForAllNodes:
                 if self.covMatSameInitForAllFreqs:
@@ -342,7 +360,6 @@ class DANSEvariables(base.DANSEparameters):
                     fullSlice = base.init_covmats(
                         (self.nPosFreqs, nSensorsTotal, nSensorsTotal), rng, *args
                     )
-            
             if self.covMatSameInitForAllFreqs:
                 sliceTilde = fullSlice[:dimYTilde[k], :dimYTilde[k]]
                 Rnntilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
@@ -368,9 +385,7 @@ class DANSEvariables(base.DANSEparameters):
                 Ryylocal.append(
                     fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
                 )
-            
-            SROsEstimates.append(np.zeros((self.nIter, nNeighbors)))
-            SROsResiduals.append(np.zeros((self.nIter, nNeighbors)))
+            # ------- Other variables initialization -------
             #
             t[:, k] = wasn[k].timeStamps
             #
@@ -384,7 +399,7 @@ class DANSEvariables(base.DANSEparameters):
                 initType=self.filterInitType,
                 fixedValue=self.filterInitFixedValue
             ))
-            if tidanseFlag:
+            if self.tidanseFlag:
                 # In TI-DANSE, `wTildeExt` and `wTildeExtTarget` must have the
                 # same shape as `wTilde` (i.e., `M_k + 1` coefficients), unlike
                 # in the fully connected regular DANSE case, because we need to 
@@ -446,7 +461,7 @@ class DANSEvariables(base.DANSEparameters):
                 dimYTilde[k], dimYTilde[k]), dtype=complex))
             #
             z.append(np.empty((self.DFTsize, 0), dtype=float))
-            zBuffer.append([np.array([]) for _ in range(nNeighbors)])
+            zBuffer.append([np.array([]) for _ in range(nReceivedChannels)])
             zLocal.append(np.array([]))
 
         # Create fields
@@ -1409,6 +1424,7 @@ class DANSEvariables(base.DANSEparameters):
         skipUpdate = False
         extraPhaseShiftFactor = np.zeros(self.dimYTilde[k])
 
+        # Account for full-sample drift flags
         for q in range(len(self.neighbors[k])):
             if not np.isnan(self.bufferFlags[k][self.i[k], q]):
                 extraPhaseShiftFactor[self.nLocalMic[k] + q] =\
@@ -1734,20 +1750,18 @@ class DANSEvariables(base.DANSEparameters):
         fs : int or float
             Sampling frequency of current node. 
         """
-        # Useful variables (compact coding)
-        nNeighs = len(self.neighbors[k])
-        iter = self.i[k]
+        # Useful variables
         bufferFlagPos = self.broadcastLength * np.sum(
-            self.bufferFlags[k][:(iter + 1), :],
+            self.bufferFlags[k][:(self.i[k] + 1), :],
             axis=0
         )
         bufferFlagPri = self.broadcastLength * np.sum(
-            self.bufferFlags[k][:(iter - self.cohDrift.segLength + 1), :],
+            self.bufferFlags[k][:(self.i[k] - self.cohDrift.segLength + 1), :],
             axis=0
         )
         
-        # DANSE filter update indices
-        # corresponding to "Filter-shift" SRO estimate updates.
+        # DANSE filter update indices corresponding to "Filter-shift"
+        # SRO estimate updates.
         cohDriftSROupdateIndices = np.arange(
             start=self.cohDrift.startAfterNups + self.cohDrift.estEvery,
             stop=self.nIter,
@@ -1755,21 +1769,21 @@ class DANSEvariables(base.DANSEparameters):
         )
         
         # Init arrays
-        sroOut = np.zeros(nNeighs)
+        sroOut = np.zeros(len(self.neighbors[k]))
         if self.estimateSROs == 'CohDrift':
             
             ld = self.cohDrift.segLength
 
-            if iter in cohDriftSROupdateIndices:
+            if self.i[k] in cohDriftSROupdateIndices:
 
                 flagFirstSROEstimate = False
-                if iter == np.amin(cohDriftSROupdateIndices):
+                if self.i[k] == np.amin(cohDriftSROupdateIndices):
                     # Let `cohdrift_sro_estimation()` know that
                     # this is the 1st SRO estimation round.
                     flagFirstSROEstimate = True
 
                 # Residuals method
-                for q in range(nNeighs):
+                for q in range(len(self.neighbors[k])):
                     # index of compressed signal from node `q` inside `yyH`
                     idxq = self.nLocalMic[k] + q     
                     if self.cohDrift.loop == 'closed':
@@ -1777,13 +1791,13 @@ class DANSEvariables(base.DANSEparameters):
                         # (closed-loop SRO est. + comp.).
 
                         # A posteriori coherence
-                        cohPosteriori = (self.yyH[k][iter, :, 0, idxq]
-                            / np.sqrt(self.yyH[k][iter, :, 0, 0] *\
-                                self.yyH[k][iter, :, idxq, idxq]))
+                        cohPosteriori = (self.yyH[k][self.i[k], :, 0, idxq]
+                            / np.sqrt(self.yyH[k][self.i[k], :, 0, 0] *\
+                                self.yyH[k][self.i[k], :, idxq, idxq]))
                         # A priori coherence
-                        cohPriori = (self.yyH[k][iter - ld, :, 0, idxq]
-                            / np.sqrt(self.yyH[k][iter - ld, :, 0, 0] *\
-                                self.yyH[k][iter - ld, :, idxq, idxq]))
+                        cohPriori = (self.yyH[k][self.i[k] - ld, :, 0, idxq]
+                            / np.sqrt(self.yyH[k][self.i[k] - ld, :, 0, 0] *\
+                                self.yyH[k][self.i[k] - ld, :, idxq, idxq]))
                         
                         # Set buffer flags to 0
                         bufferFlagPri = np.zeros_like(bufferFlagPri)
@@ -1794,13 +1808,13 @@ class DANSEvariables(base.DANSEparameters):
                         # (open-loop SRO est. + comp.).
 
                         # A posteriori coherence
-                        cohPosteriori = (self.yyHuncomp[k][iter, :, 0, idxq]
-                            / np.sqrt(self.yyHuncomp[k][iter, :, 0, 0] *\
-                                self.yyHuncomp[k][iter, :, idxq, idxq]))
+                        cohPosteriori = (self.yyHuncomp[k][self.i[k], :, 0, idxq]
+                            / np.sqrt(self.yyHuncomp[k][self.i[k], :, 0, 0] *\
+                                self.yyHuncomp[k][self.i[k], :, idxq, idxq]))
                         # A priori coherence
-                        cohPriori = (self.yyHuncomp[k][iter - ld, :, 0, idxq]
-                            / np.sqrt(self.yyHuncomp[k][iter - ld, :, 0, 0] *\
-                                self.yyHuncomp[k][iter - ld, :, idxq, idxq]))
+                        cohPriori = (self.yyHuncomp[k][self.i[k] - ld, :, 0, idxq]
+                            / np.sqrt(self.yyHuncomp[k][self.i[k] - ld, :, 0, 0] *\
+                                self.yyHuncomp[k][self.i[k] - ld, :, idxq, idxq]))
 
                     # Perform SRO estimation via coherence-drift method
                     sroRes, apr = sros.cohdrift_sro_estimation(
@@ -1820,31 +1834,24 @@ class DANSEvariables(base.DANSEparameters):
                     self.avgProdResiduals[k][:, q] = apr
 
         elif self.estimateSROs == 'DXCPPhaT':
+            # TODO: implement DXCP-PhaT-based SRO estimation
+
             # DXCP-PhaT-based SRO estimation
             sroOut = sros.dxcpphat_sro_estimation(
                 fs=fs,
                 fsref=16e3,  # FIXME: HARD-CODED!!
                 N=self.DFTsize,
-                localSig=self.yTilde[k][
-                    :,
-                    self.i[k],
-                    self.referenceSensor
-                ],
-                neighboursSig=self.yTilde[k][
-                    :,
-                    self.i[k],
-                    self.nSensorPerNode[k]:
-                ],
+                localSig=self.yTilde[k][:, self.i[k], self.referenceSensor],
+                neighboursSig=self.yTilde[k][:, self.i[k], self.nSensorPerNode[k]:],
                 refSensorIdx=self.referenceSensor,
             )
 
         elif self.estimateSROs == 'Oracle':
             # No data-based dynamic SRO estimation: use oracle knowledge
-            sroOut = (self.SROsppm[self.neighbors[k]] -\
-                self.SROsppm[k]) * 1e-6
+            sroOut = (self.SROsppm[self.neighbors[k]] - self.SROsppm[k]) * 1e-6
 
         # Save SRO (residuals)
-        self.SROsResiduals[k][iter, :] = sroOut
+        self.SROsResiduals[k][self.i[k], :] = sroOut
 
     def build_phase_shifts_for_srocomp(self, k):
         """
@@ -2052,6 +2059,10 @@ class TIDANSEvariables(DANSEvariables):
         #
         self.treeFormationCounter = 0  # counting the number of tree-formations
         self.currentWasnTreeObj = None  # current tree WASN object
+        # ------- SRO compensation variables -------
+        if self.compensationStrategy == 'network-wide':
+            self.localSROwrtRoot = np.zeros(self.nNodes)
+            self.localPhaseShiftFactor = np.zeros(self.nNodes)
 
     def update_up_downstream_neighbors(
             self,
@@ -2110,6 +2121,19 @@ class TIDANSEvariables(DANSEvariables):
             self.DFTsize
         )  # [useful for SNR computation]
 
+        # Account for SROs w.r.t. the root node if the compensation
+        # strategy is 'network-wide'.
+        if self.compensationStrategy == 'network-wide' and self.compensateSROs:
+            if k != self.currentWasnTreeObj.rootIdx:  # only non-root updates
+                # Estimate local clock drift w.r.t. tree root
+                self.estimate_local_clock_drift(k, tCurr, fs)
+            phaseShiftFactor = self.get_local_phase_shift(k)
+            # Apply phase shift to local signals in frequency domain
+            args = (phaseShiftFactor, self.DFTsize)
+            ykFrame = apply_phase_shift_to_td_frame(ykFrame, *args)
+            ykFrame_s = apply_phase_shift_to_td_frame(ykFrame_s, *args)
+            ykFrame_n = apply_phase_shift_to_td_frame(ykFrame_n, *args)
+
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
 
@@ -2130,10 +2154,28 @@ class TIDANSEvariables(DANSEvariables):
                 ykFrame_n,
                 zForSynthesis=self.zLocalPrimeBuffer_n[k]
             )
-            
-            stop = 1
         else:
             raise NotImplementedError  # TODO:
+        
+    def get_local_phase_shift(self, k):
+        """
+        Computes the phase shift for the current node w.r.t. the root node.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        """
+        # Update local phase shift factor
+        self.localPhaseShiftFactor[k] -= self.localSROwrtRoot[k] * self.Ns
+        # Apply phase shift
+        phaseShift = np.exp(
+            -1 * 1j * 2 * np.pi / self.DFTsize * np.outer(
+                np.arange(self.nPosFreqs),
+                self.localPhaseShiftFactor[k]
+            )
+        )
+        return phaseShift
     
     def ti_compute_partial_sum(self, k):
         """
@@ -2164,6 +2206,9 @@ class TIDANSEvariables(DANSEvariables):
         self.zLocal_n[k] = copy.deepcopy(self.zLocalPrime_n[k])
         for l in self.upstreamNeighbors[k]:
             if len(self.zLocal[l] > 0):  # do not consider empty buffers
+                if self.compensationStrategy == 'node-specific':
+                    # Account for SROs when summing
+                    raise NotImplementedError  # TODO: implement
                 self.zLocal[k] += self.zLocal[l]
                 self.zLocal_s[k] += self.zLocal_s[l]
                 self.zLocal_n[k] += self.zLocal_n[l]
@@ -2236,20 +2281,17 @@ class TIDANSEvariables(DANSEvariables):
             self.yHatLocal_n[k][:, self.i[k], :] =\
                 self.yTildeHat_n[k][:, self.i[k], :self.nSensorPerNode[k]]
 
-        # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
-        # # Account for buffer flags
-        # skipUpdate = self.compensate_sros(k, tCurr)
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+        # Compensate for SROs
+        # skipUpdate = self.ti_compensate_sros(k, tCurr)
+        
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
 
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)
 
-        # if not skipUpdate:
         # If covariance matrices estimates are full-rank, update filters
-        if not bypassUpdateEventMat:
+        if not bypassUpdateEventMat:# and not skipUpdate:
             # vvv !! depends on outcome of `check_covariance_matrices()` !!
             self.perform_update(k)
             # ^^^ !! depends on outcome of `check_covariance_matrices()` !!
@@ -2264,24 +2306,68 @@ class TIDANSEvariables(DANSEvariables):
                 self.wLocal[k][:, self.i[k] + 1, :] =\
                     self.wLocal[k][:, self.i[k], :]
             # if skipUpdate:
-            #     print(f'Node {k+1}: {self.i[k]+1}^th update skipped.')
+            #     print(f'Node {k + 1}: {self.i[k] + 1}-th update skipped (not enough samples accummulated due to SROs).')
         if self.bypassUpdates:
             print('!! User-forced bypass of filter coefficients updates !!')
 
         # Update external filters (for broadcasting)
         self.ti_update_external_filters(k, tCurr)
-        # self.update_external_filters(k, tCurr)
-        # vvvvvvvvvvvv TODO: vvvvvvvvvvvv
         # # Update SRO estimates
         # self.update_sro_estimates(k, fs)
         # # Update phase shifts for SRO compensation
         # if self.compensateSROs:
         #     self.build_phase_shifts_for_srocomp(k)
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         # Compute desired signal chunk estimate
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
+    
+    def estimate_local_clock_drift(self, k, tCurr, fs):
+        """
+        Estimates the local clock drift w.r.t. the tree root.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        tCurr : float
+            Current time instant [s].
+        fs : float or int
+            Current node's sampling frequency [Hz].
+        """
+        # Extract current local data chunk
+        yLocalCurr, self.idxBegChunk, self.idxEndChunk =\
+            base.local_chunk_for_update(
+                self.yin[k],
+                tCurr,
+                fs,
+                bd=self.broadcastType,
+                Ndft=self.DFTsize,
+                Ns=self.Ns
+            )
+        # Transform to frequency domain
+        YLocalCurr = np.fft.fft(yLocalCurr, axis=0)
+        # Get parent's latest SRO-compensated chunk of fused signals
+        # ($\check{z}_{p_k}$)
+        parentNodeIdx = self.downstreamNeighbors[k][0]  # only one parent
+        zParent = self.zLocalPrime[parentNodeIdx]
+        # Transform to frequency domain
+        ZParent = np.fft.fft(zParent, axis=0)
+
+        # Compute local clock drift estimate
+        if self.estimateSROs == 'CohDrift':
+            raise NotImplementedError('CohDrift SRO estimation not implemented yet.')
+        elif self.estimateSROs == 'DXCPPhaT':
+            raise NotImplementedError('DXCPPhaT SRO estimation not implemented yet.')
+        elif self.estimateSROs == 'Oracle':
+            # No data-based SRO estimation: use oracle knowledge
+            sroOut = (
+                self.SROsppm[k] - self.SROsppm[self.currentWasnTreeObj.rootIdx]
+            ) * 1e-6
+
+        # Store local clock drift estimate
+        self.localSROwrtRoot[k] = sroOut
+
 
     def ti_build_ytilde(self, k, tCurr, fs):        
         """
@@ -2326,6 +2412,16 @@ class TIDANSEvariables(DANSEvariables):
                 Ndft=self.DFTsize,
                 Ns=self.Ns
             )
+        
+        # Account for SROs w.r.t. the root node if the compensation
+        # strategy is 'network-wide'.
+        if self.compensationStrategy == 'network-wide' and self.compensateSROs:
+            phaseShift = self.get_local_phase_shift(k)
+            # Apply phase shift to local signals in frequency domain
+            args = (phaseShift, self.DFTsize)
+            yLocalCurr = apply_phase_shift_to_td_frame(yLocalCurr, *args)
+            yLocalCurr_s = apply_phase_shift_to_td_frame(yLocalCurr_s, *args)
+            yLocalCurr_n = apply_phase_shift_to_td_frame(yLocalCurr_n, *args)
 
         # Build full available observation vector
         yTildeCurr = np.concatenate(
@@ -2340,12 +2436,6 @@ class TIDANSEvariables(DANSEvariables):
             (yLocalCurr_n, self.etaMk_n[k][:, np.newaxis]),
             axis=1
         )
-
-        # if k == 0 and self.oVADframes[k][self.i[k]] and self.i[k] == 7:
-        #     plt.close('all')
-        #     plt.figure()
-        #     plt.plot(yTildeCurr)
-        #     stop = 1
 
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
         self.yTilde_s[k][:, self.i[k], :] = yTildeCurr_s
@@ -2479,6 +2569,9 @@ class TIDANSEvariables(DANSEvariables):
             else:
                 self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
 
+    def ti_compensate_sros(self):
+        pass  #  TODO:
+
 
 def update_covmats_batch(yAllFrames, vadAllFrames):
     """
@@ -2511,6 +2604,19 @@ def update_covmats_batch(yAllFrames, vadAllFrames):
         yAllFrames[:, ~vadAllFrames.astype(bool), :].conj()
     ), axis=1)
     return Ryy, Rnn
+
+
+def apply_phase_shift_to_td_frame(tdFrame, phaseShift, DFTsize):
+    # Convert frame to frequency domain
+    fdFrame = np.fft.fft(tdFrame, n=DFTsize, axis=0)
+    # Keep only positive frequencies
+    fdFrame = fdFrame[:DFTsize//2+1, :]
+    # Apply phase shift
+    fdFrame *= phaseShift
+    # Convert back to time domain
+    tdFrameShifted = base.back_to_time_domain(fdFrame, DFTsize, axis=0)
+    tdFrameShifted = np.real_if_close(tdFrameShifted)
+    return tdFrameShifted
 
 
 # --------------------------------------------------------------------------- #

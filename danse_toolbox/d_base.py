@@ -190,6 +190,10 @@ class DANSEparameters(Hyperparameters):
         # If "CohDrift", use coherence-drift method (see [3]).
         # If "DXCPPhaT", use DXCP-PhaT method from [4] (implemented based on
         #   https://github.com/fgnt/asnsig).
+    compensationStrategy: str = 'node-specific'    # type of SRO compensation
+        # - 'node-specific': node-specific compensation
+        # - 'network-wide': WASN-wide compensation
+        #       ^^^ WASN-wide can only be used with TI-DANSE.
     cohDrift: CohDriftParameters = CohDriftParameters()
     # ---- General
     performGEVD: bool = False    # if True, perform GEVD
@@ -300,15 +304,15 @@ class DANSEparameters(Hyperparameters):
             self.broadcastLength = 1
         if self.estimateSROs not in ['Oracle', 'CohDrift', 'DXCPPhaT']:
             raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
-        # if 'seq' in self.nodeUpdating:
-        #     # Ensure no relaxation with sequential node-updating
-        #     self.noExternalFilterRelaxation = True
         if self.noExternalFilterRelaxation:
-            # no differentiating between external and
-            # internal filters (bypass-studies).
+            # no differentiating between external and internal filters
+            # (bypass-studies).
             self.timeBtwExternalFiltUpdates = 0.
         if self.simType not in ['batch', 'online']:
             raise ValueError(f'Unknown simulation type: {self.simType}. Valid values: ["batch", "online"].')
+        self.compensationStrategy = self.compensationStrategy.lower()
+        if self.compensationStrategy not in ['network-wide', 'node-specific']:
+            raise ValueError(f'Unknown compensation strategy: {self.compensationStrategy}. Valid values: ["network-wide", "node-specific"].')
 
     def get_wasn_info(self, wasnParams: WASNparameters):
         """Adds useful info to DANSEparameters object from WASNparameters
@@ -865,7 +869,7 @@ def build_events_matrix(
     #       `us` events can occur.
     # >> Coding format: '<ref string>': [priority level, up/downstream]
     eventsCodesDict = dict([
-        ('tr', [-1, 'ds']),  # 0) form tree topology;
+        ('tr', [-1, 'ds']), # 0) form tree topology;
         ('fu', [0, 'ds']),  # 1) fuse local signals;
         ('bc', [1, 'ds']),  # 2) compute partial in-network sum and broadcast;
         ('re', [2, 'us']),  # 3) relay in-network sum from root upstream;

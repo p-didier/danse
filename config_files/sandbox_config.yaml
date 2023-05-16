@@ -2,16 +2,14 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230512_tests/TIDANSEonline/test2_wExtUpEvery250ms # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230515_tests/oracleSROcomp/test3_compSROs_2 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
-  noExternalFilterRelaxation: false
-  # For debug
-  performGEVD: false
-  # performGEVD: true
+  # performGEVD: false
+  performGEVD: true
   # simType: batch  # 'batch' or 'online'
   simType: online  # 'batch' or 'online'
   nodeUpdating: asy
@@ -21,12 +19,16 @@ danseParams:
   filterInitType: selectFirstSensor_andFixedValue
   filterInitFixedValue: 1
   #
+  # ------------ SRO stuff
+  compensateSROs: true
+  # compensateSROs: false
+  estimateSROs: Oracle   # "Oracle"/"CohDrift"/"DXCPPhaT"
+  # compensationStrategy: node-specific  # "node-specific"/"network-wide"
+  compensationStrategy: network-wide  # "node-specific"/"network-wide"
+  # ----------------------
+  #
   WOLAovlp: 0.5
-  # WOLAovlp: 0.75
   DFTsize: 1024
-  # DFTsize: 2048
-  # DFTsize: 4096
-  GEVDrank: 1
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 30.
   t_expAvg50pExternalFilters: 30.
@@ -41,19 +43,15 @@ wasnParams:
   VADwinLength: 0.04  # [s]
   rd: '[5, 5, 5]'
   minDistToWalls: 0.5
-  # rd: '[0.05, 0.05, 0.05]'
-  # rd: '[0.5, 0.5, 0.5]'
-  # minDistToWalls: 0.0
-  # Often used
-  sigDur: 15  # [s]
+  sigDur: 5  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
-  # layoutType: random_spinning_top
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
-  t60: 0.2  # [s]
-  # t60: 0.0  # [s]
-  SROperNode: '[0]'  # [PPM]
+  # t60: 0.2  # [s]
+  t60: 0.0  # [s]
+  SROperNode: '[0, 100, 200]'  # [PPM]
+  # SROperNode: '[0]'  # [PPM]
   # nSensorPerNode: '[1, 2, 3]'
   nSensorPerNode: '[1, 1, 1]'
   interSensorDist: 0.05

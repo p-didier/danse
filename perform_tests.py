@@ -23,18 +23,18 @@ def main():
 
     t0 = time.time()
 
-    # tests.sandbox.main(
-    #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-    # )
+    tests.sandbox.main(
+        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
+    )
 
     # tests.benchmark_danse.main(
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config_tigevddanse_week19_2023.yaml',
     #     outputFolder=f'{Path(__file__).parent}/out/20230512_tests/tigevddanse_battery',
     # )
-    tests.benchmark_danse_postproc.main(
-        resultsFolder=f'{Path(__file__).parent}/out/20230512_tests/tigevddanse_battery',
-        suptitlePrefix='TI-GEVD-DANSE',
-    )
+    # tests.benchmark_danse_postproc.main(
+    #     resultsFolder=f'{Path(__file__).parent}/out/20230512_tests/tigevddanse_battery',
+    #     suptitlePrefix='TI-GEVD-DANSE',
+    # )
 
     # tests.danse_robustness_to_sros.main()
     # tests.danse_robustness_to_sros_postproc.main(
@@ -42,11 +42,10 @@ def main():
     # )
 
     # ylim_adjust_barplots.main(
-    #     resultsFolder=f'{Path(__file__).parent}/out/20230508_tests/tigevddanse',
+    #     resultsFolder=f'{Path(__file__).parent}/out/20230512_tests/tigevddanse_battery',
     #     resultsFilename='DANSEoutputs.pkl.gz',
-    #     knowSNRylims=[0, 30],
+    #     knowSNRylims=[0, 35],
     # )
-
 
     print(f'\n\nTotal runtime: {str(datetime.timedelta(seconds=time.time() - t0))}.')
 

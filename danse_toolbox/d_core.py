@@ -202,7 +202,6 @@ def tidanse(
                     currEvents.t,
                     fs[k],
                     bypassUpdate
-                    # True  # debugging !!!!!
                 )
                 if k == tidv.currentWasnTreeObj.rootIdx and\
                     bypassUpdate:
