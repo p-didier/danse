@@ -1,5 +1,10 @@
 # Purpose of script:
 # Benchmark tests for the TI-GEVD-DANSE online implementation.
+# Various combinations of the following parameters are tested:
+#   - reverberation time
+#   - number of sensors per node
+#   - per-node sampling rate offsets
+#   - time constant for exponential averaging
 # >> Journal entry reference: 2023, week19, MON. 
 #
 # (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS

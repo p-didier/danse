@@ -23,10 +23,17 @@ def main():
 
     t0 = time.time()
 
-    tests.sandbox.main(
-        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-    )
+    # tests.sandbox.main(
+    #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
+    # )
 
+    # Benchmark tests for the TI-GEVD-DANSE online implementation.
+    # Various combinations of the following parameters are tested:
+    #   - reverberation time
+    #   - number of sensors per node
+    #   - per-node sampling rate offsets
+    #   - time constant for exponential averaging
+    # 
     # tests.benchmark_danse.main(
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config_tigevddanse_week19_2023.yaml',
     #     outputFolder=f'{Path(__file__).parent}/out/20230512_tests/tigevddanse_battery',
@@ -36,7 +43,12 @@ def main():
     #     suptitlePrefix='TI-GEVD-DANSE',
     # )
 
-    # tests.danse_robustness_to_sros.main()
+    # Test the inherent robustness of the DANSE algorithm to SROs.
+    #
+    tests.danse_robustness_to_sros.main(
+        cfgFilename=f'{CONFIG_FILES_FOLDER}/sros_effect.yaml',
+        outputFolder='20230524_tests/sros_effect/batch_danse',  # relative to `danse/out`
+    )
     # tests.danse_robustness_to_sros_postproc.main(
     #     folder=f'{Path(__file__).parent}/out/20230508_tests/sros_effect_danse'
     # )

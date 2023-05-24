@@ -2,16 +2,16 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230515_tests/oracleSROcomp/test3_compSROs_2 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230524_tests/batchDANSE_sros/test1 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
-  # performGEVD: false
-  performGEVD: true
-  # simType: batch  # 'batch' or 'online'
-  simType: online  # 'batch' or 'online'
+  performGEVD: false
+  # performGEVD: true
+  simType: batch  # 'batch' or 'online'
+  # simType: online  # 'batch' or 'online'
   nodeUpdating: asy
   # nodeUpdating: seq
   computeLocal: true
@@ -20,8 +20,8 @@ danseParams:
   filterInitFixedValue: 1
   #
   # ------------ SRO stuff
-  compensateSROs: true
-  # compensateSROs: false
+  # compensateSROs: true
+  compensateSROs: false
   estimateSROs: Oracle   # "Oracle"/"CohDrift"/"DXCPPhaT"
   # compensationStrategy: node-specific  # "node-specific"/"network-wide"
   compensationStrategy: network-wide  # "node-specific"/"network-wide"
@@ -67,9 +67,9 @@ wasnParams:
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
-    topologyType: user-defined
+    # topologyType: user-defined
     seed: 12347
-    # topologyType: fully-connected
+    topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

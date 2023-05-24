@@ -22,7 +22,10 @@ OUT_FOLDER = '20230508_tests/sros_effect_danse/'  # export path relative to `dan
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
 
-def main():
+def main(
+        cfgFilename: str = PATH_TO_CONFIG_FILE,
+        outputFolder: str = OUT_FOLDER,
+    ):
     """Main function (called by default when running script)."""
 
     # SROs to consider
@@ -31,12 +34,13 @@ def main():
     
     # Run tests
     res = run_test_batch(
-        configFilePath=PATH_TO_CONFIG_FILE,
+        configFilePath=cfgFilename,
         srosToConsider=srosToConsider,
+        outputFolder=outputFolder,
     )
 
     if EXPORT_DATA:
-        basePath = f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}'
+        basePath = f'{Path(__file__).parent.parent}/out/{outputFolder}'
         # Export res object
         with open(f'{basePath}/metricsAsFctOfSROs.pkl', 'wb') as f:
             pickle.dump(res, f)
@@ -146,7 +150,8 @@ def setup_config(filePath: str):
 
 def run_test_batch(
         configFilePath: str,
-        srosToConsider: list
+        srosToConsider: list,
+        outputFolder: str
     ) -> list[dict]:
     """
     Runs a test batch based on a (YAML) configuration.
@@ -157,6 +162,8 @@ def run_test_batch(
         Path to YAML configuration file.
     srosToConsider : list[list[float]]
         List of lists of SROs to consider (per node) [PPM].
+    outputFolder : str
+        Name of output folder.
     
     Returns
     ----------
@@ -172,7 +179,7 @@ def run_test_batch(
     for ii, sros in enumerate(srosToConsider):
         # Set up SRO parameter
         currSROs = np.concatenate((np.array([0.]), sros))
-        pickleFilePath = f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/backupvals/vals_sros_{ii+1}.pkl.gz'
+        pickleFilePath = f'{Path(__file__).parent.parent}/out/{outputFolder}/backupvals/vals_sros_{ii+1}.pkl.gz'
         if SKIP_ALREADY_RUN and Path(pickleFilePath).exists():
             print(f'>>> Skipping SRO test {ii+1} / {len(srosToConsider)}: {currSROs} PPM\n')
             # Load results
@@ -182,7 +189,7 @@ def run_test_batch(
             # Set up test parameters
             testParams.wasnParams.SROperNode = currSROs
             testParams.exportParams.exportFolder =\
-                f'{Path(__file__).parent.parent}/out/{OUT_FOLDER}/sros_{ii+1}'
+                f'{Path(__file__).parent.parent}/out/{outputFolder}/sros_{ii+1}'
             testParams.__post_init__()
             testParams.danseParams.get_wasn_info(testParams.wasnParams)
             # Run test

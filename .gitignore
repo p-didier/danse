@@ -11,3 +11,4 @@
 out/
 *.pkl
 *.npy
+_quick_tests/

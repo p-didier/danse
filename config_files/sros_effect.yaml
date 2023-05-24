@@ -22,7 +22,8 @@ exportParams:
   bypassAllExports: false  # if true, all exports are bypassed
 danseParams:
   # For debug
-  simType: online
+  # simType: online
+  simType: batch
   saveConditionNumber: true
   saveConditionNumberEvery: 9999
   # performGEVD: true

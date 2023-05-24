@@ -295,7 +295,8 @@ def plot_asc_3d(
         cz=None,
         plotSourcesLine=False
     ):
-    """Plot room, nodes, and sources in 3D.
+    """
+    Plot room, nodes, and sources in 3D.
     
     Parameters
     ----------

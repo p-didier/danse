@@ -1211,15 +1211,15 @@ def plot_asc(
         # Some random-noise (unusable) signals have been added to the nodes
         # for experimental purposes - use the original sensor-to-node indices
         # instead of the current ones for plotting.
-        sensorToNodeIndices = p.sensorToNodeIndicesASC
+        sensorToNodeIdx = p.sensorToNodeIndicesASC
     else:
-        sensorToNodeIndices = p.sensorToNodeIndices
+        sensorToNodeIdx = p.sensorToNodeIndices
 
     # Determine appropriate node radius for ASC subplots
     nodeRadius = 0
     for k in range(p.nNodes):
         allIndices = np.arange(sum(nSensorPerNode))
-        sensorIndices = allIndices[sensorToNodeIndices == k]
+        sensorIndices = allIndices[sensorToNodeIdx == k]
         if len(sensorIndices) > 1:
             meanpos = np.mean(asc.mic_array.R[:, sensorIndices], axis=1)
             curr = np.amax(asc.mic_array.R[:, sensorIndices] - \
@@ -1244,7 +1244,7 @@ def plot_asc(
         np.array([ii.position[:2] for ii in asc.sources[:p.nDesiredSources]]), 
         np.array([ii.position[:2] for ii in asc.sources[-p.nNoiseSources:]]), 
         asc.mic_array.R[:2, :].T,
-        sensorToNodeIndices,
+        sensorToNodeIdx,
         dotted=p.t60==0,
         showLegend=False,
         nodeRadius=nodeRadius,
@@ -1254,7 +1254,7 @@ def plot_asc(
         # Add topology lines
         _plot_connections(
             sensorCoords=asc.mic_array.R[:2, :],
-            stnIdx=sensorToNodeIndices
+            stnIdx=sensorToNodeIdx
         )
     ax.set(xlabel='$x$ [m]', ylabel='$y$ [m]', title='Top view')
     #
@@ -1265,7 +1265,7 @@ def plot_asc(
         np.array([ii.position[-2:] for ii in asc.sources[:p.nDesiredSources]]), 
         np.array([ii.position[-2:] for ii in asc.sources[-p.nNoiseSources:]]), 
         asc.mic_array.R[-2:, :].T,
-        sensorToNodeIndices,
+        sensorToNodeIdx,
         dotted=p.t60==0,
         showLegend=False,
         nodeRadius=nodeRadius,
@@ -1275,7 +1275,7 @@ def plot_asc(
         # Add topology lines
         _plot_connections(
             sensorCoords=asc.mic_array.R[-2:, :],
-            stnIdx=sensorToNodeIndices
+            stnIdx=sensorToNodeIdx
         )
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
     #
@@ -1283,6 +1283,33 @@ def plot_asc(
         ax = fig.add_subplot(1, nCols, 3, projection='3d')
         plot_asc_3d(ax, asc, p)  # plot room in 3d
 
+    # Add distance info in box text
+    boxText = 'Node distances\n\n'
+    for ii in range(p.nNodes):
+        distancesToSources = [
+            np.mean(np.linalg.norm(
+                asc.mic_array.R[:, sensorToNodeIdx == ii].T - s.position
+            )) for s in asc.sources
+        ]
+        for jj in range(p.nDesiredSources):
+            d = distancesToSources[jj]
+            boxText += f'{ii + 1}$\\to$D{jj + 1}={np.round(d, 2)}m\n'
+        for jj in range(p.nNoiseSources):
+            d = distancesToSources[-(jj + 1)]
+            boxText += f'{ii + 1}$\\to$N{jj + 1}={np.round(d, 2)}m\n'
+        boxText += '\n'
+    boxText = boxText[:-1]
+    ax.text(
+        1.1,
+        0.9,
+        boxText,
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment='top',
+        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    )
+    
+    # Make sure everything fits
     plt.tight_layout()
 
     if folder != '':

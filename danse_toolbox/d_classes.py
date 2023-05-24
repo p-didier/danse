@@ -185,18 +185,19 @@ class TestParameters:
             # If condition number plot is not exported, don't compute it
             self.danseParams.saveConditionNumber = False
         # Check if batch mode is possible
-        if self.danseParams.simType == 'batch' and\
-            any(self.wasnParams.SROperNode != 0):
-            ui = input('Batch mode not supported in the presence of SROs. Run online? [y/n]  ')
-            while ui not in ['y', 'n']:
-                ui = input(f'Invalid input "{ui}". Try again. Run online? [y/n]  ')
-            if ui == 'y':
-                self.danseParams.simType = 'online'
-            else:
-                raise ValueError('Batch mode not supported in the presence of SROs. Aborting.')
+        # if self.danseParams.simType == 'batch' and\
+        #     any(self.wasnParams.SROperNode != 0):
+        #     ui = input('Batch mode not supported in the presence of SROs. Run online? [y/n]  ')
+        #     while ui not in ['y', 'n']:
+        #         ui = input(f'Invalid input "{ui}". Try again. Run online? [y/n]  ')
+        #     if ui == 'y':
+        #         self.danseParams.simType = 'online'
+        #     else:
+        #         raise ValueError('Batch mode not supported in the presence of SROs. Aborting.')
         # Check that the SRO compensation strategy used corresponds to the
         # topology.
         if self.is_fully_connected_wasn() and\
+            self.danseParams.compensateSROs and\
             self.danseParams.compensationStrategy == 'network-wide':
             ui = input('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Use node-specific compensation? [y/n]  ')
             while ui not in ['y', 'n']:
@@ -344,7 +345,7 @@ class DANSEvariables(base.DANSEparameters):
                 (self.DFTsize, nSROestimates), dtype=complex
             ))
             # init all buffer flags at 0 (assuming no over- or under-flow)
-            bufferFlags.append(np.zeros((self.nIter, dimYTilde[k])))    
+            bufferFlags.append(np.zeros((self.nIter, len(wasn[k].neighborsIdx))))    
             # initiate phase shift factors as 0's (no phase shift)
             phaseShiftFactors.append(np.zeros(dimYTilde[k]))
             SROsEstimates.append(np.zeros((self.nIter, nSROestimates)))
