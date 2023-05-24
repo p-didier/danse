@@ -357,15 +357,16 @@ def danse_batch(
     t0 = time.perf_counter()
 
     # Perform batch DANSE
+    bdv.get_centralized_and_local_estimates()  # get centralized and local estimates
     for ii in range(p.maxBatchUpdates):
         # Inform user
         if bdv.printoutsAndPlotting.printout_batch_updates:
             print(f'Batch update {ii + 1}/{p.maxBatchUpdates}...')
         for k in range(bdv.nNodes):
             # Filter updates and desired signal estimates event
-            bdv.batch_update_broadcast_signals()
-            bdv.batch_update(k)
-            bdv.batch_estimate(k)
+            bdv.batch_update_danse_covmats(k)
+            bdv.perform_update(k)   # update DANSE filters
+            bdv.batch_estimate(k)   # estimate desired signal (batch mode)
             bdv.i[k] += 1  # update DANSE iteration counter
 
     # Profilin

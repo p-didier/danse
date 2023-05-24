@@ -598,7 +598,7 @@ class DANSEvariables(base.DANSEparameters):
         self.centrVADframes = vadPerFrameCentr.astype(bool)
 
         # Variables for batch mode
-        if self.simType == 'batch':
+        if 'batch' in self.simType:
             # Compute STFTs of microphone signals
             self.yinSTFT = []
             for k in range(nNodes):
@@ -613,7 +613,7 @@ class DANSEvariables(base.DANSEparameters):
                 #            automatically in scipy's get_stft().
             # Compute centralized STFT
             arraysSequence = tuple([x for x in self.yinSTFT])
-            yCentrBatch = np.concatenate(arraysSequence, axis=2)
+            self.yCentrBatch = np.concatenate(arraysSequence, axis=2)
             # Compute batch spatial covariance matrices for local and
             # centralized processing
             for k in range(self.nNodes):
@@ -622,7 +622,7 @@ class DANSEvariables(base.DANSEparameters):
                     self.oVADframes[k]
                 )
                 self.Ryycentr[k], self.Rnncentr[k] = update_covmats_batch(
-                    yCentrBatch,
+                    self.yCentrBatch,
                     self.centrVADframes
                 )
 
@@ -1597,8 +1597,7 @@ class DANSEvariables(base.DANSEparameters):
         current (external) DANSE filters. Works for both fully connected
         DANSE and TI-DANSE.
         """
-        if hasattr(self, 'eta'):
-            # TI-DANSE case
+        if hasattr(self, 'eta'):  # TI-DANSE case
             etaMkBatch = np.zeros((
                 self.yinSTFT[k].shape[0],
                 self.yinSTFT[k].shape[1]
@@ -1650,67 +1649,14 @@ class DANSEvariables(base.DANSEparameters):
         k : int
             Node index.
         """
-        def _update_w(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx):
-            """
-            Helper function for regular MWF-like  DANSE filter update.
-            """
-            # Reference sensor selection vector
-            Evect = np.zeros(Ryy.shape[-1])
-            Evect[refSensorIdx] = 1
-
-            # Cross-correlation matrix update 
-            ryd = np.matmul(Ryy - Rnn, Evect)
-            # Update node-specific parameters of node k
-            Ryyinv = np.linalg.inv(Ryy)
-            w = np.matmul(Ryyinv, ryd[:, :, np.newaxis])
-            if np.isnan(w).any():
-                stop =1
-            return w[:, :, 0]  # get rid of singleton dimension
-
-        def _update_w_gevd(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx):
-            """
-            Helper function for GEVD-based MWF-like DANSE filter update.
-            """
-            n = Ryy.shape[-1]
-            nFreqs = Ryy.shape[0]
-            # Reference sensor selection vector 
-            Evect = np.zeros((n,))
-            Evect[refSensorIdx] = 1
-
-            sigma = np.zeros((nFreqs, n))
-            Xmat = np.zeros((nFreqs, n, n), dtype=complex)
-
-            for kappa in range(nFreqs):
-                # Perform generalized eigenvalue decomposition 
-                # -- as of 2022/02/17: scipy.linalg.eigh()
-                # seemingly cannot be jitted nor vectorized.
-                sigmacurr, Xmatcurr = sla.eigh(
-                    Ryy[kappa, :, :],
-                    Rnn[kappa, :, :],
-                    check_finite=False,
-                    driver='gvd'
-                )
-                # Flip Xmat to sort eigenvalues in descending order
-                # idx = np.flip(np.argsort(sigmacurr))
-                idx = jit_flipargsort(sigmacurr)  # jitted version
-                sigma[kappa, :] = sigmacurr[idx]
-                Xmat[kappa, :, :] = Xmatcurr[:, idx]
-
-            Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0,2,1]))
-            # GEVLs tensor
-            Dmat = np.zeros((nFreqs, n, n))
-            for ii in range(self.GEVDrank):
-                Dmat[:, ii, ii] = np.squeeze(1 - 1/sigma[:, ii])
-            # LMMSE weights
-            Qhermitian = np.transpose(Qmat.conj(), axes=[0,2,1])
-            w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
-            return w
 
         # Select appropriate update function
         if self.performGEVD:
-            filter_update_fcn = _update_w_gevd
+            filter_update_fcn = update_w_gevd
+            rank = self.GEVDrank
         else:
-            filter_update_fcn = _update_w
+            filter_update_fcn = update_w
+            rank = 1  # <-- arbitrary, not used in this case
 
         if not self.bypassUpdates:
             # Update DANSE filter
@@ -1718,25 +1664,34 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryytilde[k],
                     self.Rnntilde[k],
-                    refSensorIdx=self.referenceSensor
+                    refSensorIdx=self.referenceSensor,
+                    rank=rank
                 )
                 self.nInternalFilterUps[k] += 1  
             # Update centralised filter
-            if self.computeCentralised and self.startUpdatesCentr[k]:
+            if self.computeCentralised and self.startUpdatesCentr[k] and\
+                self.simType != 'batch':
+                # Do not update in "batch" mode --> this is done separately
+                # in the BatchDANSEvariables class.
                 self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryycentr[k],
                     self.Rnncentr[k],
                     refSensorIdx=int(
                         np.sum(self.nSensorPerNode[:k]) + self.referenceSensor
-                    )
+                    ),
+                    rank=rank
                 )
                 self.nCentrFilterUps[k] += 1  
             # Update local filter
-            if self.computeLocal and self.startUpdatesLocal[k]:
+            if self.computeLocal and self.startUpdatesLocal[k] and\
+                self.simType != 'batch':
+                # Do not update in "batch" mode --> this is done separately
+                # in the BatchDANSEvariables class.
                 self.wLocal[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryylocal[k],
                     self.Rnnlocal[k],
-                    refSensorIdx=self.referenceSensor
+                    refSensorIdx=self.referenceSensor,
+                    rank=rank
                 )
                 self.nLocalFilterUps[k] += 1
 
@@ -2620,6 +2575,62 @@ def apply_phase_shift_to_td_frame(tdFrame, phaseShift, DFTsize):
     return tdFrameShifted
 
 
+def update_w(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx, rank=None):
+    """
+    Helper function for regular MWF-like DANSE filter update.
+    NB: the `rank` parameter is not used here, but is kept for consistency
+    with the GEVD-based DANSE filter update (see `update_w_gevd`).
+    """
+    # Reference sensor selection vector
+    Evect = np.zeros(Ryy.shape[-1])
+    Evect[refSensorIdx] = 1
+
+    # Cross-correlation matrix update 
+    ryd = np.matmul(Ryy - Rnn, Evect)
+    # Update node-specific parameters of node k
+    Ryyinv = np.linalg.inv(Ryy)
+    w = np.matmul(Ryyinv, ryd[:, :, np.newaxis])
+    return w[:, :, 0]  # get rid of singleton dimension
+
+
+def update_w_gevd(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx, rank=1):
+    """
+    Helper function for GEVD-based MWF-like DANSE filter update.
+    """
+    n = Ryy.shape[-1]
+    nFreqs = Ryy.shape[0]
+    # Reference sensor selection vector 
+    Evect = np.zeros((n,))
+    Evect[refSensorIdx] = 1
+
+    sigma = np.zeros((nFreqs, n))
+    Xmat = np.zeros((nFreqs, n, n), dtype=complex)
+
+    for kappa in range(nFreqs):
+        # Perform generalized eigenvalue decomposition 
+        # -- as of 2022/02/17: scipy.linalg.eigh()
+        # seemingly cannot be jitted nor vectorized.
+        sigmacurr, Xmatcurr = sla.eigh(
+            Ryy[kappa, :, :],
+            Rnn[kappa, :, :],
+            check_finite=False,
+            driver='gvd'
+        )
+        # Flip Xmat to sort eigenvalues in descending order
+        # idx = np.flip(np.argsort(sigmacurr))
+        idx = jit_flipargsort(sigmacurr)  # jitted version
+        sigma[kappa, :] = sigmacurr[idx]
+        Xmat[kappa, :, :] = Xmatcurr[:, idx]
+
+    Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0,2,1]))
+    # GEVLs tensor
+    Dmat = np.zeros((nFreqs, n, n))
+    for ii in range(rank):
+        Dmat[:, ii, ii] = np.squeeze(1 - 1/sigma[:, ii])
+    # LMMSE weights
+    Qhermitian = np.transpose(Qmat.conj(), axes=[0,2,1])
+    w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
+    return w
 # --------------------------------------------------------------------------- #
 # Jitted functions
 # --------------------------------------------------------------------------- #
