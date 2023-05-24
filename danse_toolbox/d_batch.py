@@ -1,7 +1,7 @@
 from danse_toolbox.d_classes import *
 
 @dataclass
-class BatchDANSEvariables(base.DANSEparameters):
+class BatchDANSEvariables(DANSEvariables):
     """
     Main DANSE class for batch simulations.
     Stores all relevant variables and core functions on those variables.
@@ -197,4 +197,4 @@ class BatchDANSEvariables(base.DANSEparameters):
         if self.computeLocal:
             self.dHatLocal[k][:, self.i[k] + 1] = np.dot(
                 self.wLocal[k][:, self.i[k] + 1], self.yLocal[k].T
-            )   
+            )

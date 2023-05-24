@@ -321,14 +321,13 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
     return p, wasnObj
 
 
-def danse_batch_td(
+def danse_batch(
     wasnObj: WASN,
     p: base.DANSEparameters
     ) -> tuple[DANSEoutputs, WASN]:
     """
     Fully connected batch-implementation DANSE main function with time-domain
     linear combination of signals (beamforming-ish).
-    2023.05.04: no longer used, replaced by `danse_batch` (STFT-domain).
 
     Parameters
     ----------
@@ -343,10 +342,8 @@ def danse_batch_td(
         DANSE outputs.
     """
 
-    return InterruptedError('This function is no longer used. Use `danse_batch` instead.')
-
     # Initialize variables
-    bdv = BatchDANSEvariables()  # batch!
+    bdv = BatchDANSEvariables()  # batch
     bdv.import_params(p)
     bdv.init_from_wasn(wasnObj.wasn)
 

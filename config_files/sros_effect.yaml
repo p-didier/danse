@@ -24,7 +24,7 @@ danseParams:
   # For debug
   # simType: online
   simType: batch
-  saveConditionNumber: true
+  saveConditionNumber: false
   saveConditionNumberEvery: 9999
   # performGEVD: true
   performGEVD: false
@@ -69,7 +69,8 @@ danseParams:
   efficientSpSBC: true
   estimateSROs: CohDrift
   filterInitFixedValue: 1
-  filterInitType: selectFirstSensor_andFixedValue
+  # filterInitType: selectFirstSensor_andFixedValue
+  filterInitType: selectFirstSensor
   frameLenfwSNRseg: 0.03
   gammafwSNRseg: 0.2
   minNoSpeechDurEndUterrance: 0.2

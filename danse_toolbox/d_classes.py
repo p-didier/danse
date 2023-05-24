@@ -185,15 +185,15 @@ class TestParameters:
             # If condition number plot is not exported, don't compute it
             self.danseParams.saveConditionNumber = False
         # Check if batch mode is possible
-        # if self.danseParams.simType == 'batch' and\
-        #     any(self.wasnParams.SROperNode != 0):
-        #     ui = input('Batch mode not supported in the presence of SROs. Run online? [y/n]  ')
-        #     while ui not in ['y', 'n']:
-        #         ui = input(f'Invalid input "{ui}". Try again. Run online? [y/n]  ')
-        #     if ui == 'y':
-        #         self.danseParams.simType = 'online'
-        #     else:
-        #         raise ValueError('Batch mode not supported in the presence of SROs. Aborting.')
+        if self.danseParams.simType == 'batch_wola_estimation' and\
+            any(self.wasnParams.SROperNode != 0):
+            ui = input('Batch mode with WOLA-based target signal estimation not supported in the presence of SROs. Run online? [y/n]  ')
+            while ui not in ['y', 'n']:
+                ui = input(f'Invalid input "{ui}". Try again. Run online? [y/n]  ')
+            if ui == 'y':
+                self.danseParams.simType = 'online'
+            else:
+                raise ValueError('Batch mode with WOLA-based target signal estimation not supported in the presence of SROs. Aborting.')
         # Check that the SRO compensation strategy used corresponds to the
         # topology.
         if self.is_fully_connected_wasn() and\

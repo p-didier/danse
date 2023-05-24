@@ -157,7 +157,11 @@ class DANSEparameters(Hyperparameters):
     doi: 10.1109/TSIPN.2016.2623095.
     """
     # --- General
-    simType: str = 'batch'  # simulation type ("batch" or "online")
+    simType: str = 'batch'  # simulation type
+        # - "batch": batch DANSE [1]
+        # - "batch_wola_estimation": batch DANSE filter updates but WOLA-based
+        #           ('online') estimation of the desired signals.
+        # - "online": online DANSE
     maxBatchUpdates: int = 100   # maximum number of batch DANSE updates
         # (used iff `simType == 'batch'`)
     DFTsize: int = 1024     # DFT size
@@ -405,8 +409,8 @@ def check_clock_jitter(timeInstants: np.ndarray, nNodes: int):
     fs = np.zeros(nNodes)
     for k in range(nNodes):
         deltas = np.diff(timeInstants[:, k])
-        # vvv Allowing computer precision errors down to 1e-4*mean delta.
-        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e6))))
+        # vvv Allowing computer precision errors down to 1e-7*mean delta.
+        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e7))))
         if len(np.unique(np.round(deltas, precision))) > 1:
             raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: {len(np.unique(np.round(deltas, precision)))} different sample intervals detected for node {k + 1}.')
         # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.

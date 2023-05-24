@@ -2,7 +2,7 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230524_tests/batchDANSE_sros/test1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230524_tests/sros_effect/indiv/danse_smallestSROs_2 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -10,21 +10,23 @@ exportParams:
 danseParams:
   performGEVD: false
   # performGEVD: true
-  simType: batch  # 'batch' or 'online'
-  # simType: online  # 'batch' or 'online'
+  simType: batch
+  # simType: batch_wola_estimation
+  # simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
   computeLocal: true
   computeCentralised: true
-  filterInitType: selectFirstSensor_andFixedValue
+  # filterInitType: selectFirstSensor_andFixedValue
+  filterInitType: selectFirstSensor
   filterInitFixedValue: 1
   #
   # ------------ SRO stuff
   # compensateSROs: true
   compensateSROs: false
   estimateSROs: Oracle   # "Oracle"/"CohDrift"/"DXCPPhaT"
-  # compensationStrategy: node-specific  # "node-specific"/"network-wide"
-  compensationStrategy: network-wide  # "node-specific"/"network-wide"
+  compensationStrategy: node-specific  # "node-specific"/"network-wide"
+  # compensationStrategy: network-wide  # "node-specific"/"network-wide"
   # ----------------------
   #
   WOLAovlp: 0.5
@@ -43,14 +45,16 @@ wasnParams:
   VADwinLength: 0.04  # [s]
   rd: '[5, 5, 5]'
   minDistToWalls: 0.5
-  sigDur: 5  # [s]
+  sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
   # t60: 0.2  # [s]
   t60: 0.0  # [s]
-  SROperNode: '[0, 100, 200]'  # [PPM]
+  # SROperNode: '[0, 100, 200]'  # [PPM]
+  # SROperNode: '[0, 5, 10]'  # [PPM]
+  SROperNode: '[10, 0, 5]'  # [PPM]
   # SROperNode: '[0]'  # [PPM]
   # nSensorPerNode: '[1, 2, 3]'
   nSensorPerNode: '[1, 1, 1]'
