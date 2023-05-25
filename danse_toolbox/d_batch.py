@@ -8,6 +8,16 @@ class BatchDANSEvariables(DANSEvariables):
     """
     def init(self):
         self.startUpdates = [True for _ in range(self.nNodes)]
+        # Get MMSE costs for centralised and local estimates
+        self.mmseCostLocal = [np.mean(
+            np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                self.dLocal[:, k])**2
+        ) for k in range(self.nNodes)]
+        self.mmseCostCentr = [np.mean(
+            np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                self.dCentr[:, k])**2
+        ) for k in range(self.nNodes)]
+        self.mmseCost = np.full((self.maxBatchUpdates, self.nNodes), None)  # <-- to be updated
 
     def get_centralized_and_local_estimates(self):
         """
@@ -49,9 +59,12 @@ class BatchDANSEvariables(DANSEvariables):
                     self.yCentrBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
                 )
                 # Convert back to time domain
-                self.dCentr[:, k] = self.get_istft(self.dHatCentr[:, :, k], k)
-                self.dCentr_s[:, k] = self.get_istft(self.dHatCentr_s[:, :, k], k)
-                self.dCentr_n[:, k] = self.get_istft(self.dHatCentr_n[:, :, k], k)
+                self.dCentr[:, k] =self.get_istft(self.dHatCentr[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
+                self.dCentr_s[:, k] = self.get_istft(self.dHatCentr_s[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
+                self.dCentr_n[:, k] = self.get_istft(self.dHatCentr_n[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
 
         if self.computeLocal:
             for k in range(self.nNodes):
@@ -78,9 +91,12 @@ class BatchDANSEvariables(DANSEvariables):
                     self.yinSTFT_n[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
                 )
                 # Convert back to time domain
-                self.dLocal[:, k] = self.get_istft(self.dHatLocal[:, :, k], k)
-                self.dLocal_s[:, k] = self.get_istft(self.dHatLocal_s[:, :, k], k)
-                self.dLocal_n[:, k] = self.get_istft(self.dHatLocal_n[:, :, k], k)
+                self.dLocal[:, k] = self.get_istft(self.dHatLocal[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
+                self.dLocal_s[:, k] = self.get_istft(self.dHatLocal_s[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
+                self.dLocal_n[:, k] = self.get_istft(self.dHatLocal_n[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
 
 
     def batch_update_danse_covmats(self, k):
@@ -119,9 +135,12 @@ class BatchDANSEvariables(DANSEvariables):
             yTildeBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
         )
         # Convert back to time domain
-        self.d[:, k] = self.get_istft(self.dhat[:, :, k], k)
-        self.d_s[:, k] = self.get_istft(self.dhat_s[:, :, k], k)
-        self.d_n[:, k] = self.get_istft(self.dhat_n[:, :, k], k)
+        self.d[:, k] = self.get_istft(self.dhat[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
+        self.d_s[:, k] = self.get_istft(self.dhat_s[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
+        self.d_n[:, k] = self.get_istft(self.dhat_n[:, :, k], k)\
+                    / np.sum(self.winWOLAanalysis)
 
     def get_istft(self, xSTFT, k):
         """
@@ -155,3 +174,18 @@ class BatchDANSEvariables(DANSEvariables):
                 mode='constant'
             )
         return x
+    
+    def get_mmse_cost(self, k):
+        """
+        Compute the DANSE MMSE cost function for the given node.
+
+        Parameters
+        ----------
+        k : int
+            The node index.
+        """
+        # True desired signal
+        targetSig = self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor]
+        self.mmseCost[self.i[k], k] = np.mean(
+            np.abs(targetSig - self.d[:, k])**2
+        )

@@ -2,20 +2,20 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230525_tests/fullbatch/test1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230525_tests/fullbatch_gevd/test3_mmsecostplot # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
   maxBatchUpdates: 10
-  performGEVD: false
-  # performGEVD: true
+  # performGEVD: false
+  performGEVD: true
   simType: batch
   # simType: batch_wola_estimation
   # simType: online
-  nodeUpdating: asy
-  # nodeUpdating: seq
+  # nodeUpdating: asy
+  nodeUpdating: seq
   computeLocal: true
   computeCentralised: true
   # filterInitType: selectFirstSensor_andFixedValue
@@ -57,8 +57,8 @@ wasnParams:
   # SROperNode: '[0, 5, 10]'  # [PPM]
   SROperNode: '[10, 0, 5]'  # [PPM]
   # SROperNode: '[0]'  # [PPM]
-  # nSensorPerNode: '[1, 2, 3]'
-  nSensorPerNode: '[1, 1, 1]'
+  nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[1, 1, 1]'
   interSensorDist: 0.05
   #
   baseSNR: 5

@@ -20,8 +20,8 @@ from pyinstrument import Profiler
 from danse_toolbox.d_sros import *
 import danse_toolbox.d_base as base
 from danse_toolbox.d_classes import *
+from danse_toolbox.d_post import DANSEoutputs
 from danse_toolbox.d_batch import BatchDANSEvariables
-from danse_toolbox.d_post import DANSEoutputs, BatchDANSEoutputs
 
 def danse(
     wasnObj: WASN,
@@ -358,6 +358,7 @@ def danse_batch(
     t0 = time.perf_counter()
 
     # Perform batch DANSE
+    upNodeIdx = 0
     bdv.get_centralized_and_local_estimates()  # get centralized and local estimates
     for ii in range(p.maxBatchUpdates):
         # Inform user
@@ -366,9 +367,15 @@ def danse_batch(
         for k in range(bdv.nNodes):
             # Filter updates and desired signal estimates event
             bdv.batch_update_danse_covmats(k)
-            bdv.perform_update(k)   # update DANSE filters
+            if p.nodeUpdating != 'seq' or (p.nodeUpdating == 'seq' and k == upNodeIdx):
+                bdv.perform_update(k)   # update DANSE filters
+            else: # do not update DANSE filters
+                bdv.wTilde[k][:, bdv.i[k] + 1, :] = bdv.wTilde[k][:, bdv.i[k], :]
             bdv.batch_estimate(k)   # estimate desired signal (batch mode)
+            bdv.get_mmse_cost(k)
             bdv.i[k] += 1  # update DANSE iteration counter
+        # Update node index for sequential updates
+        upNodeIdx = (upNodeIdx + 1) % bdv.nNodes
 
     # Profilin
     if not is_interactive():
@@ -386,6 +393,13 @@ def danse_batch(
     out = DANSEoutputs()
     out.import_params(p)
     out.from_variables(bdv)
+    # Update WASN object
+    for k in range(len(wasnObj.wasn)):
+        wasnObj.wasn[k].enhancedData = bdv.d[:, k]
+        if bdv.computeCentralised:
+            wasnObj.wasn[k].enhancedData_c = bdv.dCentr[:, k]
+        if bdv.computeLocal:
+            wasnObj.wasn[k].enhancedData_l = bdv.dLocal[:, k]
 
     return out, wasnObj
 
