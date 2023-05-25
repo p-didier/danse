@@ -93,17 +93,17 @@ def danse_it_up(
     p: TestParameters
     ) -> tuple[pp.DANSEoutputs, WASN]:
     """
-    Container function for pr epping signals and launching the DANSE algorithm.
+    Container function for launching the- correct version of the DANSE algorithm.
     """
     # Launch DANSE
     if p.is_fully_connected_wasn():  # Fully connected WASN case
+        print(f'Running {p.danseParams.simType} DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         if p.danseParams.simType == 'batch':  # true batch mode
-            core.danse_batch(wasnObj, p.danseParams)
+            out, wasnUpdated = core.danse_batch(wasnObj, p.danseParams)
         else:
-            print(f'Running "{p.danseParams.simType}" DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
             out, wasnUpdated = core.danse(wasnObj, p.danseParams)
     else:  # Ad-hoc WASN topology case
-        print(f'Running "{p.danseParams.simType}" TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
+        print(f'Running {p.danseParams.simType} TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
     print('DANSE run complete.')
 

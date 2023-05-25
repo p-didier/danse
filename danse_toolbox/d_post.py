@@ -520,10 +520,12 @@ class BatchDANSEoutputs(DANSEparameters):
         if self.computeLocal:
             self.filtersLocal: list[np.ndarray] = bdv.wLocal
 
-        self.TDdesiredSignals_est = np.array(bdv.dHat)
-        self.TDdesiredSignals_est_c = np.array(bdv.dHatCentr)
-        self.TDdesiredSignals_est_l = np.array(bdv.dHatLocal)
-        self.TDdesiredSignals = np.array([x[:, np.newaxis] for x in bdv.d])
+        self.TDdesiredSignals_est = np.array(bdv.d)
+        self.TDdesiredSignals_est_c = np.array(bdv.dCentr)
+        self.TDdesiredSignals_est_l = np.array(bdv.dLocal)
+        self.TDdesiredSignals = np.array(
+            [x[:, bdv.referenceSensor] for x in bdv.cleanSpeechSignalsAtNodes]
+        )
         self.noisySigs = np.array([
             bdv.yLocal[k][:, self.referenceSensor] for k in range(self.nNodes)
         ]).T
@@ -1100,7 +1102,8 @@ def export_sounds(
                 f'{folder}/wav/enhanced_N{k + 1}.wav',
                 int(wasn[k].fs), data
             )
-            if out.broadcastType == 'wholeChunk' and fullyConnected:
+            if out.broadcastType == 'wholeChunk' and fullyConnected and\
+                out.simType != 'batch':
                 # Export the fused signals too
                 if not Path(f'{folder}/wav/fused').is_dir():
                     Path(f'{folder}/wav/fused').mkdir()

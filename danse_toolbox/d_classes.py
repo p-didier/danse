@@ -268,6 +268,8 @@ class DANSEvariables(base.DANSEparameters):
         list of `Node` objects.
         """
         nNodes = len(wasn)  # number of nodes in WASN
+        # Sampling frequencies of all nodes
+        self.fs = np.array([node.fs for node in wasn])
         nSensorsTotal = sum([node.nSensors for node in wasn])
         self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
         # Expected number of DANSE iterations (==  # of signal frames)
@@ -601,19 +603,33 @@ class DANSEvariables(base.DANSEparameters):
         if 'batch' in self.simType:
             # Compute STFTs of microphone signals
             self.yinSTFT = []
+            self.yinSTFT_s = []  # clean speech
+            self.yinSTFT_n = []  # clean noise
             for k in range(nNodes):
-                self.yinSTFT.append(base.get_stft(
-                    x=self.yin[k],
+                kwargs = dict(
                     fs=wasn[k].fs,
                     win=self.winWOLAanalysis,
                     ovlp=1 - self.Ns / self.DFTsize,
                     boundary=None  # no padding to center frames at t=0s!
+                )
+                self.yinSTFT.append(base.get_stft(
+                    x=self.yin[k], **kwargs
                 )[0] * np.sum(self.winWOLAanalysis))  
                 #        ^^^ compensate for window power scaling done
                 #            automatically in scipy's get_stft().
+                self.yinSTFT_s.append(base.get_stft(
+                    x=self.cleanSpeechSignalsAtNodes[k], **kwargs
+                )[0] * np.sum(self.winWOLAanalysis))  
+                self.yinSTFT_n.append(base.get_stft(
+                    x=self.cleanNoiseSignalsAtNodes[k], **kwargs
+                )[0] * np.sum(self.winWOLAanalysis))
             # Compute centralized STFT
             arraysSequence = tuple([x for x in self.yinSTFT])
+            arraysSequence_s = tuple([x for x in self.yinSTFT_s])
+            arraysSequence_n = tuple([x for x in self.yinSTFT_n])
             self.yCentrBatch = np.concatenate(arraysSequence, axis=2)
+            self.yCentrBatch_s = np.concatenate(arraysSequence_s, axis=2)
+            self.yCentrBatch_n = np.concatenate(arraysSequence_n, axis=2)
             # Compute batch spatial covariance matrices for local and
             # centralized processing
             for k in range(self.nNodes):
@@ -1591,17 +1607,27 @@ class DANSEvariables(base.DANSEparameters):
                 )
                 self.lastCondNumberSaveRyyCentr[k] = self.i[k]
 
-    def get_y_tilde_batch(self, k):
+    def get_y_tilde_batch(
+            self,
+            k,
+            computeSpeechAndNoiseOnly=False,
+        ):
         """
         Compute complete yTilde for all nodes, all frames, using
         current (external) DANSE filters. Works for both fully connected
         DANSE and TI-DANSE.
         """
+
         if hasattr(self, 'eta'):  # TI-DANSE case
             etaMkBatch = np.zeros((
                 self.yinSTFT[k].shape[0],
                 self.yinSTFT[k].shape[1]
             ), dtype=complex)
+            if computeSpeechAndNoiseOnly:
+                etaMkBatch_s = copy.deepcopy(etaMkBatch)
+                etaMkBatch_n = copy.deepcopy(etaMkBatch)
+                # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
+                # as `yinSTFT`.
             for idxq in range(len(self.neighbors[k])):
                 q = self.neighbors[k][idxq]
                 # TI-DANSE fusion vector
@@ -1612,11 +1638,31 @@ class DANSEvariables(base.DANSEparameters):
                     p.conj(),
                     self.yinSTFT[q]
                 )
+                if computeSpeechAndNoiseOnly:
+                    etaMkBatch_s += np.einsum(   # <-- `+=` is important
+                        'ij,ikj->ik',
+                        p.conj(),
+                        self.yinSTFT_s[q]
+                    )
+                    etaMkBatch_n += np.einsum(   # <-- `+=` is important
+                        'ij,ikj->ik',
+                        p.conj(),
+                        self.yinSTFT_n[q]
+                    )
             # Construct yTilde
             yTildeBatch = np.concatenate(
                 (self.yinSTFT[k], etaMkBatch[:, :, np.newaxis]),
                 axis=-1
             )
+            if computeSpeechAndNoiseOnly:
+                yTildeBatch_s = np.concatenate(
+                    (self.yinSTFT_s[k], etaMkBatch_s[:, :, np.newaxis]),
+                    axis=-1
+                )
+                yTildeBatch_n= np.concatenate(
+                    (self.yinSTFT_s[k], etaMkBatch_n[:, :, np.newaxis]),
+                    axis=-1
+                )
         else:
             # Compute batch fused signals using current (external) DANSE filters
             zBatch = np.zeros((
@@ -1624,6 +1670,11 @@ class DANSEvariables(base.DANSEparameters):
                 self.yinSTFT[k].shape[1],
                 len(self.neighbors[k])
             ), dtype=complex)
+            if computeSpeechAndNoiseOnly:
+                zBatch_s = copy.deepcopy(zBatch)
+                zBatch_n = copy.deepcopy(zBatch)
+                # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
+                # as `yinSTFT`.
             for idxq in range(len(self.neighbors[k])):
                 q = self.neighbors[k][idxq]  # neighbor node index in the WASN
                 zBatch[:, :, idxq] = np.einsum(
@@ -1631,13 +1682,36 @@ class DANSEvariables(base.DANSEparameters):
                     self.wTildeExt[q].conj(),
                     self.yinSTFT[q]
                 )
+                if computeSpeechAndNoiseOnly:
+                    zBatch_s[:, :, idxq] = np.einsum(
+                        'ij,ikj->ik',
+                        self.wTildeExt[q].conj(),
+                        self.yinSTFT_s[q]
+                    )
+                    zBatch_n[:, :, idxq] = np.einsum(
+                        'ij,ikj->ik',
+                        self.wTildeExt[q].conj(),
+                        self.yinSTFT_n[q]
+                    )
             # Construct yTilde
             yTildeBatch = np.concatenate(
                 (self.yinSTFT[k], zBatch),
                 axis=-1
             )
+            if computeSpeechAndNoiseOnly:
+                yTildeBatch_s = np.concatenate(
+                    (self.yinSTFT_s[k], zBatch_s),
+                    axis=-1
+                )
+                yTildeBatch_n = np.concatenate(
+                    (self.yinSTFT_n[k], zBatch_n),
+                    axis=-1
+                )
         
-        return yTildeBatch
+        if computeSpeechAndNoiseOnly:
+            return yTildeBatch, yTildeBatch_s, yTildeBatch_n
+        else:
+            return yTildeBatch
 
     def perform_update(self, k):
         """

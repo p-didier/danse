@@ -2,12 +2,13 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230524_tests/sros_effect/indiv/danse_smallestSROs_2 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230525_tests/fullbatch/test1 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
+  maxBatchUpdates: 10
   performGEVD: false
   # performGEVD: true
   simType: batch

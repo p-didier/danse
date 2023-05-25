@@ -6,8 +6,8 @@ class BatchDANSEvariables(DANSEvariables):
     Main DANSE class for batch simulations.
     Stores all relevant variables and core functions on those variables.
     """
-    # def init(self):
-    #     self.dhatAll = [np.zeros_like(self.dhat) for _ in range(self.nIter)]
+    def init(self):
+        self.startUpdates = [True for _ in range(self.nNodes)]
 
     def get_centralized_and_local_estimates(self):
         """
@@ -37,8 +37,22 @@ class BatchDANSEvariables(DANSEvariables):
                     'ik,ijk->ij',
                     self.wCentr[k][:, self.i[k] + 1, :].conj(), 
                     self.yCentrBatch[:, :-1, :]  # <-- exclude last frame FIXME: why?
+                )                
+                self.dHatCentr_s[:, :, k] = np.einsum(
+                    'ik,ijk->ij',
+                    self.wCentr[k][:, self.i[k] + 1, :].conj(), 
+                    self.yCentrBatch_s[:, :-1, :]  # <-- exclude last frame FIXME: why?
                 )
-                # TODO: Convert back to time domain
+                self.dHatCentr_n[:, :, k] = np.einsum(
+                    'ik,ijk->ij',
+                    self.wCentr[k][:, self.i[k] + 1, :].conj(), 
+                    self.yCentrBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
+                )
+                # Convert back to time domain
+                self.dCentr[:, k] = self.get_istft(self.dHatCentr[:, :, k], k)
+                self.dCentr_s[:, k] = self.get_istft(self.dHatCentr_s[:, :, k], k)
+                self.dCentr_n[:, k] = self.get_istft(self.dHatCentr_n[:, :, k], k)
+
         if self.computeLocal:
             for k in range(self.nNodes):
                 self.wLocal[k][:, self.i[k] + 1, :] = filter_update_fcn(
@@ -53,7 +67,20 @@ class BatchDANSEvariables(DANSEvariables):
                     self.wLocal[k][:, self.i[k] + 1, :].conj(), 
                     self.yinSTFT[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
                 )
-                # TODO: Convert back to time domain
+                self.dHatLocal_s[:, :, k] = np.einsum(
+                    'ik,ijk->ij',
+                    self.wLocal[k][:, self.i[k] + 1, :].conj(), 
+                    self.yinSTFT_s[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
+                )
+                self.dHatLocal_n[:, :, k] = np.einsum(
+                    'ik,ijk->ij',
+                    self.wLocal[k][:, self.i[k] + 1, :].conj(), 
+                    self.yinSTFT_n[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
+                )
+                # Convert back to time domain
+                self.dLocal[:, k] = self.get_istft(self.dHatLocal[:, :, k], k)
+                self.dLocal_s[:, k] = self.get_istft(self.dHatLocal_s[:, :, k], k)
+                self.dLocal_n[:, k] = self.get_istft(self.dHatLocal_n[:, :, k], k)
 
 
     def batch_update_danse_covmats(self, k):
@@ -70,7 +97,10 @@ class BatchDANSEvariables(DANSEvariables):
         Estimate the desired signal in batch mode.
         """
         # Get ytilde batch
-        yTildeBatch = self.get_y_tilde_batch(k)
+        yTildeBatch, yTildeBatch_s, yTildeBatch_n = self.get_y_tilde_batch(
+            k,
+            computeSpeechAndNoiseOnly=True
+        )
 
         # Estimate the desired signal via linear combination
         self.dhat[:, :, k] = np.einsum(
@@ -78,4 +108,50 @@ class BatchDANSEvariables(DANSEvariables):
             self.wTilde[k][:, self.i[k] + 1, :].conj(), 
             yTildeBatch[:, :-1, :]  # <-- exclude last frame FIXME: why?
         )
-        # TODO: Convert back to time domain
+        self.dhat_s[:, :, k] = np.einsum(
+            'ik,ijk->ij',
+            self.wTilde[k][:, self.i[k] + 1, :].conj(), 
+            yTildeBatch_s[:, :-1, :]  # <-- exclude last frame FIXME: why?
+        )
+        self.dhat_n[:, :, k] = np.einsum(
+            'ik,ijk->ij',
+            self.wTilde[k][:, self.i[k] + 1, :].conj(), 
+            yTildeBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
+        )
+        # Convert back to time domain
+        self.d[:, k] = self.get_istft(self.dhat[:, :, k], k)
+        self.d_s[:, k] = self.get_istft(self.dhat_s[:, :, k], k)
+        self.d_n[:, k] = self.get_istft(self.dhat_n[:, :, k], k)
+
+    def get_istft(self, xSTFT, k):
+        """
+        Convert a STFT signal to time domain.
+
+        Parameters
+        ----------
+        xSTFT : ndarray, shape (F, T)
+            The STFT signal to convert.
+        k : int
+            The node index.
+            
+        Returns
+        -------
+        x : ndarray, shape (T,)
+            The time domain signal.
+        """
+        # Convert back to time domain
+        x = base.get_istft(
+            x=xSTFT,
+            fs=self.fs[k],
+            win=self.winWOLAanalysis,
+            ovlp=1 - self.Ns / self.DFTsize,
+            boundary=None  # no padding to center frames at t=0s!
+        )[0]
+        # Pad with zeros to match length of original signal
+        if len(x) < len(self.d[:, k]):
+            x = np.pad(
+                x,
+                (0, len(self.d[:, k]) - len(x)),
+                mode='constant'
+            )
+        return x

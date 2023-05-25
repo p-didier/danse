@@ -2102,6 +2102,33 @@ def get_stft(x, fs, win, ovlp, boundary='zeros'):
     return out, f, t
 
 
+def get_istft(x, fs, win, ovlp, boundary='zeros'):
+    # Perform inverse operation as get_stft()
+
+    if x.ndim == 2:
+        x = x[:, :, np.newaxis]
+
+    for channel in range(x.shape[-1]):
+
+        t, tmp = sig.istft(
+            x[:, :, channel],
+            fs=fs,
+            window=win,
+            nperseg=len(win),
+            noverlap=int(ovlp * len(win)),
+            boundary=boundary
+        )
+        if channel == 0:
+            out = np.zeros((tmp.shape[0], x.shape[-1]))
+        out[:, channel] = tmp
+
+    # Flatten array in case of single-channel data
+    if x.shape[-1] == 1:
+        out = np.array([i[0] for i in out])
+
+    return out, t
+
+
 def init_complex_filter(
         size,
         refIdx=0,

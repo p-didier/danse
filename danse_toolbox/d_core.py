@@ -346,6 +346,7 @@ def danse_batch(
     bdv = BatchDANSEvariables()  # batch
     bdv.import_params(p)
     bdv.init_from_wasn(wasnObj.wasn)
+    bdv.init()  # batch-mode-specific initialization
 
     # Profiling
     def is_interactive():
@@ -381,7 +382,8 @@ def danse_batch(
     print(f'(Real-time processing factor: {np.round(np.amax(bdv.timeInstants) / dur, 4)})')
 
     # Build output
-    out = BatchDANSEoutputs()
+    # out = BatchDANSEoutputs()
+    out = DANSEoutputs()
     out.import_params(p)
     out.from_variables(bdv)
 
