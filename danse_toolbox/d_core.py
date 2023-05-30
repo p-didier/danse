@@ -357,25 +357,43 @@ def danse_batch(
         profiler.start()
     t0 = time.perf_counter()
 
+    # Get centralized and local estimates (no iterations for those)
+    bdv.get_centralized_and_local_estimates()
     # Perform batch DANSE
-    upNodeIdx = 0
-    bdv.get_centralized_and_local_estimates()  # get centralized and local estimates
-    for ii in range(p.maxBatchUpdates):
-        # Inform user
-        if bdv.printoutsAndPlotting.printout_batch_updates:
-            print(f'Batch update {ii + 1}/{p.maxBatchUpdates}...')
-        for k in range(bdv.nNodes):
-            # Filter updates and desired signal estimates event
-            bdv.batch_update_danse_covmats(k)
-            if p.nodeUpdating != 'seq' or (p.nodeUpdating == 'seq' and k == upNodeIdx):
-                bdv.perform_update(k)   # update DANSE filters
-            else: # do not update DANSE filters
-                bdv.wTilde[k][:, bdv.i[k] + 1, :] = bdv.wTilde[k][:, bdv.i[k], :]
-            bdv.batch_estimate(k)   # estimate desired signal (batch mode)
-            bdv.get_mmse_cost(k)
-            bdv.i[k] += 1  # update DANSE iteration counter
-        # Update node index for sequential updates
-        upNodeIdx = (upNodeIdx + 1) % bdv.nNodes
+    if p.nodeUpdating == 'seq':  # sequential updates
+        upNodeIdx = 0
+        for ii in range(p.maxBatchUpdates):
+            if bdv.printoutsAndPlotting.printout_batch_updates:
+                print(f'[seq] Batch update {ii + 1}/{p.maxBatchUpdates}... (updating node: {upNodeIdx + 1})')
+            # Loop over nodes
+            for k in range(bdv.nNodes):
+                # Filter updates and desired signal estimates event
+                bdv.batch_update_danse_covmats(k)
+                if k == upNodeIdx:
+                    bdv.perform_update(k)
+                else: # do not update DANSE filters
+                    bdv.wTilde[k][:, bdv.i[k] + 1, :] = bdv.wTilde[k][:, bdv.i[k], :]
+                bdv.update_external_filters(k, None)
+                bdv.batch_estimate(k)
+                bdv.get_mmse_cost(k)
+                bdv.i[k] += 1
+            # Update node index for sequential updates
+            upNodeIdx = (upNodeIdx + 1) % bdv.nNodes
+    elif p.nodeUpdating in ['sim', 'asy']:  # simultaneous or asynchronous updates
+        for ii in range(p.maxBatchUpdates):
+            if bdv.printoutsAndPlotting.printout_batch_updates:
+                print(f'[{p.nodeUpdating}] Batch update {ii + 1}/{p.maxBatchUpdates}... (updating all nodes)')
+            # Loop over nodes once to get the broadcasted signals
+            for k in range(bdv.nNodes):
+                # Filter updates and desired signal estimates event
+                bdv.batch_update_danse_covmats(k)
+            # Loop over nodes a second time to perform the filter updates
+            for k in range(bdv.nNodes):
+                bdv.perform_update(k)
+                bdv.update_external_filters(k, None)
+                bdv.batch_estimate(k) 
+                bdv.get_mmse_cost(k)
+                bdv.i[k] += 1
 
     # Profilin
     if not is_interactive():

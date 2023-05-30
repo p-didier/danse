@@ -2,20 +2,21 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230525_tests/fullbatch_gevd/test3_mmsecostplot # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230530_tests/batch/nogevd_sros/test1 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
   maxBatchUpdates: 10
-  # performGEVD: false
-  performGEVD: true
+  performGEVD: false
+  # performGEVD: true
   simType: batch
   # simType: batch_wola_estimation
   # simType: online
-  # nodeUpdating: asy
-  nodeUpdating: seq
+  nodeUpdating: asy
+  # nodeUpdating: seq
+  noExternalFilterRelaxation: true
   computeLocal: true
   computeCentralised: true
   # filterInitType: selectFirstSensor_andFixedValue
@@ -53,9 +54,9 @@ wasnParams:
   spinTop_randomWiggleAmount: 0.25  # [m]
   # t60: 0.2  # [s]
   t60: 0.0  # [s]
-  # SROperNode: '[0, 100, 200]'  # [PPM]
+  SROperNode: '[0, 100, 200]'  # [PPM]
   # SROperNode: '[0, 5, 10]'  # [PPM]
-  SROperNode: '[10, 0, 5]'  # [PPM]
+  # SROperNode: '[10, 0, 5]'  # [PPM]
   # SROperNode: '[0]'  # [PPM]
   nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[1, 1, 1]'

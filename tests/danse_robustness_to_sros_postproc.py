@@ -62,13 +62,6 @@ def import_results(folder: str):
     # Import results
     resFiltNorm = []
     for ii, subfolder in enumerate(subfolders):
-        # Import results
-        print(f'Importing results from {subfolder}...')
-        pathToFile = f'{subfolder}/{RELATIVE_PATH_TO_RESULTS}'
-        with open(pathToFile, 'rb') as f:
-            results = pickle.load(f)
-        # Append results
-        resFiltNorm.append(results)
         
         if ii == 0:
             # Find YAML file containing numbers of sensor per node
@@ -86,6 +79,20 @@ def import_results(folder: str):
             sensorToNodeIdx = []
             for idxNode, nSensors in enumerate(nSensorPerNode):
                 sensorToNodeIdx += [idxNode] * nSensors
+        
+        # Import results
+        print(f'Importing results from {subfolder}...')
+        pathToFile = f'{subfolder}/{RELATIVE_PATH_TO_RESULTS}'
+        with open(pathToFile, 'rb') as f:
+            results = pickle.load(f)
+
+        # Detect batch mode
+        if np.amin(results[0]) == -np.inf:
+            resFiltNorm = None
+            break
+
+        # Append results
+        resFiltNorm.append(results)
 
     # Load metrics res object
     with open(f'{folder}/metricsAsFctOfSROs.pkl', 'rb') as f:
@@ -129,11 +136,14 @@ def plot_results(
     )
 
     # Filter norms plot
-    figsFiltNorm = plot_filtnorm_as_fct_of_sros(
-        resFiltNorm,
-        sensorToNodeIdx,
-        srosConsidered
-    )
+    if resFiltNorm is not None:
+        figsFiltNorm = plot_filtnorm_as_fct_of_sros(
+            resFiltNorm,
+            sensorToNodeIdx,
+            srosConsidered
+        )
+    else:
+        figsFiltNorm = []
 
     return figsMetrics + figsFiltNorm
 

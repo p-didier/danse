@@ -1087,7 +1087,7 @@ class DANSEvariables(base.DANSEparameters):
         self.yHatCentr_s[k][:, self.i[k], :] = yHatCentrCurr_s[:self.nPosFreqs, :]
         self.yHatCentr_n[k][:, self.i[k], :] = yHatCentrCurr_n[:self.nPosFreqs, :]
 
-    def update_external_filters(self, k, t):
+    def update_external_filters(self, k, t=None):
         """
         Update external filters for relaxed filter update.
         To be used when using simultaneous or asynchronous node-updating.
@@ -1099,7 +1099,8 @@ class DANSEvariables(base.DANSEparameters):
         k : int
             Receiving node index.
         t : float
-            Current time instant [s].
+            Current time instant [s]. If None, perform external filter update
+            regardless of the time elapsed since the last update.
         """
 
         if self.noExternalFilterRelaxation:
@@ -1112,15 +1113,20 @@ class DANSEvariables(base.DANSEparameters):
                 # Relaxed external filter update
                 self.wTildeExt[k] = self.expAvgBetaWext[k] * self.wTildeExt[k] +\
                     (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
-                # Update targets
-                if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
+                
+                if t is None:
+                    updateFlag = True  # update regardless of time elapsed
+                else:   
+                    updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
+                    # Update last external filter update instant [s]
+                    self.lastExtFiltUp[k] = t
+                    if self.printoutsAndPlotting.printout_externalFilterUpdate:
+                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
+                if updateFlag:
+                    # Update target
                     self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
                         self.wTildeExtTarget[k] + self.alphaExternalFilters *\
                         self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
-                    # Update last external filter update instant [s]
-                    self.lastExtFiltUp[k] = t
-                    if self.printoutsAndPlotting.printout_externalFilterUpdate:    # inform user
-                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             # Sequential node-updating
             else:
                 self.wTildeExt[k] =\
@@ -1741,7 +1747,7 @@ class DANSEvariables(base.DANSEparameters):
                     refSensorIdx=self.referenceSensor,
                     rank=rank
                 )
-                self.nInternalFilterUps[k] += 1  
+                self.nInternalFilterUps[k] += 1
             # Update centralised filter
             if self.computeCentralised and self.startUpdatesCentr[k] and\
                 self.simType != 'batch':

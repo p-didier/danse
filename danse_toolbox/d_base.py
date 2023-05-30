@@ -162,7 +162,7 @@ class DANSEparameters(Hyperparameters):
         # - "batch_wola_estimation": batch DANSE filter updates but WOLA-based
         #           ('online') estimation of the desired signals.
         # - "online": online DANSE
-    maxBatchUpdates: int = 100   # maximum number of batch DANSE updates
+    maxBatchUpdates: int = 10   # maximum number of batch DANSE updates
         # (used iff `simType == 'batch'`)
     DFTsize: int = 1024     # DFT size
         # (used iff `simType == 'online'`)

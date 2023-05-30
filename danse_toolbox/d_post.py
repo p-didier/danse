@@ -62,6 +62,7 @@ class DANSEoutputs(DANSEparameters):
         # MMSE cost
         if self.simType == 'batch':
             self.mmseCost = dv.mmseCost  # <-- initialised in `BatchDANSEvariables` class
+            self.mmseCostInit = dv.mmseCostInit  # <-- initialised in `BatchDANSEvariables` class
             if self.computeLocal:
                 self.mmseCostLocal = dv.mmseCostLocal  # <-- initialised in `BatchDANSEvariables` class
             if self.computeCentralised:
@@ -145,17 +146,38 @@ class DANSEoutputs(DANSEparameters):
         fig, axes = plt.subplots(1,1)
         fig.set_size_inches(8.5, 3.5)
         for k in range(self.nNodes):
-            axes.plot(self.mmseCost[:, k], '.-', label=f'Node {k+1}')
-        # Plot local and centralized costs
-        if self.computeLocal:
-            axes.plot(self.mmseCostLocal, '.-', label='Local')
-        if self.computeCentralised:
-            axes.plot(self.mmseCostCentr, '.-', label='Centralised')
+            axes.plot(
+                np.insert(self.mmseCost[:, k], 0, self.mmseCostInit[k]),
+                f'C{k}.-',
+                label=f'Node {k+1}'
+            )
+            # Plot local and centralized costs
+            if self.computeLocal:
+                axes.plot(
+                    np.insert(
+                        self.mmseCostLocal[k] * np.ones_like(self.mmseCost[:, k]),
+                        0,
+                        self.mmseCostInit[k]
+                    ),
+                    f'C{k}:',
+                    label=f'Local node {k+1}'
+                )
+            if self.computeCentralised:
+                axes.plot(
+                    np.insert(
+                        self.mmseCostCentr[k] * np.ones_like(self.mmseCost[:, k]),
+                        0,
+                        self.mmseCostInit[k]
+                    ),
+                    f'C{k}--',
+                    label='Centralised'
+                )
         # Plot legend and labels
         axes.grid()
         axes.set_xlabel('DANSE iteration $i$')
         axes.set_ylabel('MMSE cost $E\{ | d - \hat{d} |^2 \}$')
         axes.legend(loc='upper right')
+        axes.set_yscale('log')  # logarithmic scale for better visualization
         fig.tight_layout()
         return fig
 

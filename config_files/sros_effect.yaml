@@ -5,33 +5,25 @@ setThoseSensorsToNoise: []
 exportParams:
   # Often-used
   exportFolder: ''  # folder to export outputs (set in `danse_robustness_to_sros.py`)
-  #
-  filterNormsPlot: true
-  conditionNumberPlot: false  # if true, condition number plot is exported
-  convergencePlot: false  # if true, convergence plot is exported
-  wavFiles: true  # if true, WAV files are exported
-  acousticScenarioPlot: true  # if true, acoustic scenario plot is exported
-  sroEstimPerfPlot: false  # if true, SRO estimation performance plot is exported
-  metricsPlot: true  # if true, metrics plot is exported
-  waveformsAndSpectrograms: true  # if true, waveforms and spectrograms are exported
-  # vvv Files (not plots)
-  danseOutputsFile: true  # if true, DANSE outputs are exported as a pickle file
-  parametersFile: true  # if true, parameters are exported as a pickle file or a YAML file
-  filterNorms: true 
-  # vvv Global
-  bypassAllExports: false  # if true, all exports are bypassed
+  onlySNRandESTOIinPlots: true
+  sroEstimPerfPlot: false
+  filters: false
+  conditionNumberPlot: false
 danseParams:
   # For debug
   # simType: online
   simType: batch
+  maxBatchUpdates: 10
   saveConditionNumber: false
   saveConditionNumberEvery: 9999
   # performGEVD: true
   performGEVD: false
+  noExternalFilterRelaxation: true  # !!
   t_expAvg50p: 30
   t_expAvg50pExternalFilters: 30.
   timeBtwExternalFiltUpdates: 0.25
   # t_expAvg50p: 2
+  nodeUpdating: asy
   #
   DFTsize: 1024
   # DFTsize: 2048
@@ -41,14 +33,6 @@ danseParams:
   alphaExternalFilters: 0.5
   broadcastType: wholeChunk
   bypassUpdates: false
-  cohDrift:
-    alpha: 0.95
-    alphaEps: 0.05
-    estEvery: 1
-    estimationMethod: gs
-    loop: open
-    segLength: 10
-    startAfterNups: 11
   compensateSROs: false
   computeCentralised: true
   computeLocal: true
@@ -59,23 +43,14 @@ danseParams:
   covMatSameInitForAllFreqs: true
   covMatSameInitForAllNodes: true
   desSigProcessingType: wola
-  dynMetrics:
-    chunkDuration: 1.0
-    chunkOverlap: 0.5
-    dynamicPESQ: false
-    dynamicSNR: false
-    dynamicSTOI: false
-    dynamicfwSNRseg: false
   efficientSpSBC: true
   estimateSROs: CohDrift
-  filterInitFixedValue: 1
   # filterInitType: selectFirstSensor_andFixedValue
   filterInitType: selectFirstSensor
+  filterInitFixedValue: 1
   frameLenfwSNRseg: 0.03
   gammafwSNRseg: 0.2
   minNoSpeechDurEndUterrance: 0.2
-  noExternalFilterRelaxation: false
-  nodeUpdating: asy
   printout_eventsParser: true
   printout_eventsParserNoBC: false
   printout_externalFilterUpdate: true
@@ -85,9 +60,6 @@ danseParams:
     showWASNs: false
   seqUpdateStartNodeIdx: 1
   startComputeMetricsAt: after_beginning_2nd_utterance_200  # 200 ms after beg. of 2nd utt.
-  # startComputeMetricsAt: beginning_2nd_utterance
-  # startComputeMetricsAt: beginning_1st_utterance
-  # startComputeMetricsAt: end_1st_utterance
   treeFormationAlgorithm: prim
   upTDfilterEvery: 1.0
   winWOLAanalysisType: sqrthann

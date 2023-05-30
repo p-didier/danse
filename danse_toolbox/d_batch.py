@@ -8,16 +8,12 @@ class BatchDANSEvariables(DANSEvariables):
     """
     def init(self):
         self.startUpdates = [True for _ in range(self.nNodes)]
-        # Get MMSE costs for centralised and local estimates
-        self.mmseCostLocal = [np.mean(
+        # DANSE MMSE cost for each batch update
+        self.mmseCost = np.full((self.maxBatchUpdates, self.nNodes), None)
+        self.mmseCostInit = [np.mean(
             np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
-                self.dLocal[:, k])**2
-        ) for k in range(self.nNodes)]
-        self.mmseCostCentr = [np.mean(
-            np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
-                self.dCentr[:, k])**2
-        ) for k in range(self.nNodes)]
-        self.mmseCost = np.full((self.maxBatchUpdates, self.nNodes), None)  # <-- to be updated
+                self.yin[k][:, self.referenceSensor])**2
+        ) for k in range(self.nNodes)]  # <-- initial MMSE cost without DANSE
 
     def get_centralized_and_local_estimates(self):
         """
@@ -98,6 +94,15 @@ class BatchDANSEvariables(DANSEvariables):
                 self.dLocal_n[:, k] = self.get_istft(self.dHatLocal_n[:, :, k], k)\
                     / np.sum(self.winWOLAanalysis)
 
+        # Get MMSE costs for centralised and local estimates
+        self.mmseCostLocal = [np.mean(
+            np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                self.dLocal[:, k])**2
+        ) for k in range(self.nNodes)]
+        self.mmseCostCentr = [np.mean(
+            np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                self.dCentr[:, k])**2
+        ) for k in range(self.nNodes)]
 
     def batch_update_danse_covmats(self, k):
         """
