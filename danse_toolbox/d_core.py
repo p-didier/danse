@@ -21,7 +21,7 @@ from danse_toolbox.d_sros import *
 import danse_toolbox.d_base as base
 from danse_toolbox.d_classes import *
 from danse_toolbox.d_post import DANSEoutputs
-from danse_toolbox.d_batch import BatchDANSEvariables
+from danse_toolbox.d_batch import BatchDANSEvariables, BatchTIDANSEvariables
 
 def danse(
     wasnObj: WASN,
@@ -322,12 +322,11 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
 
 
 def danse_batch(
-    wasnObj: WASN,
-    p: base.DANSEparameters
+        wasnObj: WASN,
+        p: base.DANSEparameters
     ) -> tuple[DANSEoutputs, WASN]:
     """
-    Fully connected batch-implementation DANSE main function with time-domain
-    linear combination of signals (beamforming-ish).
+    Fully connected batch-implementation DANSE main function.
 
     Parameters
     ----------
@@ -418,6 +417,90 @@ def danse_batch(
             wasnObj.wasn[k].enhancedData_c = bdv.dCentr[:, k]
         if bdv.computeLocal:
             wasnObj.wasn[k].enhancedData_l = bdv.dLocal[:, k]
+
+    return out, wasnObj
+
+
+def tidanse_batch(
+        wasnObj: WASN,
+        p: base.DANSEparameters
+    ) -> tuple[DANSEoutputs, WASN]:
+    """
+    Batch-implementation of TI-DANSE, main function.
+
+    Parameters
+    ----------
+    wasnObj : `WASN` object
+        WASN under consideration.
+    p : DANSEparameters object
+        Parameters.
+
+    Returns
+    -------
+    out : DANSEoutputs object
+        DANSE outputs.
+    """
+
+    # Initialize TI-DANSE variables
+    btidv = BatchTIDANSEvariables(p, wasnObj.wasn)
+    btidv.import_params(p)
+    btidv.init_from_wasn(wasnObj.wasn)
+    btidv.init_for_adhoc_topology()  # TI-DANSE-specific variables
+    btidv.init()  # batch-mode-specific initialization
+
+    # Profiling
+    def is_interactive():  # if file is run from notebook
+        import __main__ as main
+        return not hasattr(main, '__file__')
+    if not is_interactive():
+        profiler = Profiler()
+        profiler.start()
+    t0 = time.perf_counter()    # timing
+
+    # Get centralized and local estimates (no iterations for those)
+    btidv.get_centralized_and_local_estimates()
+    # Perform batch TI-DANSE
+    if 'seq' in p.nodeUpdating:  # sequential updates
+        raise NotImplementedError()  # TODO:
+    elif 'sim' in p.nodeUpdating or 'asy' in p.nodeUpdating:  # simultaneous or asynchronous updates
+        for ii in range(p.maxBatchUpdates):
+            if btidv.printoutsAndPlotting.printout_batch_updates:
+                print(f'[{p.nodeUpdating}] Batch update {ii + 1}/{p.maxBatchUpdates}... (updating all nodes)')
+            # Loop over nodes once to get the broadcasted signals
+            for k in range(btidv.nNodes):
+                # Filter updates and desired signal estimates event
+                btidv.batch_update_tidanse_covmats(k)
+            # Loop over nodes a second time to perform the filter updates
+            for k in range(btidv.nNodes):
+                btidv.perform_update(k)
+                btidv.update_external_filters(k, None)
+                btidv.batch_estimate(k) 
+                btidv.get_mmse_cost(k)
+                btidv.i[k] += 1
+
+    # Profilin
+    if not is_interactive():
+        profiler.stop()
+        if btidv.printoutsAndPlotting.printout_profiler:
+            profiler.print()
+
+    print('\nBatch DANSE processing all done.')
+    dur = time.perf_counter() - t0
+    print(f'{np.amax(btidv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
+    print(f'(Real-time processing factor: {np.round(np.amax(btidv.timeInstants) / dur, 4)})')
+
+    # Build output
+    # out = BatchDANSEoutputs()
+    out = DANSEoutputs()
+    out.import_params(p)
+    out.from_variables(btidv)
+    # Update WASN object
+    for k in range(len(wasnObj.wasn)):
+        wasnObj.wasn[k].enhancedData = btidv.d[:, k]
+        if btidv.computeCentralised:
+            wasnObj.wasn[k].enhancedData_c = btidv.dCentr[:, k]
+        if btidv.computeLocal:
+            wasnObj.wasn[k].enhancedData_l = btidv.dLocal[:, k]
 
     return out, wasnObj
 

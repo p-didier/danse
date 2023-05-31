@@ -11,16 +11,17 @@ exportParams:
   conditionNumberPlot: false
 danseParams:
   # For debug
-  # simType: online
-  simType: batch
+  simType: online
+  # simType: batch
   maxBatchUpdates: 10
   saveConditionNumber: false
   saveConditionNumberEvery: 9999
-  # performGEVD: true
-  performGEVD: false
-  noExternalFilterRelaxation: true  # !!
-  t_expAvg50p: 30
-  t_expAvg50pExternalFilters: 30.
+  performGEVD: true
+  # performGEVD: false
+  # noExternalFilterRelaxation: true  # !!
+  noExternalFilterRelaxation: false  # !!
+  t_expAvg50p: 2
+  t_expAvg50pExternalFilters: 2
   timeBtwExternalFiltUpdates: 0.25
   # t_expAvg50p: 2
   nodeUpdating: asy
@@ -93,7 +94,7 @@ wasnParams:
   minDistToWalls: 0.5
   nDesiredSources: 1
   nNodes: 3
-  nNoiseSources: 1
+  nNoiseSources: 2
   noiseSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav

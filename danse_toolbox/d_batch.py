@@ -106,7 +106,8 @@ class BatchDANSEvariables(DANSEvariables):
 
     def batch_update_danse_covmats(self, k):
         """
-        Update the broadcast signals in batch mode, using the latest filters.
+        Update the DANSE spatial covariance matrices in batch mode,
+        using the latest filters.
         """
         self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
             self.get_y_tilde_batch(k),
@@ -194,3 +195,22 @@ class BatchDANSEvariables(DANSEvariables):
         self.mmseCost[self.i[k], k] = np.mean(
             np.abs(targetSig - self.d[:, k])**2
         )
+
+
+@dataclass
+class BatchTIDANSEvariables(BatchDANSEvariables):
+    """
+    Main TI-DANSE class for batch simulations.
+    Stores all relevant variables and core functions on those variables.
+    """
+    def batch_update_tidanse_covmats(self, k):
+        """
+        Update the TI-DANSE spatial covariance matrices in batch mode,
+        using the latest filters.
+        """
+        # `batch_update_danse_covmats` works for TI-DANSE too,
+        # as it detects presence of field `eta` and acts accordingly.
+        self.batch_update_danse_covmats(k)
+
+    def init_for_adhoc_topology(self):
+        TIDANSEvariables.init_for_adhoc_topology(self)

@@ -14,21 +14,27 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-FOLDER = f'{Path(__file__).parent.parent}/out/20230505_tests/sros_effect/run1'
+FOLDER_ONLINE = f'{Path(__file__).parent.parent}/out/20230505_tests/sros_effect/run1'
 RELATIVE_PATH_TO_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder
 SROS_REF_FILENAME = 'srosConsidered.pkl'  # file containing the SROs used for each test in `FOLDER`
 LOOK_AT_THE_LAST_N_ITERATIONS = 100  # number of iterations to consider for computing the average filter norms
 
-def main(folder=FOLDER):
+def main(
+        folder=FOLDER_ONLINE,
+        forcedYlimsMetrics=None
+    ):
     """Main function (called by default when running script)."""
-    figs = plot_results(*import_results(folder))
+    figs = plot_results(
+        *import_results(folder),
+        forcedYlimsMetrics=forcedYlimsMetrics
+    )
 
     for fig in figs:
         fig.savefig(f'{folder}/{fig.get_label()}.png', dpi=300)
         fig.savefig(f'{folder}/{fig.get_label()}.pdf')
 
 
-def import_results(folder: str):
+def import_results(folder: str, onlyMetrics: bool = False):
     """
     Imports the `tests.danse_robustness_to_sros` results from the sub-folders
     contained in the specified folder `folder`.
@@ -37,11 +43,14 @@ def import_results(folder: str):
     -----------
     folder: str
         Path to the folder containing the sub-folders with the results.
+    onlyMetrics: bool
+        If True, only the metrics results are imported.
 
     Returns:
     --------
     resFiltNorm: list
-        List of filter-norm results (one per sub-folder).
+        List of filter-norm results (one per sub-folder) or None if the
+        results are in batch mode or if `onlyMetrics` is True.
     resMetrics: list
         List of metrics results (one per sub-folder).
     srosConsidered: list
@@ -87,7 +96,7 @@ def import_results(folder: str):
             results = pickle.load(f)
 
         # Detect batch mode
-        if np.amin(results[0]) == -np.inf:
+        if np.amin(results[0]) == -np.inf or onlyMetrics:
             resFiltNorm = None
             break
 
@@ -98,14 +107,18 @@ def import_results(folder: str):
     with open(f'{folder}/metricsAsFctOfSROs.pkl', 'rb') as f:
         resMetrics = pickle.load(f)
 
-    return resFiltNorm, resMetrics, srosConsidered, sensorToNodeIdx
+    if onlyMetrics:
+        return resMetrics, sensorToNodeIdx
+    else:
+        return resFiltNorm, resMetrics, srosConsidered, sensorToNodeIdx
 
 
 def plot_results(
         resFiltNorm: list,
         resMetrics: list,
         srosConsidered: list,
-        sensorToNodeIdx: list
+        sensorToNodeIdx: list,
+        forcedYlimsMetrics: list = None
     ) -> list:
     """
     Plots the results from the `tests.danse_robustness_to_sros` script.
@@ -120,6 +133,8 @@ def plot_results(
         List of SROs considered (one per sub-folder).
     sensorToNodeIdx: list[int]
         Sensor-to-node index mappings.
+    forcedYlimsMetrics: list
+        List of y-axis limits for the SNR metrics plot.
 
     Returns:
     --------
@@ -132,7 +147,8 @@ def plot_results(
     # Metrics plot
     figsMetrics = plot_metrics_as_fct_of_sros(
         resMetrics,
-        nSensorPerNode=nSensorsPerNode
+        nSensorPerNode=nSensorsPerNode,
+        forcedYlimsMetrics=forcedYlimsMetrics
     )
 
     # Filter norms plot
@@ -314,7 +330,11 @@ def plot_filtnorm_as_fct_of_sros(resFiltNorm, sensorToNodeIdx, srosConsidered):
     return figs
 
 
-def plot_metrics_as_fct_of_sros(res: list[dict], nSensorPerNode: np.ndarray):
+def plot_metrics_as_fct_of_sros(
+        res: list[dict],
+        nSensorPerNode: np.ndarray,
+        forcedYlimsMetrics: list = None
+    ):
     """
     Post-processes the results of a test batch.
     
@@ -324,6 +344,8 @@ def plot_metrics_as_fct_of_sros(res: list[dict], nSensorPerNode: np.ndarray):
         Results.
     nSensorPerNode : np.ndarray[int]
         Number of sensors per node.
+    forcedYlimsMetrics : list
+        List of y-axis limits for the SNR plot.
     
     Returns
     ----------
@@ -360,15 +382,18 @@ def plot_metrics_as_fct_of_sros(res: list[dict], nSensorPerNode: np.ndarray):
     
     # Plot
     figs = []
-    # Derive y-axis limits for the SNR plot
-    yLimSNR = [
-        np.amin(np.array([np.amin(danseResSNR), np.amin(centralResSNR), np.amin(localResSNR), np.amin(rawResSNR)])),
-        np.amax(np.array([np.amax(danseResSNR), np.amax(centralResSNR), np.amax(localResSNR), np.amax(rawResSNR)]))
-    ]
-    yLimSNR = [
-        yLimSNR[0] - 0.1 * (yLimSNR[1] - yLimSNR[0]),
-        yLimSNR[1] + 0.1 * (yLimSNR[1] - yLimSNR[0])
-    ]
+    if forcedYlimsMetrics:
+        yLimSNR = forcedYlimsMetrics
+    else:
+        # Derive y-axis limits for the SNR plot
+        yLimSNR = [
+            np.amin(np.array([np.amin(danseResSNR), np.amin(centralResSNR), np.amin(localResSNR), np.amin(rawResSNR)])),
+            np.amax(np.array([np.amax(danseResSNR), np.amax(centralResSNR), np.amax(localResSNR), np.amax(rawResSNR)]))
+        ]
+        yLimSNR = [
+            yLimSNR[0] - 0.1 * (yLimSNR[1] - yLimSNR[0]),
+            yLimSNR[1] + 0.1 * (yLimSNR[1] - yLimSNR[0])
+        ]
     
     for k in range(nNodes):
         fig, axes = plt.subplots(1, 2)

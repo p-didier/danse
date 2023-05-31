@@ -2,7 +2,7 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230530_tests/batch/nogevd_sros/test1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230531_tests/tidanse_batch/test1 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -16,11 +16,12 @@ danseParams:
   # simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
-  noExternalFilterRelaxation: true
+  # noExternalFilterRelaxation: true
+  noExternalFilterRelaxation: false
   computeLocal: true
   computeCentralised: true
-  # filterInitType: selectFirstSensor_andFixedValue
-  filterInitType: selectFirstSensor
+  filterInitType: selectFirstSensor_andFixedValue
+  # filterInitType: selectFirstSensor
   filterInitFixedValue: 1
   #
   # ------------ SRO stuff
@@ -34,8 +35,8 @@ danseParams:
   WOLAovlp: 0.5
   DFTsize: 1024
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 30.
-  t_expAvg50pExternalFilters: 30.
+  t_expAvg50p: 2.
+  t_expAvg50pExternalFilters: 2.
   # timeBtwExternalFiltUpdates: 1
   timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
@@ -54,10 +55,10 @@ wasnParams:
   spinTop_randomWiggleAmount: 0.25  # [m]
   # t60: 0.2  # [s]
   t60: 0.0  # [s]
-  SROperNode: '[0, 100, 200]'  # [PPM]
+  # SROperNode: '[0, 100, 200]'  # [PPM]
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
-  # SROperNode: '[0]'  # [PPM]
+  SROperNode: '[0]'  # [PPM]
   nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[1, 1, 1]'
   interSensorDist: 0.05
@@ -70,12 +71,13 @@ wasnParams:
   nNoiseSources: 1
   noiseSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
-    # topologyType: user-defined
+    topologyType: user-defined
     seed: 12347
-    topologyType: fully-connected
+    # topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

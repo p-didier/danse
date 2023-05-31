@@ -104,7 +104,11 @@ def danse_it_up(
             out, wasnUpdated = core.danse(wasnObj, p.danseParams)
     else:  # Ad-hoc WASN topology case
         print(f'Running {p.danseParams.simType} TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
-        out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
+        
+        if p.danseParams.simType == 'batch':  # true batch mode
+            out, wasnUpdated = core.tidanse_batch(wasnObj, p.danseParams)
+        else:
+            out, wasnUpdated = core.tidanse(wasnObj, p.danseParams)
     print('DANSE run complete.')
 
     return out, wasnUpdated

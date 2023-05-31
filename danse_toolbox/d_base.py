@@ -409,8 +409,8 @@ def check_clock_jitter(timeInstants: np.ndarray, nNodes: int):
     fs = np.zeros(nNodes)
     for k in range(nNodes):
         deltas = np.diff(timeInstants[:, k])
-        # vvv Allowing computer precision errors down to 1e-7*mean delta.
-        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e7))))
+        # vvv Allowing computer precision errors down to 1e-4*mean delta.
+        precision = int(np.ceil(np.abs(np.log10(np.mean(deltas) / 1e4))))
         if len(np.unique(np.round(deltas, precision))) > 1:
             raise ValueError(f'[NOT IMPLEMENTED] Clock jitter detected: {len(np.unique(np.round(deltas, precision)))} different sample intervals detected for node {k + 1}.')
         # np.round(): not going below 1 PPM precision for typical fs >= 8 kHz.

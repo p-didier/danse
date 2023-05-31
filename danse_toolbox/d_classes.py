@@ -206,6 +206,15 @@ class TestParameters:
                 self.danseParams.compensationStrategy = 'node-specific'
             else:
                 raise ValueError('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Aborting.')
+        # Check that no external filter relaxation is used in batch mode.
+        if self.danseParams.simType == 'batch':
+            if not self.danseParams.noExternalFilterRelaxation:
+                print('External filter relaxation not supported in batch mode. Setting `noExternalFilterRelaxation` to True.')
+                self.danseParams.noExternalFilterRelaxation = True
+        # Check that the filter initialization type is supported in ad-hoc WASNs.
+        if not self.is_fully_connected_wasn() and\
+            self.danseParams.filterInitType == 'selectFirstSensor':
+            raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs.')
 
     def get_id(self):
         return f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60 * 1e3)}ms'
@@ -1666,7 +1675,7 @@ class DANSEvariables(base.DANSEparameters):
                     axis=-1
                 )
                 yTildeBatch_n= np.concatenate(
-                    (self.yinSTFT_s[k], etaMkBatch_n[:, :, np.newaxis]),
+                    (self.yinSTFT_n[k], etaMkBatch_n[:, :, np.newaxis]),
                     axis=-1
                 )
         else:
@@ -2242,9 +2251,10 @@ class TIDANSEvariables(DANSEvariables):
         self.zLocal_n[k] = copy.deepcopy(self.zLocalPrime_n[k])
         for l in self.upstreamNeighbors[k]:
             if len(self.zLocal[l] > 0):  # do not consider empty buffers
-                if self.compensationStrategy == 'node-specific':
-                    # Account for SROs when summing
-                    raise NotImplementedError  # TODO: implement
+                if self.compensateSROs:
+                    if self.compensationStrategy == 'node-specific':
+                        # Account for SROs when summing
+                        raise NotImplementedError  # TODO: implement
                 self.zLocal[k] += self.zLocal[l]
                 self.zLocal_s[k] += self.zLocal_s[l]
                 self.zLocal_n[k] += self.zLocal_n[l]

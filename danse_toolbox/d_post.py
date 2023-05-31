@@ -1536,7 +1536,7 @@ def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
         )
         ti = f'Node {k + 1}, {out.nSensorPerNode[k]} sensor(s)'
         if out.simType == 'online':
-            ti += f'(online: $\\beta$={np.round(out.beta[k], 4)})'
+            ti += f' (online: $\\beta$={np.round(out.beta[k], 4)})'
         axForTitle.set_title(ti)
         plt.tight_layout()
         figs.append(fig)
