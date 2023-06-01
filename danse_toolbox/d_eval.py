@@ -433,7 +433,7 @@ def get_snr(s: np.ndarray, n: np.ndarray, vad: np.ndarray):
     
     Returns
     -------
-    snrEst : [Nchannels x 1] np.ndarray[float]
+    snrEst : [Nchannels x 1] np.ndarray[float] or float if `Nchannels == 1`
         Signal-to-noise ratio estimate [dB].
     """
     # Check for single-channel case
@@ -453,6 +453,9 @@ def get_snr(s: np.ndarray, n: np.ndarray, vad: np.ndarray):
             np.mean(np.abs(s[vad[:, c], c]) ** 2) /\
             np.mean(np.abs(n[vad[:, c], c]) ** 2)
         )
+
+    if nChannels == 1:
+        snrEst = snrEst[0]
     
     return snrEst
 

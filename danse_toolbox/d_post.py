@@ -1012,7 +1012,7 @@ def metrics_subplot(ax, barWidth=1, data=None):
                     idxNode + colShifts[idxColShift] *  delta,
                     data[f'Node{idxNode + 1}'].afterLocal,
                     width=barWidth / widthFact,
-                    color='C3',
+                    color='C1',
                     edgecolor='k',
                     label='Local est.'
                 )
@@ -1031,7 +1031,7 @@ def metrics_subplot(ax, barWidth=1, data=None):
                 idxNode + colShifts[idxColShift] * delta,
                 data[f'Node{idxNode + 1}'].after,
                 width=barWidth / widthFact,
-                color='C1',
+                color='C3',
                 edgecolor='k',
                 label='DANSE est.'
             )

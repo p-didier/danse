@@ -2,15 +2,15 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230601_tests/diffusenoise/test1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230601_tests/diffusenoise/10dB_DN # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
   maxBatchUpdates: 10
-  # performGEVD: false
-  performGEVD: true
+  performGEVD: false
+  # performGEVD: true
   simType: batch
   # simType: online
   nodeUpdating: asy
@@ -19,8 +19,8 @@ danseParams:
   noExternalFilterRelaxation: false
   computeLocal: true
   computeCentralised: true
-  filterInitType: selectFirstSensor_andFixedValue
-  # filterInitType: selectFirstSensor
+  # filterInitType: selectFirstSensor_andFixedValue
+  filterInitType: selectFirstSensor
   filterInitFixedValue: 1
   #
   # ------------ SRO stuff
@@ -46,7 +46,7 @@ snrYlimMax: null
 wasnParams:
   # Diffuse noise params
   diffuseNoise: true
-  diffuseNoiseSNR: 20
+  diffuseNoiseSNR: 10
   typeDiffuseNoise: noise
   #
   VADenergyDecrease_dB: 35
@@ -54,12 +54,12 @@ wasnParams:
   rd: '[5, 5, 5]'
   minDistToWalls: 0.5
   sigDur: 15  # [s]
-  selfnoiseSNR: 30  # [dB]
+  selfnoiseSNR: 50  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
-  t60: 0.2  # [s]
-  # t60: 0.0  # [s]
+  # t60: 0.2  # [s]
+  t60: 0.0  # [s]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
@@ -80,9 +80,9 @@ wasnParams:
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
-    topologyType: user-defined
+    # topologyType: user-defined
     seed: 12347
-    # topologyType: fully-connected
+    topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

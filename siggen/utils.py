@@ -756,8 +756,10 @@ def build_wasn(
         if p.diffuseNoise:
             # Generate diffuse noise for each sensor
             diffuseNoise_k = get_diffuse_noise(p, k)
-            # Add diffuse noise to signals with correct SNR
-            sigs += diffuseNoise_k * 10 ** (-p.diffuseNoiseSNR / 20)
+            # Apply correct SNR
+            diffuseNoise_k *= 10 ** (-p.diffuseNoiseSNR / 20)
+            # Add to signals
+            sigs += diffuseNoise_k
         # Apply microphone self-noise
         selfNoise = np.zeros_like(sigs)
         for m in range(sigs.shape[-1]):
@@ -790,8 +792,8 @@ def build_wasn(
             sro=p.SROperNode[k],
             sto=0.
         )
-        # Add same microphone self-noise
-        noiseOnly += selfNoiseRefSensor[:, np.newaxis]
+        # # Add same microphone self-noise
+        # noiseOnly += selfNoiseRefSensor[:, np.newaxis]
 
         # Get geometrical parameters
         sensorPositions = room.mic_array.R[:, p.sensorToNodeIndices == k]
