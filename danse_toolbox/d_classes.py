@@ -1632,7 +1632,6 @@ class DANSEvariables(base.DANSEparameters):
         current (external) DANSE filters. Works for both fully connected
         DANSE and TI-DANSE.
         """
-
         if hasattr(self, 'eta'):  # TI-DANSE case
             etaMkBatch = np.zeros((
                 self.yinSTFT[k].shape[0],
@@ -1643,27 +1642,28 @@ class DANSEvariables(base.DANSEparameters):
                 etaMkBatch_n = copy.deepcopy(etaMkBatch)
                 # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
                 # as `yinSTFT`.
-            for idxq in range(len(self.neighbors[k])):
-                q = self.neighbors[k][idxq]
-                # TI-DANSE fusion vector
-                p = self.wTildeExt[q][:, :self.nSensorPerNode[q]] /\
-                    self.wTildeExt[q][:, -1:]
-                etaMkBatch += np.einsum(   # <-- `+=` is important
-                    'ij,ikj->ik',
-                    p.conj(),
-                    self.yinSTFT[q]
-                )
-                if computeSpeechAndNoiseOnly:
-                    etaMkBatch_s += np.einsum(   # <-- `+=` is important
+            for q in range(self.nNodes):
+                if q != k:  # only sum over the other nodes
+                    # TI-DANSE fusion vector
+                    p = self.wTildeExt[q][:, :self.nSensorPerNode[q]] /\
+                        self.wTildeExt[q][:, -1:]
+                    # Compute sum
+                    etaMkBatch += np.einsum(   # <-- `+=` is important
                         'ij,ikj->ik',
                         p.conj(),
-                        self.yinSTFT_s[q]
+                        self.yinSTFT[q]
                     )
-                    etaMkBatch_n += np.einsum(   # <-- `+=` is important
-                        'ij,ikj->ik',
-                        p.conj(),
-                        self.yinSTFT_n[q]
-                    )
+                    if computeSpeechAndNoiseOnly:
+                        etaMkBatch_s += np.einsum(   # <-- `+=` is important
+                            'ij,ikj->ik',
+                            p.conj(),
+                            self.yinSTFT_s[q]
+                        )
+                        etaMkBatch_n += np.einsum(   # <-- `+=` is important
+                            'ij,ikj->ik',
+                            p.conj(),
+                            self.yinSTFT_n[q]
+                        )
             # Construct yTilde
             yTildeBatch = np.concatenate(
                 (self.yinSTFT[k], etaMkBatch[:, :, np.newaxis]),

@@ -474,7 +474,7 @@ def tidanse_batch(
             for k in range(btidv.nNodes):
                 btidv.perform_update(k)
                 btidv.update_external_filters(k, None)
-                btidv.batch_estimate(k) 
+                btidv.batch_estimate(k)
                 btidv.get_mmse_cost(k)
                 btidv.i[k] += 1
 

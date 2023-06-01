@@ -1,16 +1,15 @@
 import os
-import time
 import copy
 import librosa
 import resampy
 import numpy as np
 import pickle, gzip
 from numba import njit
-from pathlib import Path
 from siggen import classes
 import scipy.signal as sig
 import pyroomacoustics as pra
 import matplotlib.pyplot as plt
+from pyANFgen.pyanfgen.utils import pyanfgen, ANFgenConfig
 from scipy.spatial.transform import Rotation as rot
 
 
@@ -276,13 +275,16 @@ def build_room(p: classes.WASNparameters):
         desiredSignalsRaw,
         p
     )
-    # Get wet noise
-    _, wetNoises = get_vad(
-        rirsNoiseSources,
-        noiseSignalsRaw,
-        p,
-        bypassVADcomputation=True  # save computation time
-    )
+    if p.nNoiseSources > 0:
+        # Get wet noise
+        _, wetNoises = get_vad(
+            rirsNoiseSources,
+            noiseSignalsRaw,
+            p,
+            bypassVADcomputation=True  # save computation time
+        )
+    else:
+        wetNoises = None
 
     return room, vad, wetSpeeches, wetNoises
 
@@ -750,6 +752,12 @@ def build_wasn(
             sro=p.SROperNode[k],
             sto=0.
         )
+        # If asked, add diffuse noise
+        if p.diffuseNoise:
+            # Generate diffuse noise for each sensor
+            diffuseNoise_k = get_diffuse_noise(p, k)
+            # Add diffuse noise to signals with correct SNR
+            sigs += diffuseNoise_k * 10 ** (-p.diffuseNoiseSNR / 20)
         # Apply microphone self-noise
         selfNoise = np.zeros_like(sigs)
         for m in range(sigs.shape[-1]):
@@ -758,6 +766,7 @@ def build_wasn(
             )
         selfNoiseRefSensor = selfNoise[:, 0]
 
+        # vvvvvv Speech-only signals vvvvvv
         # Apply asynchronicities also to speech-only signal
         speechOnly, _, _ = apply_asynchronicity_at_node(
             y=wetSpeeches[k].T,
@@ -767,9 +776,16 @@ def build_wasn(
         )
         # Add same microphone self-noise
         speechOnly += selfNoiseRefSensor[:, np.newaxis]
-        # Apply asynchronicities also to noise-only signal
+        if p.nNoiseSources > 0:
+            # Apply asynchronicities also to noise-only signal
+            noiseOnlyWithoutAsync = wetNoises[k].T
+        else:
+            noiseOnlyWithoutAsync = np.zeros_like(speechOnly)
+        if p.diffuseNoise:
+            # Add diffuse noise to signals
+            noiseOnlyWithoutAsync += diffuseNoise_k
         noiseOnly, _, _ = apply_asynchronicity_at_node(
-            y=wetNoises[k].T,
+            y=noiseOnlyWithoutAsync,
             fs=p.fs,
             sro=p.SROperNode[k],
             sto=0.
@@ -1260,3 +1276,21 @@ def dot_to_p(x):
     Converts a float to a string with a 'p' instead of a '.'.
     """
     return str(x).replace('.', 'p')
+
+
+def get_diffuse_noise(p: classes.WASNparameters, k: int):
+    """
+    Generate diffuse noise for each sensor at node `k`.
+    """
+    cfg = ANFgenConfig(
+        fs=p.fs,
+        M=p.nSensorPerNode[k],
+        d=p.interSensorDist,
+        nfType='spherical' if len(p.rd) == 3 else 'circular',
+        sigType=p.typeDiffuseNoise,
+        babbleFile=p.fileDiffuseBabble,
+        T=p.sigDur,
+    )
+    x = pyanfgen(cfg)
+    
+    return x

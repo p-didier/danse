@@ -47,10 +47,10 @@ def main():
     #
     # tests.danse_robustness_to_sros.main(
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sros_effect.yaml',
-    #     outputFolder='20230531_tests/sros_effect/online_gevddanse_2noises',  # relative to `danse/out`
+    #     outputFolder='20230531_tests/sros_effect/batch_gevddanse_2noises',  # relative to `danse/out`
     # )
     # tests.danse_robustness_to_sros_postproc.main(
-    #     folder=f'{Path(__file__).parent}/out/20230531_tests/sros_effect/online_danse_2noises',
+    #     folder=f'{Path(__file__).parent}/out/20230531_tests/sros_effect/batch_gevddanse_2noises',
     #     forcedYlimsMetrics=[0, 40],
     # )
 

@@ -11,8 +11,8 @@ exportParams:
   conditionNumberPlot: false
 danseParams:
   # For debug
-  simType: online
-  # simType: batch
+  # simType: online
+  simType: batch
   maxBatchUpdates: 10
   saveConditionNumber: false
   saveConditionNumberEvery: 9999

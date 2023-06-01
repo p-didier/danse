@@ -2,17 +2,16 @@
 seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230531_tests/tidanse_batch/test1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230601_tests/diffusenoise/test1 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
   maxBatchUpdates: 10
-  performGEVD: false
-  # performGEVD: true
+  # performGEVD: false
+  performGEVD: true
   simType: batch
-  # simType: batch_wola_estimation
   # simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
@@ -34,9 +33,10 @@ danseParams:
   #
   WOLAovlp: 0.5
   DFTsize: 1024
+  # DFTsize: 2048
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 2.
-  t_expAvg50pExternalFilters: 2.
+  t_expAvg50p: 10
+  t_expAvg50pExternalFilters: 10
   # timeBtwExternalFiltUpdates: 1
   timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
@@ -44,6 +44,11 @@ danseParams:
 referenceSensor: 0
 snrYlimMax: null
 wasnParams:
+  # Diffuse noise params
+  diffuseNoise: true
+  diffuseNoiseSNR: 20
+  typeDiffuseNoise: noise
+  #
   VADenergyDecrease_dB: 35
   VADwinLength: 0.04  # [s]
   rd: '[5, 5, 5]'
@@ -53,8 +58,8 @@ wasnParams:
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
-  # t60: 0.2  # [s]
-  t60: 0.0  # [s]
+  t60: 0.2  # [s]
+  # t60: 0.0  # [s]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
