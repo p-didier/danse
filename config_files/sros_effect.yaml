@@ -11,13 +11,13 @@ exportParams:
   conditionNumberPlot: false
 danseParams:
   # For debug
-  # simType: online
-  simType: batch
+  simType: online
+  # simType: batch
   maxBatchUpdates: 10
   saveConditionNumber: false
   saveConditionNumberEvery: 9999
-  performGEVD: true
-  # performGEVD: false
+  # performGEVD: true
+  performGEVD: false
   # noExternalFilterRelaxation: true  # !!
   noExternalFilterRelaxation: false  # !!
   t_expAvg50p: 2
@@ -68,6 +68,12 @@ danseParams:
 referenceSensor: 0
 snrYlimMax: null
 wasnParams:
+  # Diffuse noise params
+  diffuseNoise: true
+  # diffuseNoise: false
+  diffuseNoiseSNR: 10
+  typeDiffuseNoise: noise
+  #
   # Often used
   sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
@@ -94,7 +100,7 @@ wasnParams:
   minDistToWalls: 0.5
   nDesiredSources: 1
   nNodes: 3
-  nNoiseSources: 2
+  nNoiseSources: 1
   noiseSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav

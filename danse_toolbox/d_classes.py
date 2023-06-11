@@ -417,7 +417,7 @@ class DANSEvariables(base.DANSEparameters):
                 # in the fully connected regular DANSE case, because we need to 
                 # compute the fusion vector `p` as $w_{kk}/g_\eta$.
                 wTildeExt.append(base.init_complex_filter(
-                    (self.nPosFreqs, dimYTilde[k]),
+                    (self.nPosFreqs, self.nIter + 1, dimYTilde[k]),
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
@@ -430,7 +430,7 @@ class DANSEvariables(base.DANSEparameters):
                 ))
             else:
                 wTildeExt.append(base.init_complex_filter(
-                    (self.nPosFreqs, wasn[k].nSensors),
+                    (self.nPosFreqs, self.nIter + 1, wasn[k].nSensors),
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
@@ -715,7 +715,7 @@ class DANSEvariables(base.DANSEparameters):
                 'h': self.winWOLAanalysis,
                 'f': self.winWOLAsynthesis,
                 'Ns': self.Ns,
-                'wHat': self.wTildeExt[k]  # external DANSE filters
+                'wHat': self.wTildeExt[k][:, self.i[k], :]  # external DANSE filters
             }
 
             # Time-domain chunk-wise broadcasting
@@ -774,35 +774,27 @@ class DANSEvariables(base.DANSEparameters):
             else:
                 currL = self.broadcastLength
 
+            kwargs = {
+                'wqqHat': self.wTildeExt[k][:, self.i[k], :],  # external DANSE filters
+                'L': currL,
+                'wIRprevious': self.wIR[k],
+                'winWOLAanalysis': self.winWOLAanalysis,
+                'winWOLAsynthesis': self.winWOLAsynthesis,
+                'Ns': self.Ns,
+                'updateBroadcastFilter': updateBroadcastFilter
+            }
+
             self.zLocal_s[k], _ = base.danse_compression_few_samples(
                 ykFrame_s,
-                self.wTildeExt[k],
-                currL,
-                self.wIR[k],
-                self.winWOLAanalysis,
-                self.winWOLAsynthesis,
-                self.Ns,
-                updateBroadcastFilter
+                **kwargs
             )  # - speech-only for SNR computation
             self.zLocal_n[k], _ = base.danse_compression_few_samples(
                 ykFrame_n,
-                self.wTildeExt[k],
-                currL,
-                self.wIR[k],
-                self.winWOLAanalysis,
-                self.winWOLAsynthesis,
-                self.Ns,
-                updateBroadcastFilter
+                **kwargs
             )  # - noise-only for SNR computation
             self.zLocal[k], self.wIR[k] = base.danse_compression_few_samples(
                 ykFrame,
-                self.wTildeExt[k],
-                currL,
-                self.wIR[k],
-                self.winWOLAanalysis,
-                self.winWOLAsynthesis,
-                self.Ns,
-                updateBroadcastFilter
+                **kwargs
             )  # local compressed signals
 
             # Fill buffers in
@@ -1112,35 +1104,29 @@ class DANSEvariables(base.DANSEparameters):
             regardless of the time elapsed since the last update.
         """
 
-        if self.noExternalFilterRelaxation:
+        if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
             # No relaxation (i.e., no "external" filters)
-            self.wTildeExt[k] =\
+            self.wTildeExt[k][:, self.i[k] + 1, :] =\
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
-        else:
-            # Simultaneous or asynchronous node-updating
-            if 'seq' not in self.nodeUpdating:
-                # Relaxed external filter update
-                self.wTildeExt[k] = self.expAvgBetaWext[k] * self.wTildeExt[k] +\
-                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
-                
-                if t is None:
-                    updateFlag = True  # update regardless of time elapsed
-                else:   
-                    updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
-                    # Update last external filter update instant [s]
-                    self.lastExtFiltUp[k] = t
-                    if self.printoutsAndPlotting.printout_externalFilterUpdate:
-                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-                if updateFlag:
-                    # Update target
-                    self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
-                        self.wTildeExtTarget[k] + self.alphaExternalFilters *\
-                        self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
-            # Sequential node-updating
-            else:
-                self.wTildeExt[k] =\
+        else:   # Simultaneous or asynchronous node-updating
+            # Relaxed external filter update
+            self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
+                (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
+            
+            if t is None:
+                updateFlag = True  # update regardless of time elapsed
+            else:   
+                updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
+                # Update last external filter update instant [s]
+                self.lastExtFiltUp[k] = t
+                if self.printoutsAndPlotting.printout_externalFilterUpdate:
+                    print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
+            if updateFlag:
+                # Update target
+                self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
+                    self.wTildeExtTarget[k] + self.alphaExternalFilters *\
                     self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
-                    
 
     def process_incoming_signals_buffers(self, k, t):
         """
@@ -1645,8 +1631,8 @@ class DANSEvariables(base.DANSEparameters):
             for q in range(self.nNodes):
                 if q != k:  # only sum over the other nodes
                     # TI-DANSE fusion vector
-                    p = self.wTildeExt[q][:, :self.nSensorPerNode[q]] /\
-                        self.wTildeExt[q][:, -1:]
+                    p = self.wTildeExt[q][:, self.i[q], :self.nSensorPerNode[q]] /\
+                        self.wTildeExt[q][:, self.i[q], -1:]
                     # Compute sum
                     etaMkBatch += np.einsum(   # <-- `+=` is important
                         'ij,ikj->ik',
@@ -1694,18 +1680,18 @@ class DANSEvariables(base.DANSEparameters):
                 q = self.neighbors[k][idxq]  # neighbor node index in the WASN
                 zBatch[:, :, idxq] = np.einsum(
                     'ij,ikj->ik',
-                    self.wTildeExt[q].conj(),
+                    self.wTildeExt[q][:, self.i[q], :].conj(),
                     self.yinSTFT[q]
                 )
                 if computeSpeechAndNoiseOnly:
                     zBatch_s[:, :, idxq] = np.einsum(
                         'ij,ikj->ik',
-                        self.wTildeExt[q].conj(),
+                        self.wTildeExt[q][:, self.i[q], :].conj(),
                         self.yinSTFT_s[q]
                     )
                     zBatch_n[:, :, idxq] = np.einsum(
                         'ij,ikj->ik',
-                        self.wTildeExt[q].conj(),
+                        self.wTildeExt[q][:, self.i[q], :].conj(),
                         self.yinSTFT_n[q]
                     )
             # Construct yTilde
@@ -2545,12 +2531,13 @@ class TIDANSEvariables(DANSEvariables):
         yqHat = yqHat[:int(self.DFTsize // 2 + 1), :]
         # Compute compression vector
         if not self.startUpdates[k]:
-            p = self.wTildeExt[k][:, :yq.shape[-1]]
+            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
         else:
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            p = self.wTildeExt[k][:, :yq.shape[-1]] / self.wTildeExt[k][:, -1:]
+            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
+                self.wTildeExt[k][:, self.i[k], -1:]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 

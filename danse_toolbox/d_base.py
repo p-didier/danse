@@ -1647,7 +1647,7 @@ def danse_compression_whole_chunk(
 
 def danse_compression_few_samples(
     yq, wqqHat, L, wIRprevious,
-    winWOLAanalysis, winWOLAsynthesis, R, 
+    winWOLAanalysis, winWOLAsynthesis, Ns, 
     updateBroadcastFilter=False):
     """
     Performs local signals compression according to DANSE theory [1],
@@ -1667,7 +1667,7 @@ def danse_compression_few_samples(
         WOLA analysis window (time-domain to WOLA-domain).
     winWOLAsynthesis : [`n` x 1] np.ndarray (float)
         WOLA synthesis window (WOLA-domain to time-domain).
-    R : int
+    Ns : int
         Sample shift between adjacent windows.
     updateBroadcastFilter : bool
         If True, update TD filter for broadcast.
@@ -1684,7 +1684,7 @@ def danse_compression_few_samples(
             wqqHat,
             winWOLAanalysis,
             winWOLAsynthesis,
-            R
+            Ns
         )
     else:
         wIR = wIRprevious

@@ -398,9 +398,9 @@ def plot_metrics_as_fct_of_sros(
     for k in range(nNodes):
         fig, axes = plt.subplots(1, 2)
         fig.set_size_inches(10, 5)
-        axes[0].plot(danseResSNR[:, k], color='C1', marker='o', label='DANSE')
+        axes[0].plot(danseResSNR[:, k], color='C3', marker='o', label='DANSE')
         axes[0].plot(centralResSNR[:, k], color='C2', marker='s', label='Centralized')
-        axes[0].hlines(localResSNR[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
+        axes[0].hlines(localResSNR[k], 0, len(res) - 1, color='C1', linestyles='dashed', label='Local')
         axes[0].hlines(rawResSNR[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
         axes[0].set_xlabel('SROs [PPM]')
         axes[0].set_title('SNR')
@@ -414,9 +414,9 @@ def plot_metrics_as_fct_of_sros(
         axes[0].grid()
         axes[0].set_ylim(yLimSNR)  # SNR limits
         # plt.show()
-        axes[1].plot(danseResSTOI[:, k], color='C1', marker='o', label='DANSE')
+        axes[1].plot(danseResSTOI[:, k], color='C3', marker='o', label='DANSE')
         axes[1].plot(centralResSTOI[:, k], color='C2', marker='s', label='Centralized')
-        axes[1].hlines(localResSTOI[k], 0, len(res) - 1, color='C3', linestyles='dashed', label='Local')
+        axes[1].hlines(localResSTOI[k], 0, len(res) - 1, color='C1', linestyles='dashed', label='Local')
         axes[1].hlines(rawResSTOI[k], 0, len(res) - 1, color='C0', linestyles='dashdot', label='Raw')
         axes[1].set_xlabel('SROs [PPM]')
         axes[1].set_title('eSTOI')

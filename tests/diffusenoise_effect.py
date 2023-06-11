@@ -7,17 +7,22 @@
 
 import sys
 import copy
+import numpy as np
 import tests.sandbox
 from pathlib import Path
 from danse_toolbox.d_classes import TestParameters
 
 # Diffuse noise SNRs to consider
-DN_SNRS = [0, 5, 10, 15, 20, 25, 30, 35, 40]  # dB
+DN_POWER_FACTORS = list(np.flipud(np.arange(
+    start=-30,
+    stop=15,
+    step=5,
+)))
 PATH_TO_BASE_CONFIG_FILE = f'{Path(__file__).parent}/config_files/sandbox_config.yaml'
 BASE_EXPORT_PATH = f'{Path(__file__).parent}/out/20230601_tests/diffusenoise_effect'
 
 def main(
-        dnSNRs=DN_SNRS,
+        dnPowFacts=DN_POWER_FACTORS,
         baseCfgFilename: str=PATH_TO_BASE_CONFIG_FILE,
         baseExportPath: str=BASE_EXPORT_PATH
     ):
@@ -28,13 +33,13 @@ def main(
     p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
     print('Base parameters loaded.')
 
-    for ii in range(len(dnSNRs)):
-        currDNSNR = int(dnSNRs[ii])
-        print(f'\n>>> Running test {ii+1}/{len(dnSNRs)} for diffuse noise SNR = {currDNSNR} dB...')
+    for ii in range(len(dnPowFacts)):
+        currPowFact = int(dnPowFacts[ii])
+        print(f'\n>>> Running test {ii+1}/{len(dnPowFacts)} for diffuse noise power factor = {currPowFact} dB...')
         currParams = copy.deepcopy(p)
-        currParams.wasnParams.diffuseNoiseSNR = currDNSNR
+        currParams.wasnParams.diffuseNoisePowerFactor = currPowFact
         currParams.exportParams.exportFolder =\
-            f'{baseExportPath}/dnSNR_{currDNSNR}dB'
+            f'{baseExportPath}/dnPowFact_{currPowFact}dB'
         # Complete parameters
         currParams.__post_init__()
         currParams.danseParams.get_wasn_info(p.wasnParams)

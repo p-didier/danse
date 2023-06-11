@@ -14,6 +14,9 @@ class BatchDANSEvariables(DANSEvariables):
             np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
                 self.yin[k][:, self.referenceSensor])**2
         ) for k in range(self.nNodes)]  # <-- initial MMSE cost without DANSE
+        self.yTildeBatch = [None for _ in range(self.nNodes)]
+        self.yTildeBatch_s = [None for _ in range(self.nNodes)]
+        self.yTildeBatch_n = [None for _ in range(self.nNodes)]
 
     def get_centralized_and_local_estimates(self):
         """
@@ -109,8 +112,14 @@ class BatchDANSEvariables(DANSEvariables):
         Update the DANSE spatial covariance matrices in batch mode,
         using the latest filters.
         """
+        self.yTildeBatch[k], self.yTildeBatch_s[k], self.yTildeBatch_n[k] =\
+            self.get_y_tilde_batch(
+            k,
+            computeSpeechAndNoiseOnly=True
+        )
+        
         self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
-            self.get_y_tilde_batch(k),
+            self.yTildeBatch[k],
             self.oVADframes[k]
         )
     
@@ -118,27 +127,22 @@ class BatchDANSEvariables(DANSEvariables):
         """
         Estimate the desired signal in batch mode.
         """
-        # Get ytilde batch
-        yTildeBatch, yTildeBatch_s, yTildeBatch_n = self.get_y_tilde_batch(
-            k,
-            computeSpeechAndNoiseOnly=True
-        )
-
+        currWtilde = self.wTilde[k][:, self.i[k] + 1, :]
         # Estimate the desired signal via linear combination
         self.dhat[:, :, k] = np.einsum(
             'ik,ijk->ij',
-            self.wTilde[k][:, self.i[k] + 1, :].conj(), 
-            yTildeBatch[:, :-1, :]  # <-- exclude last frame FIXME: why?
+            currWtilde.conj(), 
+            self.yTildeBatch[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
         )
         self.dhat_s[:, :, k] = np.einsum(
             'ik,ijk->ij',
-            self.wTilde[k][:, self.i[k] + 1, :].conj(), 
-            yTildeBatch_s[:, :-1, :]  # <-- exclude last frame FIXME: why?
+            currWtilde.conj(), 
+            self.yTildeBatch_s[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
         )
         self.dhat_n[:, :, k] = np.einsum(
             'ik,ijk->ij',
-            self.wTilde[k][:, self.i[k] + 1, :].conj(), 
-            yTildeBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
+            currWtilde.conj(), 
+            self.yTildeBatch_n[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
         )
         # Convert back to time domain
         self.d[:, k] = self.get_istft(self.dhat[:, :, k], k)\

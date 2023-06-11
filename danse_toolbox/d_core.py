@@ -368,10 +368,12 @@ def danse_batch(
             for k in range(bdv.nNodes):
                 # Filter updates and desired signal estimates event
                 bdv.batch_update_danse_covmats(k)
+            for k in range(bdv.nNodes):
                 if k == upNodeIdx:
                     bdv.perform_update(k)
                 else: # do not update DANSE filters
                     bdv.wTilde[k][:, bdv.i[k] + 1, :] = bdv.wTilde[k][:, bdv.i[k], :]
+                    bdv.wTildeExt[k][:, bdv.i[k] + 1, :] = bdv.wTildeExt[k][:, bdv.i[k], :]
                 bdv.update_external_filters(k, None)
                 bdv.batch_estimate(k)
                 bdv.get_mmse_cost(k)

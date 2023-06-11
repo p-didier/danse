@@ -744,6 +744,32 @@ def build_wasn(
     )
 
     myWASN = classes.WASN()
+    # If asked, compute diffuse noise
+    if p.diffuseNoise:
+        # Compute inter-sensor distance matrix
+        totalNumSensors = np.sum(p.nSensorPerNode)
+        interSensorDists = np.zeros((totalNumSensors, totalNumSensors))
+        for m1 in range(totalNumSensors):
+            for m2 in range(totalNumSensors):
+                interSensorDists[m1, m2] = np.sqrt(np.sum(
+                    (room.mic_array.R[:, m1] - room.mic_array.R[:, m2]) ** 2
+                ))
+        # Generate diffuse noise for each sensor
+        cfg = ANFgenConfig(
+            fs=p.fs,
+            M=totalNumSensors,
+            d=interSensorDists,
+            nfType='spherical' if len(p.rd) == 3 else 'circular',
+            sigType=p.typeDiffuseNoise,
+            babbleFile=p.fileDiffuseBabble,
+            T=p.sigDur,
+        )
+        diffuseNoise = pyanfgen(cfg)
+        # Normalize
+        diffuseNoise /= np.amax(diffuseNoise)
+        # Apply desired power factor
+        diffuseNoise *= 10 ** (p.diffuseNoisePowerFactor / 20)
+
     for k in range(p.nNodes):
         # Apply asynchronicities
         sigs, t, fsSRO = apply_asynchronicity_at_node(
@@ -754,12 +780,7 @@ def build_wasn(
         )
         # If asked, add diffuse noise
         if p.diffuseNoise:
-            # Generate diffuse noise for each sensor
-            diffuseNoise_k = get_diffuse_noise(p, k)
-            # Apply correct SNR
-            diffuseNoise_k *= 10 ** (-p.diffuseNoiseSNR / 20)
-            # Add to signals
-            sigs += diffuseNoise_k
+            sigs += diffuseNoise[:, p.sensorToNodeIndices == k]
         # Apply microphone self-noise
         selfNoise = np.zeros_like(sigs)
         for m in range(sigs.shape[-1]):
@@ -776,8 +797,10 @@ def build_wasn(
             sro=p.SROperNode[k],
             sto=0.
         )
-        # Add same microphone self-noise
-        speechOnly += selfNoiseRefSensor[:, np.newaxis]
+        # # Add same microphone self-noise
+        # speechOnly += selfNoiseRefSensor[:, np.newaxis]
+
+        # vvvvvv Noise-only signals vvvvvv
         if p.nNoiseSources > 0:
             # Apply asynchronicities also to noise-only signal
             noiseOnlyWithoutAsync = wetNoises[k].T
@@ -785,15 +808,15 @@ def build_wasn(
             noiseOnlyWithoutAsync = np.zeros_like(speechOnly)
         if p.diffuseNoise:
             # Add diffuse noise to signals
-            noiseOnlyWithoutAsync += diffuseNoise_k
+            noiseOnlyWithoutAsync += diffuseNoise[:, p.sensorToNodeIndices == k]
         noiseOnly, _, _ = apply_asynchronicity_at_node(
             y=noiseOnlyWithoutAsync,
             fs=p.fs,
             sro=p.SROperNode[k],
             sto=0.
         )
-        # # Add same microphone self-noise
-        # noiseOnly += selfNoiseRefSensor[:, np.newaxis]
+        # Add same microphone self-noise
+        noiseOnly += selfNoiseRefSensor[:, np.newaxis]
 
         # Get geometrical parameters
         sensorPositions = room.mic_array.R[:, p.sensorToNodeIndices == k]
@@ -886,12 +909,22 @@ def build_wasn(
 def apply_self_noise(sig, snr):
     """Apply random self-noise to sensor signal `sig`."""
     sn = np.random.uniform(-1, 1, size=sig.shape)
-    Pn = np.mean(np.abs(sn) ** 2)
+    sig, sn = apply_noise(sig, sn, snr)
+    return sig, sn
+
+
+def apply_noise(sig, noise, snr):
+    """
+    Applies a noise `noise` to a signal `sig` so that it has
+    a given target SNR `snr`.
+    """
+    Pn = np.mean(np.abs(noise) ** 2)
     Ps = np.mean(np.abs(sig) ** 2)
     currSNR = 10 * np.log10(Ps / Pn)
-    sn *= 10 ** (-(snr - currSNR) / 20)
-    sig += sn
-    return sig, sn
+    noise *= 10 ** (-(snr - currSNR) / 20)
+    sig += noise
+    return sig, noise
+
 
 
 def apply_asynchronicity_at_node(y, fs, sro=0., sto=0.):
@@ -1278,21 +1311,3 @@ def dot_to_p(x):
     Converts a float to a string with a 'p' instead of a '.'.
     """
     return str(x).replace('.', 'p')
-
-
-def get_diffuse_noise(p: classes.WASNparameters, k: int):
-    """
-    Generate diffuse noise for each sensor at node `k`.
-    """
-    cfg = ANFgenConfig(
-        fs=p.fs,
-        M=p.nSensorPerNode[k],
-        d=p.interSensorDist,
-        nfType='spherical' if len(p.rd) == 3 else 'circular',
-        sigType=p.typeDiffuseNoise,
-        babbleFile=p.fileDiffuseBabble,
-        T=p.sigDur,
-    )
-    x = pyanfgen(cfg)
-    
-    return x

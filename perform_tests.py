@@ -6,6 +6,7 @@
 import sys
 import time
 import datetime
+import numpy as np
 from pathlib import Path
 import tests.sandbox
 import tests.danse_robustness_to_sros
@@ -25,9 +26,9 @@ def main():
 
     t0 = time.time()
 
-    # tests.sandbox.main(
-    #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-    # )
+    tests.sandbox.main(
+        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
+    )
 
     # Benchmark tests for the TI-GEVD-DANSE online implementation.
     # Various combinations of the following parameters are tested:
@@ -49,10 +50,10 @@ def main():
     #
     # tests.danse_robustness_to_sros.main(
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sros_effect.yaml',
-    #     outputFolder='20230531_tests/sros_effect/batch_gevddanse_2noises',  # relative to `danse/out`
+    #     outputFolder='20230603_tests/sros_effect/online_danse_10dB_DNSNR',  # relative to `danse/out`
     # )
     # tests.danse_robustness_to_sros_postproc.main(
-    #     folder=f'{Path(__file__).parent}/out/20230531_tests/sros_effect/batch_gevddanse_2noises',
+    #     folder=f'{Path(__file__).parent}/out/20230603_tests/sros_effect/online_danse_10dB_DNSNR',
     #     forcedYlimsMetrics=[0, 40],
     # )
 
@@ -66,11 +67,12 @@ def main():
     #
     # tests.diffusenoise_effect.main(
     #     baseCfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-    #     baseExportPath=f'{Path(__file__).parent}/out/20230601_tests/dn_effect_batch',
+    #     baseExportPath=f'{Path(__file__).parent}/out/20230608_tests/dn_effect/batch_danse',
     # )
-    tests.diffusenoise_effect_postproc.main(
-        baseExportPath=f'{Path(__file__).parent}/out/20230601_tests/diffusenoise_effect_gevd',
-    )
+    # tests.diffusenoise_effect_postproc.main(
+    #     forcedSNRylims=[-7, 45],
+    #     baseExportPath=f'{Path(__file__).parent}/out/20230608_tests/dn_effect/batch_danse',
+    # )
 
     print(f'\n\nTotal runtime: {str(datetime.timedelta(seconds=time.time() - t0))}.')
 

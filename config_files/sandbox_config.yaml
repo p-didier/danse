@@ -1,8 +1,8 @@
-# seed: 12350
-seed: 12347
+seed: 12350
+# seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230601_tests/diffusenoise/10dB_DN # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230609_tests/base_tests/test2_batchdanse_[3,3,3]_seq_20dBSN # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -13,8 +13,8 @@ danseParams:
   # performGEVD: true
   simType: batch
   # simType: online
-  nodeUpdating: asy
-  # nodeUpdating: seq
+  # nodeUpdating: asy
+  nodeUpdating: seq
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
@@ -45,8 +45,9 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Diffuse noise params
-  diffuseNoise: true
-  diffuseNoiseSNR: 10
+  # diffuseNoise: true
+  diffuseNoise: false
+  diffuseNoisePowerFactor: -40
   typeDiffuseNoise: noise
   #
   VADenergyDecrease_dB: 35
@@ -54,7 +55,7 @@ wasnParams:
   rd: '[5, 5, 5]'
   minDistToWalls: 0.5
   sigDur: 15  # [s]
-  selfnoiseSNR: 50  # [dB]
+  selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
   spinTop_randomWiggleAmount: 0.25  # [m]
@@ -64,7 +65,8 @@ wasnParams:
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
   SROperNode: '[0]'  # [PPM]
-  nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[1, 2, 3]'
+  nSensorPerNode: '[3, 3, 3]'
   # nSensorPerNode: '[1, 1, 1]'
   interSensorDist: 0.05
   #
