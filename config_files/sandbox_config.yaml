@@ -2,7 +2,7 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230609_tests/base_tests/test2_batchdanse_[3,3,3]_seq_20dBSN # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230612_tests/base_tests/newASC/sanityCheck_vertSTLayout # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -13,8 +13,8 @@ danseParams:
   # performGEVD: true
   simType: batch
   # simType: online
-  # nodeUpdating: asy
-  nodeUpdating: seq
+  nodeUpdating: asy
+  # nodeUpdating: seq
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
@@ -45,10 +45,12 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Diffuse noise params
-  # diffuseNoise: true
-  diffuseNoise: false
-  diffuseNoisePowerFactor: -40
-  typeDiffuseNoise: noise
+  diffuseNoise: true
+  # diffuseNoise: false
+  diffuseNoisePowerFactor: -10
+  # typeDiffuseNoise: noise
+  typeDiffuseNoise: babble
+  fileDiffuseBabble: danse/tests/sigs/02_noise/ssn/ssn_1995-1837-0001.wav
   #
   VADenergyDecrease_dB: 35
   VADwinLength: 0.04  # [s]
@@ -57,7 +59,11 @@ wasnParams:
   sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
-  layoutType: random
+  # layoutType: random
+  # layoutType: vert_spinning_top
+  # layoutType: random_spinning_top
+  layoutType: predefined
+  predefinedLayoutFile: danse/config_files/asc_layouts/asc1_20230612_191723.yaml
   spinTop_randomWiggleAmount: 0.25  # [m]
   # t60: 0.2  # [s]
   t60: 0.0  # [s]
@@ -75,10 +81,11 @@ wasnParams:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2.wav
   nDesiredSources: 1
   nNodes: 3
-  nNoiseSources: 1
+  nNoiseSources: 3
   noiseSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
+  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_2830-3980-0002.wav
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:

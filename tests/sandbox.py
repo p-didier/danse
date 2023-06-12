@@ -73,6 +73,7 @@ def main(
             [node.nodeType for node in wasnObj.wasn],
             plot3Dview=True
         )
+        plt.show()
 
     # Parameters check and pre-DANSE computations
     p, wasnObj = core.prep_for_danse(p, wasnObj)

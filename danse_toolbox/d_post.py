@@ -1331,10 +1331,6 @@ def plot_asc(
             stnIdx=sensorToNodeIdx
         )
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
-    #
-    if plot3Dview:
-        ax = fig.add_subplot(1, nCols, 3, projection='3d')
-        plot_asc_3d(ax, asc, p)  # plot room in 3d
 
     # Add distance info in box text
     boxText = 'Node distances\n\n'
@@ -1353,15 +1349,20 @@ def plot_asc(
         boxText += '\n'
     boxText = boxText[:-1]
     ax.text(
-        1.1,
-        0.9,
-        boxText,
+        x=1.1,
+        y=0.9,
+        s=boxText,
         transform=ax.transAxes,
         fontsize=10,
         verticalalignment='top',
         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     )
     
+    #
+    if plot3Dview:
+        ax = fig.add_subplot(1, nCols, 3, projection='3d')
+        plot_asc_3d(ax, asc, p)  # plot room in 3d
+
     # Make sure everything fits
     plt.tight_layout()
 

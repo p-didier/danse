@@ -1,5 +1,6 @@
 import os
 import copy
+import yaml
 import librosa
 import resampy
 import numpy as np
@@ -51,67 +52,53 @@ def build_room(p: classes.WASNparameters):
         air_absorption=False,
         materials=pra.Material(e_absorption),
     )
-
-    # Desired number of samples
-    desiredNumSamples = int(p.sigDur * p.fs)
-
-    def _get_source_signal(file):
-        """Helper function to load and process source signal."""
-        # Load
-        y, fsOriginal = librosa.load(file)
-        # Resample
-        y = resampy.resample(y, fsOriginal, p.fs)
-        # Adjust length
-        if len(y) > desiredNumSamples:
-            y = y[:desiredNumSamples]
-        elif len(y) < desiredNumSamples:
-            while len(y) < desiredNumSamples:
-                y = np.concatenate((y, y))  # loop
-                y = y[:desiredNumSamples]
-        # Whiten
-        y = (y - np.mean(y)) / np.std(y)  # whiten
-        return y
     
-    if p.layoutType == 'random':
+    if p.layoutType == 'predefined':
+        layoutInfo = load_layout_from_yaml(p.predefinedLayoutFile)
+
+        if any(np.array(layoutInfo['rd']) != p.rd.astype(float)):
+            raise ValueError('Room dimensions do not match.')  # FIXME: make sure the parameters read from YAML match those in the `TestParameters`
+        
+        # Extract sensor coordinates
+        sensorsCoords = []
+        for k in range(len(layoutInfo['Mk'])):
+            # Generate node and sensors
+            sensorsCoords.append(layoutInfo['sensorCoords'][
+                int(np.sum(layoutInfo['Mk'][:k])):int(np.sum(layoutInfo['Mk'][:k + 1]))
+            ])
+        # Flatten list
+        sensorsCoords = np.concatenate(sensorsCoords, axis=0).T
+
+        # Extract desired sources coordinates
+        desiredSourceCoords = np.array(layoutInfo['targetCoords']).T
+
+        # Extract noise sources coordinates
+        noiseSourceCoords = np.array(layoutInfo['interfererCoords']).T
+        
+    elif p.layoutType == 'random':
+        # Compute sensor coordinates
+        sensorsCoords = []
         for k in range(p.nNodes):
             # Generate node and sensors
             r = np.random.uniform(size=(3,)) * (p.rd - 2 * p.minDistToWalls)\
                 + p.minDistToWalls # node centre coordinates
-            sensorsCoords = generate_array_pos(
+            sensorsCoords.append(generate_array_pos(
                 r,
                 p.nSensorPerNode[k],
                 p.arrayGeometry,
                 p.interSensorDist,
                 applyRandomRot=False
-            )
-            room.add_microphone_array(sensorsCoords.T)
+            ))
+        # Flatten list
+        sensorsCoords = np.concatenate(sensorsCoords, axis=0).T
+            
+        # Compute desired sources coordinates
+        desiredSourceCoords = np.random.uniform(size=(3, p.nDesiredSources)) *\
+            (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls
 
-        # Add desired sources
-        desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
-        for ii in range(p.nDesiredSources):
-            # Load sound file
-            y = _get_source_signal(p.desiredSignalFile[ii])
-            desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
-            ssrc = pra.soundsource.SoundSource(
-                position=np.random.uniform(size=(3,)) *\
-                    (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
-                signal=desiredSignalsRaw[:, ii]
-            )
-            room.add_soundsource(ssrc)
-
-        # Add noise sources
-        noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
-        for ii in range(p.nNoiseSources):
-            # Load sound file
-            y = _get_source_signal(p.noiseSignalFile[ii])
-            y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
-            noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
-            ssrc = pra.soundsource.SoundSource(
-                position=np.random.uniform(size=(3,)) *\
-                    (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls, # coordinates
-                signal=noiseSignalsRaw[:, ii]
-            )
-            room.add_soundsource(ssrc)
+        # Compute noise sources coordinates
+        noiseSourceCoords = np.random.uniform(size=(3, p.nNoiseSources)) *\
+            (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls
         #
     elif 'spinning_top' in p.layoutType:  # Spinning top layout
 
@@ -146,37 +133,39 @@ def build_room(p: classes.WASNparameters):
             elevationLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
             
             # Generate speech sources along the line
-            desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
+            desiredSourceCoords = np.zeros((3, p.nDesiredSources))
             for ii in range(p.nDesiredSources):
                 # Generate random point on the line
-                x, y, z = random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
-                # Add source
-                sourceSig = _get_source_signal(p.desiredSignalFile[ii])
-                desiredSignalsRaw[:, ii] = sourceSig  # save (for VAD computation)
-                ssrc = pra.soundsource.SoundSource(
-                    position=np.array([x, y, z]), # coordinates
-                    signal=desiredSignalsRaw[:, ii]
+                x, y, z = random_point_on_line(
+                    azimuthLine,
+                    elevationLine,
+                    xOffset,
+                    yOffset,
+                    p.rd
                 )
-                room.add_soundsource(ssrc)
+                desiredSourceCoords[:, ii] = np.array([x, y, z])
 
             # Generate noise sources along the line
-            noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
+            noiseSourceCoords = np.zeros((3, p.nNoiseSources))
             for ii in range(p.nNoiseSources):
                 # Generate random point on the line
-                x, y, z = random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
-                # Add source
-                sourceSig = _get_source_signal(p.noiseSignalFile[ii])
-                sourceSig *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
-                noiseSignalsRaw[:, ii] = sourceSig
-                # ^^^ (for use in metrics computation)
-                ssrc = pra.soundsource.SoundSource(
-                    position=np.array([x, y, z]), # coordinates
-                    signal=noiseSignalsRaw[:, ii]
+                x, y, z = random_point_on_line(
+                    azimuthLine,
+                    elevationLine,
+                    xOffset,
+                    yOffset,
+                    p.rd
                 )
-                room.add_soundsource(ssrc)
+                noiseSourceCoords[:, ii] = np.array([x, y, z])
             
             # Generate random circle center
-            cx, cy, cz = random_point_on_line(azimuthLine, elevationLine, xOffset, yOffset)
+            cx, cy, cz = random_point_on_line(
+                azimuthLine,
+                elevationLine,
+                xOffset,
+                yOffset,
+                p.rd
+            )
             # Compute maximal circle radius based on room dimension
             if 'random' in p.layoutType:
                 refDistCenterCircle = np.sqrt(
@@ -197,7 +186,7 @@ def build_room(p: classes.WASNparameters):
             else:
                 circR = np.random.uniform(circRmin, circRmax)
 
-            micArray = np.zeros((np.sum(p.nSensorPerNode), 3))
+            sensorCoords = np.zeros((np.sum(p.nSensorPerNode), 3))
             # Generate array centers equally spaced on the circle
             angleArrayCenters = np.arange(0, 2 * np.pi, 2 * np.pi / p.nNodes)
             for k in range(p.nNodes):
@@ -222,7 +211,7 @@ def build_room(p: classes.WASNparameters):
                         p.spinTop_randomWiggleAmount
                     )
                 idxSensor = int(np.sum(p.nSensorPerNode[:k]))
-                micArray[idxSensor:(idxSensor + p.nSensorPerNode[k]), :] =\
+                sensorCoords[idxSensor:(idxSensor + p.nSensorPerNode[k]), :] =\
                     generate_array_pos(
                     np.array([x, y, z]),
                     p.nSensorPerNode[k],
@@ -233,14 +222,14 @@ def build_room(p: classes.WASNparameters):
             # Rotate coordinates so that the circle is perpendicular
             # to the source line.
             if 'random' in p.layoutType:
-                micArray = rotate_array_yx(
-                    micArray,
+                sensorCoords = rotate_array_yx(
+                    sensorCoords,
                     targetVector=np.array([cx, cy, cz])
                 )
             
             # Check that all microphones are in the room
-            if np.any(micArray > p.rd - p.minDistToWalls) or\
-                np.any(micArray < p.minDistToWalls):
+            if np.any(sensorCoords > p.rd - p.minDistToWalls) or\
+                np.any(sensorCoords < p.minDistToWalls):
                 validNodePos = False
                 attemptsCount += 1
                 if attemptsCount > maxNumAttempts:
@@ -248,7 +237,14 @@ def build_room(p: classes.WASNparameters):
             else:
                 validNodePos = True
         
-        room.add_microphone_array(micArray.T)
+    # Add sensors and sources to room
+    room, desiredSignalsRaw, noiseSignalsRaw = add_sensors_and_sources_to_room(
+        sensorsCoords=sensorsCoords,
+        desiredSourceCoords=desiredSourceCoords,
+        noiseSourceCoords=noiseSourceCoords,
+        p=p,
+        room=room,
+    )
 
     # Compute RIRs
     room.compute_rir()
@@ -287,6 +283,92 @@ def build_room(p: classes.WASNparameters):
         wetNoises = None
 
     return room, vad, wetSpeeches, wetNoises
+
+
+def add_sensors_and_sources_to_room(
+        sensorsCoords: np.ndarray,
+        desiredSourceCoords: np.ndarray,
+        noiseSourceCoords: np.ndarray,
+        p: classes.WASNparameters,
+        room: pra.room.ShoeBox
+    ) -> pra.room.ShoeBox:
+    """
+    Add sensors and sources (desired and noise) to Pyroomacoustics room
+    object from previously computed coordinates.
+
+    Parameters
+    ----------
+    sensorsCoords : [3 x Nsensors] np.ndarray (float)
+        Sensor coordinates [m].
+    desiredSourceCoords : [3 x Ndesired] np.ndarray (float)
+        Desired source coordinates [m].
+    noiseSourceCoords : [3 x Nnoise] np.ndarray (float)
+        Noise source coordinates [m].
+    p : WASNparameters object
+        Parameters.
+    room : pyroomacoustics.room.ShoeBox object
+        Room object.
+
+    Returns
+    -------
+    room : pyroomacoustics.room.ShoeBox object
+        Room object.
+    desiredSignalsRaw : [N x Ndesired] np.ndarray (float)
+        Raw (unprocessed) desired source signals.
+    noiseSignalsRaw : [N x Nnoise] np.ndarray (float)
+        Raw (unprocessed) noise source signals.
+    """
+    
+    def _get_source_signal(file):
+        """Helper function to load and process source signal."""
+        # Load
+        y, fsOriginal = librosa.load(file)
+        # Resample
+        y = resampy.resample(y, fsOriginal, p.fs)
+        # Adjust length
+        if len(y) > desiredNumSamples:
+            y = y[:desiredNumSamples]
+        elif len(y) < desiredNumSamples:
+            while len(y) < desiredNumSamples:
+                y = np.concatenate((y, y))  # loop
+                y = y[:desiredNumSamples]
+        # Whiten
+        y = (y - np.mean(y)) / np.std(y)  # whiten
+        return y
+    
+    # Add nodes
+    room.add_microphone_array(sensorsCoords)
+
+    # Desired number of samples
+    desiredNumSamples = int(p.sigDur * p.fs)
+
+    # Add desired sources
+    desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
+    for ii in range(p.nDesiredSources):
+        # Load sound file
+        y = _get_source_signal(p.desiredSignalFile[ii])
+        desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
+        ssrc = pra.soundsource.SoundSource(
+            position=desiredSourceCoords[:, ii], # coordinates
+            signal=desiredSignalsRaw[:, ii]
+        )
+        room.add_soundsource(ssrc)
+
+    # Add noise sources
+    noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
+    for ii in range(p.nNoiseSources):
+        # Load sound file
+        y = _get_source_signal(p.noiseSignalFile[ii])
+        y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
+        noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
+        ssrc = pra.soundsource.SoundSource(
+            position=noiseSourceCoords[:, ii], # coordinates
+            signal=noiseSignalsRaw[:, ii]
+        )
+        room.add_soundsource(ssrc)
+
+    return room, desiredSignalsRaw, noiseSignalsRaw
+
 
 def plot_asc_3d(
         ax,
@@ -1253,6 +1335,7 @@ def random_point_on_line(
     # Ensure the points are in the room
     cond1, cond2, cond3 = True, True, True
     x, y, z = -1, -1, -1
+    iterCount = 0
     while cond1 or cond2 or cond3:
         r = np.random.uniform(
             minDistToWalls,
@@ -1267,6 +1350,9 @@ def random_point_on_line(
         cond1 = x > rd[0] - minDistToWalls or x < minDistToWalls
         cond2 = y > rd[1] - minDistToWalls or y < minDistToWalls
         cond3 = z > rd[2] - minDistToWalls or z < minDistToWalls
+        iterCount += 1
+        if iterCount > 1000:
+            raise ValueError('Cannot find ASC for specified spinning-top layout parameters.')
     return x, y, z
 
 
@@ -1311,3 +1397,15 @@ def dot_to_p(x):
     Converts a float to a string with a 'p' instead of a '.'.
     """
     return str(x).replace('.', 'p')
+
+
+def load_layout_from_yaml(pathToFile):
+    """
+    Loads an acoustic scenario layout (sensors + sources coordinates) from a 
+    YAML file.
+    """
+    
+    with open(pathToFile, 'r') as f:
+        d = yaml.load(f, Loader=yaml.FullLoader)
+
+    return d

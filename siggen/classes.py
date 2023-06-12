@@ -2,6 +2,7 @@
 import copy
 import itertools
 import numpy as np
+from pathlib import Path
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
 import danse_toolbox.dataclass_methods as met
@@ -29,6 +30,8 @@ class AcousticScenarioParameters:
         #       is random.
         #  - "vert_spinning_top": vertical spinning top layout
         #       Description: same as above, but with a vertical source line.
+        #  - "predefined": predefined layout from YAML file `predefinedLayoutFile`.
+    predefinedLayoutFile: str = ''  # used iff `layoutType == "predefined"`.
     #
     spinTop_randomWiggleAmount: float = 0.0  # [m] amount of random wiggle
         # in the node positions (only for the spinning top layout).
@@ -191,6 +194,10 @@ class WASNparameters(AcousticScenarioParameters):
             raise ValueError(f'The length of the list containing the numbers of sensor per node ({len(self.nSensorPerNode)}) does not match the number of nodes ({self.nNodes}).')
         # VAD energy factor (VAD threshold = max(energy signal)/VADenergyFactor)
         self.VADenergyFactor = 10 ** (self.VADenergyDecrease_dB / 10)
+        # Check validity of acoustic scenario
+        if self.layoutType == 'predefined':
+            if not Path(self.predefinedLayoutFile).is_file():
+                raise ValueError(f'The file "{self.predefinedLayoutFile}" does not exist.')
 
 @dataclass
 class Node:

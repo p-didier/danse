@@ -1,0 +1,12 @@
+sensorCoordsPerNode:
+- # node 1
+- 
+- 3
+desiredSourceCoords:
+- 1
+- 2
+- 3
+noiseSourceCoords:
+- 1
+- 2
+- 3
