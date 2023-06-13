@@ -206,15 +206,19 @@ class TestParameters:
                 self.danseParams.compensationStrategy = 'node-specific'
             else:
                 raise ValueError('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Aborting.')
-        # Check that no external filter relaxation is used in batch mode.
-        if self.danseParams.simType == 'batch':
-            if not self.danseParams.noExternalFilterRelaxation:
-                print('External filter relaxation not supported in batch mode. Setting `noExternalFilterRelaxation` to True.')
-                self.danseParams.noExternalFilterRelaxation = True
+        # # Check that no external filter relaxation is used in batch mode.
+        # if self.danseParams.simType == 'batch':
+        #     if not self.danseParams.noExternalFilterRelaxation:
+        #         print('External filter relaxation not supported in batch mode. Setting `noExternalFilterRelaxation` to True.')
+        #         self.danseParams.noExternalFilterRelaxation = True
         # Check that the filter initialization type is supported in ad-hoc WASNs.
         if not self.is_fully_connected_wasn() and\
             self.danseParams.filterInitType == 'selectFirstSensor':
             raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs.')
+        # Export checks
+        if self.danseParams.simType == 'batch':
+            self.exportParams.filters = False
+            self.exportParams.filterNormsPlot = False
 
     def get_id(self):
         return f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60 * 1e3)}ms'
@@ -285,6 +289,8 @@ class DANSEvariables(base.DANSEparameters):
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
         # Check for TI-DANSE case
         self.tidanseFlag = not check_if_fully_connected(wasn)
+        # Check for non-sequential node-updating
+        self.seqNUflag = 'seq' in self.nodeUpdating
 
         avgProdResiduals = []   # average residuals product coming out of
                                 # filter-shift processing (SRO estimation).
@@ -297,6 +303,9 @@ class DANSEvariables(base.DANSEparameters):
         Ryylocal = []   # autocorrelation matrix when VAD=1 [local]
         Rnntilde = []   # autocorrelation matrix when VAD=0 [DANSE]
         Ryytilde = []   # autocorrelation matrix when VAD=1 [DANSE]
+        if not self.seqNUflag:  # simultaneous or asynchronous node-updating
+            Rznzn = []    # autocorrelation matrix when VAD=0, only fused signals
+            Rzz = []    # autocorrelation matrix when VAD=1, only fused signals
         SROsEstimates = []  # SRO estimates per node (for each neighbor)
         SROsResiduals = []  # SRO residuals per node (for each neighbor)
         t = np.zeros((len(wasn[0].timeStamps), nNodes))  # time stamps
@@ -397,6 +406,18 @@ class DANSEvariables(base.DANSEparameters):
                 Ryylocal.append(
                     fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
                 )
+            if not self.seqNUflag:  # simultaneous or asynchronous node-updating
+                if self.covMatSameInitForAllFreqs:
+                    sliceZ = fullSlice[:nReceivedChannels + 1, :nReceivedChannels + 1]
+                    Rznzn.append(np.tile(sliceZ, (self.nPosFreqs, 1, 1)))
+                    Rzz.append(np.tile(sliceZ, (self.nPosFreqs, 1, 1)))
+                else:
+                    Rznzn.append(
+                        fullSlice[:, :nReceivedChannels + 1, :nReceivedChannels + 1]
+                    )
+                    Rzz.append(
+                        fullSlice[:, :nReceivedChannels + 1, :nReceivedChannels + 1]
+                    )
             # ------- Other variables initialization -------
             #
             t[:, k] = wasn[k].timeStamps
@@ -534,6 +555,9 @@ class DANSEvariables(base.DANSEparameters):
         self.Ryylocal = Ryylocal
         self.Rnntilde = Rnntilde
         self.Ryytilde = Ryytilde
+        if not self.seqNUflag:
+            self.Rznzn = Rznzn
+            self.Rzz = Rzz
         self.SROsppm = np.array([node.sro for node in wasn])
         self.SROsEstimates = SROsEstimates
         self.SROsResiduals = SROsResiduals
@@ -633,12 +657,12 @@ class DANSEvariables(base.DANSEparameters):
                     x=self.cleanNoiseSignalsAtNodes[k], **kwargs
                 )[0] * np.sum(self.winWOLAanalysis))
             # Compute centralized STFT
-            arraysSequence = tuple([x for x in self.yinSTFT])
-            arraysSequence_s = tuple([x for x in self.yinSTFT_s])
-            arraysSequence_n = tuple([x for x in self.yinSTFT_n])
-            self.yCentrBatch = np.concatenate(arraysSequence, axis=2)
-            self.yCentrBatch_s = np.concatenate(arraysSequence_s, axis=2)
-            self.yCentrBatch_n = np.concatenate(arraysSequence_n, axis=2)
+            arraysSequenceCentr = tuple([x for x in self.yinSTFT])
+            arraysSequenceCentr_s = tuple([x for x in self.yinSTFT_s])
+            arraysSequenceCentr_n = tuple([x for x in self.yinSTFT_n])
+            self.yCentrBatch = np.concatenate(arraysSequenceCentr, axis=2)
+            self.yCentrBatch_s = np.concatenate(arraysSequenceCentr_s, axis=2)
+            self.yCentrBatch_n = np.concatenate(arraysSequenceCentr_n, axis=2)
             # Compute batch spatial covariance matrices for local and
             # centralized processing
             for k in range(self.nNodes):
@@ -1110,9 +1134,14 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
         else:   # Simultaneous or asynchronous node-updating
             # Relaxed external filter update
+            if self.simType == 'batch':
+                beta = 1 - 1 / (self.i[k] + 1)  # cfr. DANSE paper Part II, Eq. (26)-(28)
+            else:
+                beta = self.expAvgBetaWext[k]
+                
             self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
-                (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
+                beta * self.wTildeExt[k][:, self.i[k], :] +\
+                (1 - beta) *  self.wTildeExtTarget[k]
             
             if t is None:
                 updateFlag = True  # update regardless of time elapsed
@@ -1612,6 +1641,7 @@ class DANSEvariables(base.DANSEparameters):
             self,
             k,
             computeSpeechAndNoiseOnly=False,
+            exportFusedSignals=False
         ):
         """
         Compute complete yTilde for all nodes, all frames, using
@@ -1628,27 +1658,27 @@ class DANSEvariables(base.DANSEparameters):
                 etaMkBatch_n = copy.deepcopy(etaMkBatch)
                 # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
                 # as `yinSTFT`.
-            for q in range(self.nNodes):
-                if q != k:  # only sum over the other nodes
+            for idxNode in range(self.nNodes):
+                if idxNode != k:  # only sum over the other nodes
                     # TI-DANSE fusion vector
-                    p = self.wTildeExt[q][:, self.i[q], :self.nSensorPerNode[q]] /\
-                        self.wTildeExt[q][:, self.i[q], -1:]
+                    p = self.wTildeExt[idxNode][:, self.i[idxNode], :self.nSensorPerNode[idxNode]] /\
+                        self.wTildeExt[idxNode][:, self.i[idxNode], -1:]
                     # Compute sum
                     etaMkBatch += np.einsum(   # <-- `+=` is important
                         'ij,ikj->ik',
                         p.conj(),
-                        self.yinSTFT[q]
+                        self.yinSTFT[idxNode]
                     )
                     if computeSpeechAndNoiseOnly:
                         etaMkBatch_s += np.einsum(   # <-- `+=` is important
                             'ij,ikj->ik',
                             p.conj(),
-                            self.yinSTFT_s[q]
+                            self.yinSTFT_s[idxNode]
                         )
                         etaMkBatch_n += np.einsum(   # <-- `+=` is important
                             'ij,ikj->ik',
                             p.conj(),
-                            self.yinSTFT_n[q]
+                            self.yinSTFT_n[idxNode]
                         )
             # Construct yTilde
             yTildeBatch = np.concatenate(
@@ -1669,50 +1699,57 @@ class DANSEvariables(base.DANSEparameters):
             zBatch = np.zeros((
                 self.yinSTFT[k].shape[0],
                 self.yinSTFT[k].shape[1],
-                len(self.neighbors[k])
+                len(self.neighbors[k]) + 1  # <-- including the local $z_k$
             ), dtype=complex)
             if computeSpeechAndNoiseOnly:
                 zBatch_s = copy.deepcopy(zBatch)
                 zBatch_n = copy.deepcopy(zBatch)
-                # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
-                # as `yinSTFT`.
-            for idxq in range(len(self.neighbors[k])):
-                q = self.neighbors[k][idxq]  # neighbor node index in the WASN
-                zBatch[:, :, idxq] = np.einsum(
+                # ^^^ ok because `yinSTFT_s` and `yinSTFT_n` have the same
+                # shape as `yinSTFT`.
+            indicesNodesInZ = np.concatenate((np.array([k]), self.neighbors[k]))
+            for ii, idxNode in enumerate(indicesNodesInZ):
+                zBatch[:, :, ii] = np.einsum(
                     'ij,ikj->ik',
-                    self.wTildeExt[q][:, self.i[q], :].conj(),
-                    self.yinSTFT[q]
+                    self.wTildeExt[idxNode][:, self.i[idxNode], :].conj(),
+                    self.yinSTFT[idxNode]
                 )
                 if computeSpeechAndNoiseOnly:
-                    zBatch_s[:, :, idxq] = np.einsum(
+                    zBatch_s[:, :, ii] = np.einsum(
                         'ij,ikj->ik',
-                        self.wTildeExt[q][:, self.i[q], :].conj(),
-                        self.yinSTFT_s[q]
+                        self.wTildeExt[idxNode][:, self.i[idxNode], :].conj(),
+                        self.yinSTFT_s[idxNode]
                     )
-                    zBatch_n[:, :, idxq] = np.einsum(
+                    zBatch_n[:, :, ii] = np.einsum(
                         'ij,ikj->ik',
-                        self.wTildeExt[q][:, self.i[q], :].conj(),
-                        self.yinSTFT_n[q]
+                        self.wTildeExt[idxNode][:, self.i[idxNode], :].conj(),
+                        self.yinSTFT_n[idxNode]
                     )
             # Construct yTilde
             yTildeBatch = np.concatenate(
-                (self.yinSTFT[k], zBatch),
+                (self.yinSTFT[k], zBatch[:, :, 1:]),  # <-- discard local fusedn signal (redundant information)
                 axis=-1
             )
             if computeSpeechAndNoiseOnly:
                 yTildeBatch_s = np.concatenate(
-                    (self.yinSTFT_s[k], zBatch_s),
+                    (self.yinSTFT_s[k], zBatch_s[:, :, 1:]),
                     axis=-1
                 )
                 yTildeBatch_n = np.concatenate(
-                    (self.yinSTFT_n[k], zBatch_n),
+                    (self.yinSTFT_n[k], zBatch_n[:, :, 1:]),
                     axis=-1
                 )
         
+        # Conditional exports
         if computeSpeechAndNoiseOnly:
-            return yTildeBatch, yTildeBatch_s, yTildeBatch_n
+            if exportFusedSignals:
+                return yTildeBatch, yTildeBatch_s, yTildeBatch_n, zBatch, zBatch_s, zBatch_n
+            else:
+                return yTildeBatch, yTildeBatch_s, yTildeBatch_n
         else:
-            return yTildeBatch
+            if exportFusedSignals:
+                return yTildeBatch, zBatch
+            else:
+                return yTildeBatch
 
     def perform_update(self, k):
         """
@@ -2628,12 +2665,12 @@ def update_covmats_batch(yAllFrames, vadAllFrames):
     """
     Ryy = np.mean(np.einsum(
         'ikj,ikl->ikjl',
-        yAllFrames[:, vadAllFrames.astype(bool), :],  # only VAD frames with both speech and noise
+        yAllFrames[:, vadAllFrames.astype(bool), :],  # speech+noise VAD frames
         yAllFrames[:, vadAllFrames.astype(bool), :].conj()
     ), axis=1)
     Rnn = np.mean(np.einsum(
         'ikj,ikl->ikjl',
-        yAllFrames[:, ~vadAllFrames.astype(bool), :],  # only VAD frames with only noise
+        yAllFrames[:, ~vadAllFrames.astype(bool), :],  # noise-only VAD frames
         yAllFrames[:, ~vadAllFrames.astype(bool), :].conj()
     ), axis=1)
     return Ryy, Rnn
@@ -2652,11 +2689,17 @@ def apply_phase_shift_to_td_frame(tdFrame, phaseShift, DFTsize):
     return tdFrameShifted
 
 
-def update_w(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx, rank=None):
+def update_w(
+        Ryy: np.ndarray,
+        Rnn: np.ndarray,
+        refSensorIdx,
+        rank=None,
+    ):
     """
     Helper function for regular MWF-like DANSE filter update.
-    NB: the `rank` parameter is not used here, but is kept for consistency
-    with the GEVD-based DANSE filter update (see `update_w_gevd`).
+    NB: the `rank` input parameter is not used here, but is kept for
+    consistency with respect to the GEVD-based DANSE filter update
+    (see `update_w_gevd`).
     """
     # Reference sensor selection vector
     Evect = np.zeros(Ryy.shape[-1])
@@ -2670,7 +2713,12 @@ def update_w(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx, rank=None):
     return w[:, :, 0]  # get rid of singleton dimension
 
 
-def update_w_gevd(Ryy: np.ndarray, Rnn: np.ndarray, refSensorIdx, rank=1):
+def update_w_gevd(
+        Ryy: np.ndarray,
+        Rnn: np.ndarray,
+        refSensorIdx,
+        rank=1
+    ):
     """
     Helper function for GEVD-based MWF-like DANSE filter update.
     """

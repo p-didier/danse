@@ -6,7 +6,6 @@
 import sys
 import time
 import datetime
-import numpy as np
 from pathlib import Path
 import tests.sandbox
 import tests.danse_robustness_to_sros
@@ -28,7 +27,7 @@ def main():
 
     tests.sandbox.main(
         cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-        plotASCearly=True,
+        plotASCearly=False,
     )
 
     # Benchmark tests for the TI-GEVD-DANSE online implementation.
