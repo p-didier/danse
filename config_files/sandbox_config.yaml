@@ -2,7 +2,7 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230613_tests/newASC/batch/test13_filtRelax_0p02_30ups # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230613_tests/newASC/online/test1_gevd_N1024 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -11,8 +11,8 @@ danseParams:
   maxBatchUpdates: 30
   # performGEVD: false
   performGEVD: true
-  simType: batch
-  # simType: online
+  # simType: batch
+  simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
   # noExternalFilterRelaxation: true
@@ -35,10 +35,10 @@ danseParams:
   DFTsize: 1024
   # DFTsize: 2048
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 0.02
-  t_expAvg50pExternalFilters: 0.02
-  # timeBtwExternalFiltUpdates: 1
-  timeBtwExternalFiltUpdates: 0.25
+  t_expAvg50p: 10
+  t_expAvg50pExternalFilters: 0.2
+  timeBtwExternalFiltUpdates: 1
+  # timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
     printout_profiler: true
 referenceSensor: 0
@@ -63,7 +63,7 @@ wasnParams:
   # layoutType: vert_spinning_top
   # layoutType: random_spinning_top
   layoutType: predefined
-  predefinedLayoutFile: danse/config_files/asc_layouts/asc1_20230612_191723.yaml
+  predefinedLayoutFile: danse/config_files/asc_layouts/asc2_20230613_174233.yaml
   spinTop_randomWiggleAmount: 0.25  # [m]
   t60: 0.2  # [s]
   # t60: 0.0  # [s]

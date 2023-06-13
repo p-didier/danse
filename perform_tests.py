@@ -50,11 +50,11 @@ def main():
     #
     # tests.danse_robustness_to_sros.main(
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sros_effect.yaml',
-    #     outputFolder='20230603_tests/sros_effect/online_danse_10dB_DNSNR',  # relative to `danse/out`
+    #     outputFolder='20230613_tests/sros_effect/online_rSGEVDDANSE',  # relative to `danse/out`
     # )
     # tests.danse_robustness_to_sros_postproc.main(
-    #     folder=f'{Path(__file__).parent}/out/20230603_tests/sros_effect/online_danse_10dB_DNSNR',
-    #     forcedYlimsMetrics=[0, 40],
+    #     folder=f'{Path(__file__).parent}/out/20230613_tests/sros_effect/batch_rSGEVDDANSE',
+    #     forcedYlimsMetrics=[-8, 20],
     # )
 
     # ylim_adjust_barplots.main(

@@ -1011,7 +1011,6 @@ def apply_noise(sig, noise, snr):
     return sig, noise
 
 
-
 def apply_asynchronicity_at_node(y, fs, sro=0., sto=0.):
     """
     Apply asynchronicities (SROs and STOs) to the signals
@@ -1053,10 +1052,10 @@ def apply_asynchronicity_at_node(y, fs, sro=0., sto=0.):
 
 
 def get_topo(
-    topoParams: classes.TopologyParameters,
-    sensorToNodeIndices,
-    sensorCoords,
-    roomDim=[5, 5, 5]
+        topoParams: classes.TopologyParameters,
+        sensorToNodeIndices,
+        sensorCoords,
+        roomDim=[5, 5, 5]
     ):
     """
     Create inter-node connections matrix 

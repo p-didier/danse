@@ -9,6 +9,7 @@
 
 import re
 import sys
+import yaml
 import pickle
 import numpy as np
 from pathlib import Path
@@ -19,13 +20,15 @@ RELATIVE_PATH_TO_RESULTS = 'filtNorms/filtNorms.pkl'  # relative to subfolder
 SROS_REF_FILENAME = 'srosConsidered.pkl'  # file containing the SROs used for each test in `FOLDER`
 LOOK_AT_THE_LAST_N_ITERATIONS = 100  # number of iterations to consider for computing the average filter norms
 
+ONLY_METRICS = True
+
 def main(
         folder=FOLDER_ONLINE,
         forcedYlimsMetrics=None
     ):
     """Main function (called by default when running script)."""
     figs = plot_results(
-        *import_results(folder),
+        *import_results(folder, onlyMetrics=ONLY_METRICS),
         forcedYlimsMetrics=forcedYlimsMetrics
     )
 
@@ -68,49 +71,52 @@ def import_results(folder: str, onlyMetrics: bool = False):
     with open(f'{folder}/{SROS_REF_FILENAME}', 'rb') as f:
         srosConsidered = pickle.load(f)
 
-    # Import results
-    resFiltNorm = []
-    for ii, subfolder in enumerate(subfolders):
-        
-        if ii == 0:
-            # Find YAML file containing numbers of sensor per node
-            yamlFile = [f for f in Path(subfolder).iterdir() if f.suffix == '.yaml'][0]
-            # Read numbers of sensor per node
-            with open(yamlFile, 'r') as f:
-                yamlContent = f.readlines()
-                # Find line containing numbers of sensor per node
-                for line in yamlContent:
-                    if 'nSensorPerNode' in line:
-                        break
-                # Extract numbers of sensor per node
+    # Find YAML file containing numbers of sensor per node
+    yamlFile = [f for f in Path(subfolders[0]).iterdir() if f.suffix == '.yaml'][0]
+    # Read numbers of sensor per node
+    with open(yamlFile, 'r') as f:
+        yamlContent = f.readlines()
+        # Find line containing numbers of sensor per node
+        for line in yamlContent:
+            if 'predefinedLayoutFile' in line:  # check for predefined layout file
+                # Extract numbers of sensor per node from file
+                pathToLayoutYaml = line[24:-1]
+                with open(pathToLayoutYaml, 'r') as f:
+                    yamlContent = yaml.load(f, Loader=yaml.FullLoader)
+                nSensorPerNode = yamlContent['Mk']
+                break
+            elif 'nSensorPerNode' in line:
+                # Extract numbers of sensor per node from line
                 nSensorPerNode = [int(n) for n in re.findall(r'\d+', line)]
-            # Translate to sensor-to-node index mapping
-            sensorToNodeIdx = []
-            for idxNode, nSensors in enumerate(nSensorPerNode):
-                sensorToNodeIdx += [idxNode] * nSensors
-        
-        # Import results
-        print(f'Importing results from {subfolder}...')
-        pathToFile = f'{subfolder}/{RELATIVE_PATH_TO_RESULTS}'
-        with open(pathToFile, 'rb') as f:
-            results = pickle.load(f)
+                break
+    # Translate to sensor-to-node index mapping
+    sensorToNodeIdx = []
+    for idxNode, nSensors in enumerate(nSensorPerNode):
+        sensorToNodeIdx += [idxNode] * nSensors
 
-        # Detect batch mode
-        if np.amin(results[0]) == -np.inf or onlyMetrics:
-            resFiltNorm = None
-            break
-
-        # Append results
-        resFiltNorm.append(results)
+    # Import results
+    if not onlyMetrics:
+        resFiltNorm = []
+        for ii, subfolder in enumerate(subfolders):
+            # Import results
+            print(f'Importing results from {subfolder}...')
+            pathToFile = f'{subfolder}/{RELATIVE_PATH_TO_RESULTS}'
+            with open(pathToFile, 'rb') as f:
+                results = pickle.load(f)
+            # Detect batch mode
+            if np.amin(results[0]) == -np.inf or onlyMetrics:
+                resFiltNorm = None
+                break
+            # Append results
+            resFiltNorm.append(results)
+    else:
+        resFiltNorm = None
 
     # Load metrics res object
     with open(f'{folder}/metricsAsFctOfSROs.pkl', 'rb') as f:
         resMetrics = pickle.load(f)
 
-    if onlyMetrics:
-        return resMetrics, sensorToNodeIdx
-    else:
-        return resFiltNorm, resMetrics, srosConsidered, sensorToNodeIdx
+    return resFiltNorm, resMetrics, srosConsidered, sensorToNodeIdx
 
 
 def plot_results(
@@ -410,7 +416,7 @@ def plot_metrics_as_fct_of_sros(
             [str(res[ii]['sros'][1:]) for ii in range(len(res))],
             rotation=90
         )
-        axes[0].legend(loc='upper right')
+        axes[0].legend(loc='lower left')
         axes[0].grid()
         axes[0].set_ylim(yLimSNR)  # SNR limits
         # plt.show()

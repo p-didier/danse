@@ -22,6 +22,8 @@ OUT_FOLDER = '20230508_tests/sros_effect_danse/'  # export path relative to `dan
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
 
+NNODES_IN_WASN = 4
+
 def main(
         cfgFilename: str = PATH_TO_CONFIG_FILE,
         outputFolder: str = OUT_FOLDER,
@@ -29,8 +31,12 @@ def main(
     """Main function (called by default when running script)."""
 
     # SROs to consider
-    srosToConsider = [np.array([ii / 2, ii]) * MAX_SRO_PPM / N_SRO_TESTS for\
-            ii in np.arange(0, N_SRO_TESTS)]
+    srosToConsider = [np.round(np.linspace(
+        start=ii / (NNODES_IN_WASN - 1),
+        stop=ii,
+        num=NNODES_IN_WASN - 1,
+        endpoint=True
+    ) * MAX_SRO_PPM / N_SRO_TESTS) for ii in np.arange(0, N_SRO_TESTS)]
     
     # Run tests
     res = run_test_batch(

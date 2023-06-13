@@ -13,18 +13,15 @@ danseParams:
   # For debug
   simType: online
   # simType: batch
-  maxBatchUpdates: 10
-  saveConditionNumber: false
-  saveConditionNumberEvery: 9999
-  # performGEVD: true
-  performGEVD: false
+  maxBatchUpdates: 20
+  performGEVD: true
+  nodeUpdating: asy
+  # performGEVD: false
   # noExternalFilterRelaxation: true  # !!
   noExternalFilterRelaxation: false  # !!
   t_expAvg50p: 2
-  t_expAvg50pExternalFilters: 2
-  timeBtwExternalFiltUpdates: 0.25
-  # t_expAvg50p: 2
-  nodeUpdating: asy
+  t_expAvg50pExternalFilters: 0.2
+  timeBtwExternalFiltUpdates: 1
   #
   DFTsize: 1024
   # DFTsize: 2048
@@ -38,27 +35,13 @@ danseParams:
   computeCentralised: true
   computeLocal: true
   computeNoiseFree: false
-  covMatEyeInitScaling: 1.0
-  covMatInitType: fully_random
-  covMatRandomInitScaling: 2.220446049250313e-16
-  covMatSameInitForAllFreqs: true
-  covMatSameInitForAllNodes: true
   desSigProcessingType: wola
   efficientSpSBC: true
   estimateSROs: CohDrift
   # filterInitType: selectFirstSensor_andFixedValue
   filterInitType: selectFirstSensor
   filterInitFixedValue: 1
-  frameLenfwSNRseg: 0.03
-  gammafwSNRseg: 0.2
   minNoSpeechDurEndUterrance: 0.2
-  printout_eventsParser: true
-  printout_eventsParserNoBC: false
-  printout_externalFilterUpdate: true
-  printout_profiler: true
-  printoutsAndPlotting:
-    onlySNRandESTOIinPlots: true
-    showWASNs: false
   seqUpdateStartNodeIdx: 1
   startComputeMetricsAt: after_beginning_2nd_utterance_200  # 200 ms after beg. of 2nd utt.
   treeFormationAlgorithm: prim
@@ -71,17 +54,20 @@ wasnParams:
   # Diffuse noise params
   diffuseNoise: true
   # diffuseNoise: false
-  diffuseNoiseSNR: 10
-  typeDiffuseNoise: noise
+  diffuseNoiseSNR: -10
+  # typeDiffuseNoise: noise
+  typeDiffuseNoise: babble
+  fileDiffuseBabble: danse/tests/sigs/02_noise/ssn/ssn_long.wav
   #
   # Often used
   sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # layoutType: random_spinning_top
-  layoutType: random
-  spinTop_randomWiggleAmount: 0.25  # [m]
-  t60: 0.0  # [s]
-  # t60: 0.2  # [s]
+  # layoutType: random
+  layoutType: predefined
+  predefinedLayoutFile: danse/config_files/asc_layouts/asc1_20230612_191723.yaml
+  # t60: 0.0  # [s]
+  t60: 0.2  # [s]
   SROperNode: '[0]'  # [PPM]
   nSensorPerNode: '[1, 2, 3]'
   interSensorDist: 0.05
@@ -101,9 +87,7 @@ wasnParams:
   nDesiredSources: 1
   nNodes: 3
   nNoiseSources: 1
-  noiseSignalFile:
-  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech1.wav
-  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/02_noise/ssn/ssn_speech2.wav
+  noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   rd: '[5, 5, 5]'  # compact way to write lists/arrays (as a string)
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files

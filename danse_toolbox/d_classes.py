@@ -219,6 +219,10 @@ class TestParameters:
         if self.danseParams.simType == 'batch':
             self.exportParams.filters = False
             self.exportParams.filterNormsPlot = False
+        elif 'online' in self.danseParams.simType:
+            self.exportParams.filters = True
+            self.exportParams.filterNormsPlot = True
+
 
     def get_id(self):
         return f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60 * 1e3)}ms'
@@ -1142,11 +1146,11 @@ class DANSEvariables(base.DANSEparameters):
                 updateFlag = True  # update regardless of time elapsed
             else:   
                 updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
+            if updateFlag:
                 # Update last external filter update instant [s]
                 self.lastExtFiltUp[k] = t
                 if self.printoutsAndPlotting.printout_externalFilterUpdate:
                     print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-            if updateFlag:
                 # Update target
                 self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
                     self.wTildeExtTarget[k] + self.alphaExternalFilters *\
