@@ -1134,14 +1134,9 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
         else:   # Simultaneous or asynchronous node-updating
             # Relaxed external filter update
-            if self.simType == 'batch':
-                beta = 1 - 1 / (self.i[k] + 1)  # cfr. DANSE paper Part II, Eq. (26)-(28)
-            else:
-                beta = self.expAvgBetaWext[k]
-                
             self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                beta * self.wTildeExt[k][:, self.i[k], :] +\
-                (1 - beta) *  self.wTildeExtTarget[k]
+                self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
+                (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
             
             if t is None:
                 updateFlag = True  # update regardless of time elapsed

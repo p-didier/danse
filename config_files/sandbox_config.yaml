@@ -2,13 +2,13 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230613_tests/newASC/batch/test11_filtRelax_1m1overI # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230613_tests/newASC/batch/test13_filtRelax_0p02_30ups # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
-  maxBatchUpdates: 10
+  maxBatchUpdates: 30
   # performGEVD: false
   performGEVD: true
   simType: batch
@@ -35,8 +35,8 @@ danseParams:
   DFTsize: 1024
   # DFTsize: 2048
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 0.01
-  t_expAvg50pExternalFilters: 0.01
+  t_expAvg50p: 0.02
+  t_expAvg50pExternalFilters: 0.02
   # timeBtwExternalFiltUpdates: 1
   timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
