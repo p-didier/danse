@@ -55,6 +55,7 @@ def build_room(p: classes.WASNparameters):
     
     if p.layoutType == 'predefined':
         layoutInfo = load_layout_from_yaml(p.predefinedLayoutFile)
+        p.align_with_loaded_yaml_layout(layoutInfo)
 
         if any(np.array(layoutInfo['rd']) != p.rd.astype(float)):
             raise ValueError('Room dimensions do not match.')  # FIXME: make sure the parameters read from YAML match those in the `TestParameters`
@@ -322,9 +323,11 @@ def add_sensors_and_sources_to_room(
     def _get_source_signal(file):
         """Helper function to load and process source signal."""
         # Load
-        y, fsOriginal = librosa.load(file)
+        y, fsOriginal = librosa.load(file, sr=None)
         # Resample
-        y = resampy.resample(y, fsOriginal, p.fs)
+        if fsOriginal != p.fs:
+            print(f'Resampling {file} from {fsOriginal} Hz to {p.fs} Hz...')
+            y = resampy.resample(y, fsOriginal, p.fs)
         # Adjust length
         if len(y) > desiredNumSamples:
             y = y[:desiredNumSamples]

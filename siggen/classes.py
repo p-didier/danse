@@ -58,8 +58,16 @@ class AcousticScenarioParameters:
     # vvv Localized sources vvv
     nDesiredSources: int = 1   # number of desired sources
     nNoiseSources: int = 1     # number of undesired (noise) sources
-    desiredSignalFile: list[str] = field(default_factory=list)  # list of paths to desired signal file(s)
-    noiseSignalFile: list[str] = field(default_factory=list)    # list of paths to noise signal file(s)
+    desiredSignalFile: list[str] = field(default_factory=list)
+        # ^^^ list of paths to desired signal file(s)
+    noiseSignalFile: list[str] = field(default_factory=list)
+        # ^^^ list of paths to noise signal file(s)
+        # NB: if `noiseSignalFile` is a string and
+        # `noiseSignalFile == loadfrom <path>`, loads `nNoiseSources`
+        # noise signals randomly selected from the audio files in the
+        # folder at <path>.
+    noiseSignalFilesLoadedFromFolder: str = None
+        # folder from which noise signals were loaded. `None` by default.
     baseSNR: int = 5                        # [dB] SNR between dry desired signals and dry noise
     # vvv VAD parameters vvv
     VADenergyDecrease_dB: float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
@@ -166,6 +174,48 @@ class WASNparameters(AcousticScenarioParameters):
                     # If no value provided, use 0
                     var = np.full(nNodes, fill_value=0)
             return var
+
+        def _select_random_files_from_folder(folder, nFiles, fs=None):
+            """Helper function -- selects `nFiles` files randomly from a folder."""
+            # Get all files in folder
+            files = list(Path(folder).glob('**/*'))
+            files = [x for x in files if x.is_file() and\
+                not Path.samefile(x, self.fileDiffuseBabble)]
+            if fs is not None:
+                # For each file, check if there is a corresponding file with
+                # the same name but different sampling rate
+                for file in files:
+                    if Path(f'{str(file)[:-4]}_{int(fs)}Hz.wav') in files:
+                        # If so, remove the file with the wrong sampling rate
+                        files.remove(file)
+            # Select `nFiles` files randomly
+            return [
+                str(files[ii]) for ii in np.random.choice(
+                    np.arange(len(files)),
+                    size=nFiles,
+                    replace=False
+                )
+            ]
+        
+        # Loading noises from folder, if asked
+        if self.noiseSignalFile[:len('loadfrom ')] == 'loadfrom ':
+            # Get folder
+            noiseFolder = self.noiseSignalFile[len('loadfrom '):]
+            self.noiseSignalFile = _select_random_files_from_folder(
+                folder=noiseFolder,
+                nFiles=self.nNoiseSources,
+                fs=self.fs
+            )
+            self.noiseSignalFilesLoadedFromFolder = noiseFolder
+        elif self.noiseSignalFilesLoadedFromFolder is not None and\
+            Path(self.noiseSignalFilesLoadedFromFolder).is_dir():
+            # `elif` statement for when `__post_init__` is called for the N>1th
+            # time (e.g., when loading a WASN layout from a YAML file).
+            self.noiseSignalFile = _select_random_files_from_folder(
+                folder=self.noiseSignalFilesLoadedFromFolder,
+                nFiles=self.nNoiseSources,
+                fs=self.fs
+            )
         
         # Dimensionality checks
         self.addedNoiseSignalsPerNode = _dim_check(
@@ -198,6 +248,29 @@ class WASNparameters(AcousticScenarioParameters):
         if self.layoutType == 'predefined':
             if not Path(self.predefinedLayoutFile).is_file():
                 raise ValueError(f'The file "{self.predefinedLayoutFile}" does not exist.')
+
+    def align_with_loaded_yaml_layout(self, layoutDict):
+        """Ensures the WASN parameters are consistent with the layout loaded
+        from a YAML file.
+        
+        Parameters
+        ----------
+        layoutDict : dict
+            Dictionary containing the layout loaded from a YAML file (see
+            `siggen.utils.load_layout_from_yaml()`).
+        """
+        self.rd = np.array(layoutDict['rd'])
+        self.nSensorPerNode = np.array(layoutDict['Mk'])
+        self.nNodes = len(self.nSensorPerNode)
+        self.nDesiredSources = len(layoutDict['targetCoords'])
+        self.nNoiseSources = len(layoutDict['interfererCoords'])
+        self.__post_init__()  # re-run post-initialization commands
+
+        # Check that enough signals were provided
+        if self.nDesiredSources > len(self.desiredSignalFile):
+            raise ValueError(f'Not enough desired signals provided ({len(self.desiredSignalFile)} provided, {self.nDesiredSources} required).')
+        if self.nNoiseSources > len(self.noiseSignalFile):                
+            raise ValueError(f'Not enough noise signals provided ({len(self.noiseSignalFile)} provided, {self.nNoiseSources} required).')
 
 @dataclass
 class Node:
