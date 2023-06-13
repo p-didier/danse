@@ -1641,7 +1641,6 @@ class DANSEvariables(base.DANSEparameters):
             self,
             k,
             computeSpeechAndNoiseOnly=False,
-            exportFusedSignals=False
         ):
         """
         Compute complete yTilde for all nodes, all frames, using
@@ -1699,15 +1698,14 @@ class DANSEvariables(base.DANSEparameters):
             zBatch = np.zeros((
                 self.yinSTFT[k].shape[0],
                 self.yinSTFT[k].shape[1],
-                len(self.neighbors[k]) + 1  # <-- including the local $z_k$
+                len(self.neighbors[k])
             ), dtype=complex)
             if computeSpeechAndNoiseOnly:
                 zBatch_s = copy.deepcopy(zBatch)
                 zBatch_n = copy.deepcopy(zBatch)
                 # ^^^ ok because `yinSTFT_s` and `yinSTFT_n` have the same
                 # shape as `yinSTFT`.
-            indicesNodesInZ = np.concatenate((np.array([k]), self.neighbors[k]))
-            for ii, idxNode in enumerate(indicesNodesInZ):
+            for ii, idxNode in enumerate(self.neighbors[k]):
                 zBatch[:, :, ii] = np.einsum(
                     'ij,ikj->ik',
                     self.wTildeExt[idxNode][:, self.i[idxNode], :].conj(),
@@ -1726,30 +1724,24 @@ class DANSEvariables(base.DANSEparameters):
                     )
             # Construct yTilde
             yTildeBatch = np.concatenate(
-                (self.yinSTFT[k], zBatch[:, :, 1:]),  # <-- discard local fusedn signal (redundant information)
+                (self.yinSTFT[k], zBatch),
                 axis=-1
             )
             if computeSpeechAndNoiseOnly:
                 yTildeBatch_s = np.concatenate(
-                    (self.yinSTFT_s[k], zBatch_s[:, :, 1:]),
+                    (self.yinSTFT_s[k], zBatch_s),
                     axis=-1
                 )
                 yTildeBatch_n = np.concatenate(
-                    (self.yinSTFT_n[k], zBatch_n[:, :, 1:]),
+                    (self.yinSTFT_n[k], zBatch_n),
                     axis=-1
                 )
         
         # Conditional exports
         if computeSpeechAndNoiseOnly:
-            if exportFusedSignals:
-                return yTildeBatch, yTildeBatch_s, yTildeBatch_n, zBatch, zBatch_s, zBatch_n
-            else:
-                return yTildeBatch, yTildeBatch_s, yTildeBatch_n
+            return yTildeBatch, yTildeBatch_s, yTildeBatch_n
         else:
-            if exportFusedSignals:
-                return yTildeBatch, zBatch
-            else:
-                return yTildeBatch
+            return yTildeBatch
 
     def perform_update(self, k):
         """

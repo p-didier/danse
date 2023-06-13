@@ -115,12 +115,10 @@ class BatchDANSEvariables(DANSEvariables):
         Update the DANSE spatial covariance matrices in batch mode,
         using the latest filters.
         """
-        self.yTildeBatch[k], self.yTildeBatch_s[k], self.yTildeBatch_n[k],\
-            self.zBatch[k], self.zBatch_s[k], self.zBatch_n[k] =\
+        self.yTildeBatch[k], self.yTildeBatch_s[k], self.yTildeBatch_n[k] =\
             self.get_y_tilde_batch(
             k,
             computeSpeechAndNoiseOnly=True,
-            exportFusedSignals=True
         )
         
         self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
@@ -128,16 +126,6 @@ class BatchDANSEvariables(DANSEvariables):
             self.oVADframes[k]
         )
 
-        # rS-DANSE_k^+ algorithm (Part II paper)
-        if 'asy' in self.nodeUpdating or 'sim' in self.nodeUpdating:
-            # Needed on top of $R_{\tilde{y}_k \tilde{y}_k}$ and
-            # $R_{\tilde{n}_k \tilde{n}_k}$ (to compute $R_{\tilde{y}_k d_k}$):
-            # >>> $R_{zz}$ and $R_{z_n z_n}$ (to compute $R_{z d_k}$).
-            self.Rzz[k], self.Rznzn[k] = update_covmats_batch(
-                self.zBatch[k],
-                self.oVADframes[k]
-            )
-    
     def batch_estimate(self, k):
         """
         Estimate the desired signal in batch mode.
