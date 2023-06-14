@@ -27,7 +27,7 @@ def main():
 
     tests.sandbox.main(
         cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-        plotASCearly=False,
+        plotASCearly=True,
     )
 
     # Benchmark tests for the TI-GEVD-DANSE online implementation.

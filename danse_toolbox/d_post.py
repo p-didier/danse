@@ -1332,32 +1332,50 @@ def plot_asc(
         )
     ax.set(xlabel='$y$ [m]', ylabel='$z$ [m]', title='Side view')
 
-    # Add distance info in box text
-    boxText = 'Node distances\n\n'
+    # Add distance info
+    distancesToSources = []
     for ii in range(p.nNodes):
-        distancesToSources = [
+        distancesToSources.append([
             np.mean(np.linalg.norm(
                 asc.mic_array.R[:, sensorToNodeIdx == ii].T - s.position
             )) for s in asc.sources
-        ]
-        for jj in range(p.nDesiredSources):
-            d = distancesToSources[jj]
-            boxText += f'{ii + 1}$\\to$D{jj + 1}={np.round(d, 2)}m\n'
-        for jj in range(p.nNoiseSources):
-            d = distancesToSources[-(jj + 1)]
-            boxText += f'{ii + 1}$\\to$N{jj + 1}={np.round(d, 2)}m\n'
-        boxText += '\n'
-    boxText = boxText[:-1]
-    ax.text(
-        x=1.1,
-        y=0.9,
-        s=boxText,
-        transform=ax.transAxes,
-        fontsize=10,
-        verticalalignment='top',
-        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    )
-    
+        ])
+    distancesToSources = np.array(distancesToSources)
+    if p.nNodes * p.nDesiredSources + p.nNodes * p.nNoiseSources < 15:
+        boxText = 'Node distances\n\n'
+        for ii in range(p.nNodes):
+            for jj in range(p.nDesiredSources):
+                d = distancesToSources[ii, jj]
+                boxText += f'{ii + 1}$\\to$D{jj + 1}={np.round(d, 2)}m\n'
+            for jj in range(p.nNoiseSources):
+                d = distancesToSources[ii, -(jj + 1)]
+                boxText += f'{ii + 1}$\\to$N{jj + 1}={np.round(d, 2)}m\n'
+            boxText += '\n'
+        boxText = boxText[:-1]
+        ax.text(
+            x=1.1,
+            y=0.9,
+            s=boxText,
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        )
+    else:
+        # Too many nodes and/or sources to display distances in box text.
+        # Instead, display a table of distances in a separate figure.
+        fig2 = plot_distances_as_table(
+            distancesToSources,
+            p.nDesiredSources,
+            p.nNoiseSources
+        )
+        if folder != '':
+            # Make sure folder exists
+            if not Path(folder).exists():
+                Path(folder).mkdir(parents=True, exist_ok=True)
+            # Export
+            fig2.savefig(f'{folder}/asc_dists.png', dpi=300)
+            fig2.savefig(f'{folder}/asc_dists.pdf')
     #
     if plot3Dview:
         ax = fig.add_subplot(1, nCols, 3, projection='3d')
@@ -1374,6 +1392,46 @@ def plot_asc(
         fig.savefig(f'{folder}/asc.png', dpi=300)
         fig.savefig(f'{folder}/asc.pdf')
         
+    return fig
+
+
+def plot_distances_as_table(dists: np.ndarray, nDesired: int, nNoise: int):
+    """
+    Plots a table of distances between nodes and sources.
+    
+    Parameters
+    ----------
+    dists : [Nnodes x Nsources] np.ndarray of floats
+        Distances between each node and each source.
+    nDesired : int
+        Number of desired sources.
+    nNoise : int
+        Number of noise sources.
+    """
+    
+    # Create table
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    fig.set_size_inches(5.5 * dists.shape[1] / 9, 1.5 * dists.shape[0] / 3)
+    ax.axis('off')
+    ax.axis('tight')
+    # Create table
+    table = ax.table(
+        cellText=np.round(dists, 2),
+        rowLabels=[f'Node {ii + 1}' for ii in range(dists.shape[0])],
+        colLabels=[f'Desired {ii + 1}' for ii in range(nDesired)] + \
+            [f'Noise {ii + 1}' for ii in range(nNoise)],
+        loc='center'
+    )
+    # Adjust table properties
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1, 1.5)
+    # Add title
+    ax.set_title('Distances between nodes and sources [m]')
+    # Make sure everything fits
+    plt.tight_layout()
+    
     return fig
 
 
