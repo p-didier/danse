@@ -1424,8 +1424,8 @@ def plot_distances_as_table(dists: np.ndarray, nDesired: int, nNoise: int):
         loc='center'
     )
     # Adjust table properties
-    table.auto_set_font_size(False)
-    table.set_fontsize(12)
+    table.auto_set_font_size(True)
+    # table.set_fontsize(10)
     table.scale(1, 1.5)
     # Add title
     ax.set_title('Distances between nodes and sources [m]')
@@ -1570,7 +1570,11 @@ def plot_room2D(ax, rd, dotted=False):
     ax.plot([0,rd[0]], [rd[1],rd[1]], fmt)
 
 
-def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
+def plot_signals_all_nodes(
+        out: DANSEoutputs,
+        wasn: list[Node],
+        fixedWindow=True
+    ):
     """
     Plot DANSE output signals, comparing with inputs.
 
@@ -1578,19 +1582,28 @@ def plot_signals_all_nodes(out: DANSEoutputs, wasn: list[Node]):
     ----------
     out : `DANSEoutputs` object
         DANSE run outputs.
-
+    wasn : list of `Node` objects
+        WASN under consideration.
+    fixedWindow : bool, optional
+        Whether to use a fixed window for plotting. If False, use the
+        original window used for WOLA processing.
+    
     Returns
     -------
     figs : list of `matplotlib.figure.Figure` objects
         Figure handle for each node.
     """
+    if fixedWindow:
+        win = np.sqrt(np.hanning(1024))
+    else:
+        win = out.winWOLAanalysis
 
     figs = []
     # Plot per node
     for k in range(out.nNodes):
         fig, axForTitle = plot_signals(
             node=wasn[k],
-            win=out.winWOLAanalysis,
+            win=win,
             ovlp=out.WOLAovlp
         )
         ti = f'Node {k + 1}, {out.nSensorPerNode[k]} sensor(s)'
@@ -1629,6 +1642,7 @@ def plot_signals(node: Node, win, ovlp):
     ax.plot(
         node.timeStamps,
         node.cleanspeechRefSensor,
+        '0.5-',  # grey
         label='Desired (ref. sensor)'
     )
     ax.plot(
@@ -1640,12 +1654,14 @@ def plot_signals(node: Node, win, ovlp):
     ax.plot(
         node.timeStamps,
         node.data[:, 0] - 2*delta,
-        label='Noisy (ref. sensor)'
+        'C0-',
+        label='Noisy (ref. sensor)',
     )
     # Desired signal estimate waveform 
     ax.plot(
         node.timeStamps,
         node.enhancedData - 4*delta,
+        'C3-',
         label='Enhanced (global)'
     )
     currDelta = 4*delta
@@ -1653,6 +1669,7 @@ def plot_signals(node: Node, win, ovlp):
         ax.plot(
             node.timeStamps,
             node.enhancedData_l - currDelta - 2*delta,
+            'C1-',
             label='Enhanced (local)'
         )
         currDelta += 2*delta
@@ -1660,6 +1677,7 @@ def plot_signals(node: Node, win, ovlp):
         ax.plot(
             node.timeStamps,
             node.enhancedData_c - currDelta - 2*delta,
+            'C2-',
             label='Enhanced (centr.)'
         )
     # Plot start of enhancement metrics computations
