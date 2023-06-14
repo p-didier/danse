@@ -2,7 +2,7 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230614_tests/effectOfN/test2_noProcessing_N4096 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230614_tests/effectOfN/fixedBeta/test1_N1024 # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -32,12 +32,14 @@ danseParams:
   # ----------------------
   #
   WOLAovlp: 0.5
-  # DFTsize: 1024
+  DFTsize: 1024
   # DFTsize: 2048
-  DFTsize: 4096
+  # DFTsize: 4096
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 2
   t_expAvg50pExternalFilters: 0.2
+  forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
+  forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
   timeBtwExternalFiltUpdates: 1
   # timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
@@ -77,8 +79,8 @@ wasnParams:
   # nSensorPerNode: '[1, 1, 1]'
   interSensorDist: 0.05
   #
-  # baseSNR: 5
-  baseSNR: 9999
+  baseSNR: 5
+  # baseSNR: 9999
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2_16000Hz.wav
   nDesiredSources: 1

@@ -214,6 +214,10 @@ class DANSEparameters(Hyperparameters):
     t_expAvg50p: float = 2.     # [s] Time in the past at which the spatial
         # covariance matrices values are weighted by 50% via
         # exponential averaging.
+    forcedBeta: float = None    # if not None, use this value for the
+        # forgetting factor beta.
+    forcedBetaExternalFilters: float = None    # if not None, use this value
+        # for the forgetting factor beta for external filters.
     filterInitType: str = 'selectFirstSensor'
         # type of complex filter vector initialization:
         # -- 'selectFirstSensor' == [1, 0, ..., 0]^T,

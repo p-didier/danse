@@ -82,8 +82,8 @@ def danse(
                     events.t,
                     fs[k],
                     k,
-                    # events.bypassUpdate[idxEventCurrInstant]
-                    True  # debugging
+                    events.bypassUpdate[idxEventCurrInstant]
+                    # True  # debugging
                 )
             else:
                 raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')
@@ -287,14 +287,21 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
         return np.exp(np.log(0.5) / (t50p * fs / Ns))
 
     for k in range(p.wasnParams.nNodes):  # for each node
-        # Derive exponential averaging factor for `Ryy` and `Rnn` updates
+        # Set exponential averaging factor for `Ryy` and `Rnn` updates
         params = (wasnObj.wasn[k].fs, p.danseParams.Ns)
-        wasnObj.wasn[k].beta = _get_beta_from_t50p(
-            p.danseParams.t_expAvg50p, *params
-        )
-        wasnObj.wasn[k].betaWext = _get_beta_from_t50p(
-            p.danseParams.t_expAvg50pExternalFilters, *params
-        )
+        if p.danseParams.forcedBeta is None:
+            wasnObj.wasn[k].beta = _get_beta_from_t50p(
+                p.danseParams.t_expAvg50p, *params
+            )
+        else:
+            wasnObj.wasn[k].beta = p.danseParams.forcedBeta
+        # Set exponential averaging factor for `wEXT` updates
+        if p.danseParams.forcedBetaExternalFilters is None:
+            wasnObj.wasn[k].betaWext = _get_beta_from_t50p(
+                p.danseParams.t_expAvg50pExternalFilters, *params
+            )
+        else:
+            wasnObj.wasn[k].betaWext = p.danseParams.forcedBetaExternalFilters
     
     # If random-noise (unusable) signals have been added...
     if any(p.wasnParams.addedNoiseSignalsPerNode > 0):
