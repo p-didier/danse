@@ -322,7 +322,8 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
     # Compute VAD per STFT frame for each node
     wasnObj.get_vad_per_frame(
         frameLen=p.danseParams.DFTsize,
-        frameShift=p.danseParams.Ns
+        frameShift=p.danseParams.Ns,
+        minProportionActive=p.wasnParams.vadMinProportionActive
     )
 
     return p, wasnObj

@@ -72,6 +72,10 @@ class AcousticScenarioParameters:
     # vvv VAD parameters vvv
     VADenergyDecrease_dB: float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
     VADwinLength: float = 20e-3     # [s] VAD window length
+    vadMinProportionActive: float = 0.5  # for computation of frame-based VAD:
+        # the VAD at a frame is considered active if at least
+        # `vadMinProportionActive` of the per-sample VAD values within the
+        # frame are active.
     enableVADloadFromFile: bool = True  # if True, loads VAD from file
     vadFilesFolder: str = ''    # folder containing VAD files
     #
@@ -248,6 +252,12 @@ class WASNparameters(AcousticScenarioParameters):
         if self.layoutType == 'predefined':
             if not Path(self.predefinedLayoutFile).is_file():
                 raise ValueError(f'The file "{self.predefinedLayoutFile}" does not exist.')
+            
+        if self.topologyParams.topologyType == 'fully-connected':
+            # For consistency and to avoid conflicts, make sure the user-
+            # defined topology is ones.
+            self.topologyParams.userDefinedTopo =\
+                np.ones((self.nNodes, self.nNodes))
 
     def align_with_loaded_yaml_layout(self, layoutDict):
         """Ensures the WASN parameters are consistent with the layout loaded
@@ -578,7 +588,7 @@ class WASN:
         ax.set_ylabel('$y$ [m]')
         ax.set_zlabel('$z$ [m]')
     
-    def get_vad_per_frame(self, frameLen, frameShift):
+    def get_vad_per_frame(self, frameLen, frameShift, minProportionActive=0.5):
         """
         Computes the VAD per frame for each node in the WASN.
 
@@ -588,6 +598,9 @@ class WASN:
             Frame length [samples].
         frameShift : int
             Frame shift [samples].
+        minProportionActive : float
+            Minimum proportion of active samples in a frame for the frame to be
+            considered active.
         """
         for k in range(len(self.wasn)):  # for each node
             vadCurrNode = self.wasn[k].vad
@@ -602,9 +615,12 @@ class WASN:
                     vadPerFrame = vadPerFrame[:ii + 1]  # crop (no VAD if frame is incomplete)
                     break
                 vadChunk = vadCurrNode[idxBeg:idxEnd]
-                # VAD is 1 if more than half of the frame is active
-                vadPerFrame[ii] = float(sum(vadChunk) >= len(vadChunk) // 2)
-            # Save VAD per frame into `Node` object in WASN
+                # VAD is 1 if more than `minProportionActive` of the frame
+                # is active.
+                vadPerFrame[ii] = float(
+                    sum(vadChunk) >= len(vadChunk) * minProportionActive
+                )
+            # Save VAD per frame into `Node` object in WASN* 
             self.wasn[k].vadPerFrame = vadPerFrame.astype(bool)
 
 

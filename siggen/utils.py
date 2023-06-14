@@ -95,11 +95,11 @@ def build_room(p: classes.WASNparameters):
             
         # Compute desired sources coordinates
         desiredSourceCoords = np.random.uniform(size=(3, p.nDesiredSources)) *\
-            (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls
+            (p.rd[:, np.newaxis] - 2 * p.minDistToWalls) + p.minDistToWalls
 
         # Compute noise sources coordinates
         noiseSourceCoords = np.random.uniform(size=(3, p.nNoiseSources)) *\
-            (p.rd - 2 * p.minDistToWalls) + p.minDistToWalls
+            (p.rd[:, np.newaxis] - 2 * p.minDistToWalls) + p.minDistToWalls
         #
     elif 'spinning_top' in p.layoutType:  # Spinning top layout
 

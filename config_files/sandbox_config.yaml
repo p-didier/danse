@@ -2,7 +2,7 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230614_tests/effectOfN/fixedBeta/test1_N1024 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230614_tests/GEVD/online/test3_as1_2noises_2sensorsPerNode  # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -32,18 +32,19 @@ danseParams:
   # ----------------------
   #
   WOLAovlp: 0.5
+  # DFTsize: 512
   DFTsize: 1024
   # DFTsize: 2048
   # DFTsize: 4096
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 2
-  t_expAvg50pExternalFilters: 0.2
-  forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
-  forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
+  t_expAvg50pExternalFilters: 0.02
+  # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
+  # forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
   timeBtwExternalFiltUpdates: 1
   # timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
-    printout_profiler: true
+    printout_profiler: false
 referenceSensor: 0
 snrYlimMax: null
 wasnParams:
@@ -55,19 +56,21 @@ wasnParams:
   typeDiffuseNoise: babble
   fileDiffuseBabble: danse/tests/sigs/02_noise/ssn/ssn_long.wav
   #
-  VADenergyDecrease_dB: 35
+  # VADenergyDecrease_dB: 35
+  VADenergyDecrease_dB: 50
   VADwinLength: 0.04  # [s]
+  vadMinProportionActive: 0.25 
   rd: '[5, 5, 5]'
   minDistToWalls: 0.5
   sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
-  # layoutType: random
+  layoutType: random
   # layoutType: vert_spinning_top
   # layoutType: random_spinning_top
-  layoutType: predefined
+  # layoutType: predefined
   predefinedLayoutFile: danse/config_files/asc_layouts/asc2_20230613_174233.yaml
-  spinTop_randomWiggleAmount: 0.25  # [m]
+  spinTop_randomWiggleAmount: 0.1  # [m]
   t60: 0.2  # [s]
   # t60: 0.0  # [s]
   # SROperNode: '[0, 100, 200]'  # [PPM]
@@ -75,17 +78,20 @@ wasnParams:
   # SROperNode: '[10, 0, 5]'  # [PPM]
   SROperNode: '[0]'  # [PPM]
   # nSensorPerNode: '[1, 2, 3]'
-  nSensorPerNode: '[3, 3, 3]'
+  # nSensorPerNode: '[3, 3]'
+  # nSensorPerNode: '[3, 3, 3]'
   # nSensorPerNode: '[1, 1, 1]'
-  interSensorDist: 0.05
+  nSensorPerNode: '[2, 2, 2]'
+  interSensorDist: 0.2
   #
   baseSNR: 5
+  # baseSNR: 20
   # baseSNR: 9999
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2_16000Hz.wav
   nDesiredSources: 1
   nNodes: 3
-  nNoiseSources: 3
+  nNoiseSources: 2
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files

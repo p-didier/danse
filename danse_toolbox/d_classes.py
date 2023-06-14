@@ -1149,11 +1149,12 @@ class DANSEvariables(base.DANSEparameters):
                 updateFlag = True  # update regardless of time elapsed
             else:   
                 updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
+                if updateFlag:
+                    # Update last external filter update instant [s]
+                    self.lastExtFiltUp[k] = t
+                    if self.printoutsAndPlotting.printout_externalFilterUpdate:
+                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
             if updateFlag:
-                # Update last external filter update instant [s]
-                self.lastExtFiltUp[k] = t
-                if self.printoutsAndPlotting.printout_externalFilterUpdate:
-                    print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
                 # Update target
                 self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
                     self.wTildeExtTarget[k] + self.alphaExternalFilters *\
@@ -2743,13 +2744,13 @@ def update_w_gevd(
         sigma[kappa, :] = sigmacurr[idx]
         Xmat[kappa, :, :] = Xmatcurr[:, idx]
 
-    Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0,2,1]))
+    Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0, 2, 1]))
     # GEVLs tensor
     Dmat = np.zeros((nFreqs, n, n))
     for ii in range(rank):
-        Dmat[:, ii, ii] = np.squeeze(1 - 1/sigma[:, ii])
+        Dmat[:, ii, ii] = np.squeeze(1 - 1 / sigma[:, ii])
     # LMMSE weights
-    Qhermitian = np.transpose(Qmat.conj(), axes=[0,2,1])
+    Qhermitian = np.transpose(Qmat.conj(), axes=[0, 2, 1])
     w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
     return w
 # --------------------------------------------------------------------------- #
