@@ -468,7 +468,10 @@ class DANSEvariables(base.DANSEparameters):
                 ))
             wCentr.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, nSensorsTotal),
-                self.referenceSensor,
+                refIdx=int(np.sum([node.nSensors for node in wasn[:k]]) + self.referenceSensor),
+                # ^^^ for the centralized filters, the "reference sensor"
+                # index is always relative to the entire $\mathbf{y}$ network-
+                # wide signal vector.
                 initType=self.filterInitType,
                 fixedValue=self.filterInitFixedValue
             ))
@@ -1995,6 +1998,8 @@ class DANSEvariables(base.DANSEparameters):
             self.d_n[self.idxEndChunk - self.Ns:self.idxEndChunk, k] = dChunk_n
 
         if self.computeCentralised:
+            if k > 0:
+                stop = 1
             # Build centralised desired signal estimate
             dChunk, dhatCurr = base.get_desired_sig_chunk(
                 w=self.wCentr[k][:, self.i[k] + 1, :],

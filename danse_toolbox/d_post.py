@@ -802,7 +802,7 @@ def compute_metrics(
             TDfilteredSpeech_l = out.TDfiltSpeech_l[:, k]
             TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
             print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
-
+        
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
             clean=np.squeeze(wasn[k].cleanspeechRefSensor),
@@ -1642,7 +1642,7 @@ def plot_signals(node: Node, win, ovlp):
     ax.plot(
         node.timeStamps,
         node.cleanspeechRefSensor,
-        '0.5-',  # grey
+        '0.5',  # grey
         label='Desired (ref. sensor)'
     )
     ax.plot(
