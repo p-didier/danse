@@ -86,7 +86,9 @@ def danse(
                     # True  # debugging
                 )
             else:
-                raise ValueError(f'Unknown event: "{events.type[idxEventCurrInstant]}".')
+                raise ValueError(
+                    f'Unknown event: "{events.type[idxEventCurrInstant]}".'
+                )
 
     # Profiling
     if not is_interactive() and dv.printoutsAndPlotting.printout_profiler:
@@ -306,8 +308,10 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
     # If random-noise (unusable) signals have been added...
     if any(p.wasnParams.addedNoiseSignalsPerNode > 0):
         # Coopy base `nSensorPerNode` and `sensorToNodeIndices` for ASC plots.
-        p.wasnParams.nSensorPerNodeASC = copy.deepcopy(p.wasnParams.nSensorPerNode)
-        p.wasnParams.sensorToNodeIndicesASC = copy.deepcopy(p.wasnParams.sensorToNodeIndices)
+        p.wasnParams.nSensorPerNodeASC =\
+            copy.deepcopy(p.wasnParams.nSensorPerNode)
+        p.wasnParams.sensorToNodeIndicesASC =\
+            copy.deepcopy(p.wasnParams.sensorToNodeIndices)
         # Update number of sensors per node
         for ii, n in enumerate(p.wasnParams.addedNoiseSignalsPerNode):
             p.wasnParams.nSensorPerNode[ii] += n
@@ -380,8 +384,10 @@ def danse_batch(
                 if k == upNodeIdx:
                     bdv.perform_update(k)
                 else: # do not update DANSE filters
-                    bdv.wTilde[k][:, bdv.i[k] + 1, :] = bdv.wTilde[k][:, bdv.i[k], :]
-                    bdv.wTildeExt[k][:, bdv.i[k] + 1, :] = bdv.wTildeExt[k][:, bdv.i[k], :]
+                    bdv.wTilde[k][:, bdv.i[k] + 1, :] =\
+                        bdv.wTilde[k][:, bdv.i[k], :]
+                    bdv.wTildeExt[k][:, bdv.i[k] + 1, :] =\
+                        bdv.wTildeExt[k][:, bdv.i[k], :]
                 bdv.update_external_filters(k, None)
                 bdv.batch_estimate(k)
                 bdv.get_mmse_cost(k)
@@ -471,7 +477,32 @@ def tidanse_batch(
     btidv.get_centralized_and_local_estimates()
     # Perform batch TI-DANSE
     if 'seq' in p.nodeUpdating:  # sequential updates
-        raise NotImplementedError()  # TODO:
+        upNodeIdx = 0
+        for ii in range(p.maxBatchUpdates):
+            if btidv.printoutsAndPlotting.printout_batch_updates:
+                print(f'[seq] Batch update {ii + 1}/{p.maxBatchUpdates}... (updating node: {upNodeIdx + 1})')
+            # Loop over nodes
+            # New tree formation: update up-/downstream neighbors lists
+            # btidv.update_up_downstream_neighbors(
+            #     wasnObjList[tidv.treeFormationCounter]  # <-- TODO: TODO: TODO: TODO: WE ARE MISSING THIS
+            # )
+            for k in range(btidv.nNodes):
+                # Filter updates and desired signal estimates event
+                btidv.batch_update_tidanse_covmats(k)
+            for k in range(btidv.nNodes):
+                if k == upNodeIdx:
+                    btidv.perform_update(k)
+                else: # do not update DANSE filters
+                    btidv.wTilde[k][:, btidv.i[k] + 1, :] =\
+                        btidv.wTilde[k][:, btidv.i[k], :]
+                    btidv.wTildeExt[k][:, btidv.i[k] + 1, :] =\
+                        btidv.wTildeExt[k][:, btidv.i[k], :]
+                btidv.ti_update_external_filters_batch(k, None)
+                btidv.batch_estimate(k)
+                btidv.get_mmse_cost(k)
+                btidv.i[k] += 1
+            # Update node index for sequential updates
+            upNodeIdx = (upNodeIdx + 1) % btidv.nNodes
     elif 'sim' in p.nodeUpdating or 'asy' in p.nodeUpdating:  # simultaneous or asynchronous updates
         for ii in range(p.maxBatchUpdates):
             if btidv.printoutsAndPlotting.printout_batch_updates:
@@ -483,7 +514,7 @@ def tidanse_batch(
             # Loop over nodes a second time to perform the filter updates
             for k in range(btidv.nNodes):
                 btidv.perform_update(k)
-                btidv.update_external_filters(k, None)
+                btidv.ti_update_external_filters_batch(k, None)
                 btidv.batch_estimate(k)
                 btidv.get_mmse_cost(k)
                 btidv.i[k] += 1

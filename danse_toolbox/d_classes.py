@@ -1031,11 +1031,24 @@ class DANSEvariables(base.DANSEparameters):
                 self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
                 if self.performGEVD:
                     if _check_validity_gevd(self.Rnntilde[k], self.Ryytilde[k]):
-                        self.startUpdates[k] = True
+                        self.startUpdates[k] = True# and self.startUpdatesCentr[k]
                 else:
-                    self.startUpdates[k] = True
+                    self.startUpdates[k] = True# and self.startUpdatesCentr[k]
 
         if self.simType == 'online':
+            # Local estimate
+            if self.computeLocal and not self.startUpdatesLocal[k]\
+                and tCurr >= self.startUpdatesAfterAtLeast:
+                if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
+                    self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
+                    if self.performGEVD:
+                        if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
+                            self.startUpdatesLocal[k] = True# and\
+                                #self.startUpdates[k] and self.startUpdatesCentr[k]
+                    else:
+                        self.startUpdatesLocal[k] = True# and\
+                            #self.startUpdates[k] and self.startUpdatesCentr[k]
+
             # Centralised estimate
             if self.computeCentralised and not self.startUpdatesCentr[k]\
                 and tCurr >= self.startUpdatesAfterAtLeast:
@@ -1046,17 +1059,6 @@ class DANSEvariables(base.DANSEparameters):
                             self.startUpdatesCentr[k] = True
                     else:
                         self.startUpdatesCentr[k] = True
-
-            # Local estimate
-            if self.computeLocal and not self.startUpdatesLocal[k]\
-                and tCurr >= self.startUpdatesAfterAtLeast:
-                if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
-                    self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
-                    if self.performGEVD:
-                        if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
-                            self.startUpdatesLocal[k] = True
-                    else:
-                        self.startUpdatesLocal[k] = True
         elif self.simType == 'batch':  
             self.startUpdatesCentr[k] = True
             self.startUpdatesLocal[k] = True
@@ -1159,6 +1161,11 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
                     self.wTildeExtTarget[k] + self.alphaExternalFilters *\
                     self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+                
+    def ti_update_external_filters_batch(self, k, t=None):
+        """Wrapper for `update_external_filters()` for batch processing
+        in non-fully connected WASNs."""
+        TIDANSEvariables.ti_update_external_filters(self, k, t)
 
     def process_incoming_signals_buffers(self, k, t):
         """
@@ -2600,9 +2607,10 @@ class TIDANSEvariables(DANSEvariables):
         """
         Update external filters for relaxed filter update.
         To be used when using simultaneous or asynchronous node-updating.
-        When using sequential node-updating, do not differential between
+        When using sequential node-updating, do not differentiate between
         internal (`self.wTilde`) and external filters. 
-        For TI-DANSE.
+        For TI-DANSE --> dimensions of self.wTildeExt and self.wTildeExtTarget
+        differ from DANSE.
         
         Parameters
         ----------
@@ -2612,29 +2620,57 @@ class TIDANSEvariables(DANSEvariables):
             Current time instant [s].
         """
 
-        if self.noExternalFilterRelaxation:
+        if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
             # No relaxation (i.e., no "external" filters)
-            self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
-        else:
-            # Simultaneous or asynchronous node-updating
-            if 'seq' not in self.nodeUpdating:
-                # Relaxed external filter update
-                self.wTildeExt[k] = self.expAvgBetaWext[k] * self.wTildeExt[k] +\
-                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
-                # Update targets
-                if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
-                    self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
-                        self.wTildeExtTarget[k] + self.alphaExternalFilters *\
-                        self.wTilde[k][:, self.i[k] + 1, :]
+            self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                self.wTilde[k][:, self.i[k] + 1, :]
+        else:   # Simultaneous or asynchronous node-updating
+            # Relaxed external filter update
+            self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
+                (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
+            
+            if t is None:
+                updateFlag = True  # update regardless of time elapsed
+            else:   
+                updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
+                if updateFlag:
                     # Update last external filter update instant [s]
                     self.lastExtFiltUp[k] = t
-                    # Inform user
-                    if self.printoutsAndPlotting.verbose and\
-                        self.printoutsAndPlotting.printout_externalFilterUpdate:
-                        print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-            # Sequential node-updating
-            else:
-                self.wTildeExt[k] = self.wTilde[k][:, self.i[k] + 1, :]
+                    if self.printoutsAndPlotting.printout_externalFilterUpdate:
+                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
+            if updateFlag:
+                # Update target
+                self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
+                    self.wTildeExtTarget[k] + self.alphaExternalFilters *\
+                    self.wTilde[k][:, self.i[k] + 1, :]
+
+        # if self.noExternalFilterRelaxation:
+        #     # No relaxation (i.e., no "external" filters)
+        #     self.wTildeExt[k][:, self.i[k], :] =\
+        #         self.wTilde[k][:, self.i[k] + 1, :]
+        # else:
+        #     # Simultaneous or asynchronous node-updating
+        #     if 'seq' not in self.nodeUpdating:
+        #         # Relaxed external filter update
+        #         self.wTildeExt[k][:, self.i[k], :] =\
+        #             self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
+        #             (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
+        #         # Update targets
+        #         if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
+        #             self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
+        #                 self.wTildeExtTarget[k] + self.alphaExternalFilters *\
+        #                 self.wTilde[k][:, self.i[k] + 1, :]
+        #             # Update last external filter update instant [s]
+        #             self.lastExtFiltUp[k] = t
+        #             # Inform user
+        #             if self.printoutsAndPlotting.verbose and\
+        #                 self.printoutsAndPlotting.printout_externalFilterUpdate:
+        #                 print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
+        #     # Sequential node-updating
+        #     else:
+        #         self.wTildeExt[k][:, self.i[k], :] =\
+        #             self.wTilde[k][:, self.i[k] + 1, :]
 
     def ti_compensate_sros(self):
         pass  #  TODO:

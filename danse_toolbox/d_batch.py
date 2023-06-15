@@ -1,4 +1,5 @@
 from danse_toolbox.d_classes import *
+import scipy.signal as sig
 
 @dataclass
 class BatchDANSEvariables(DANSEvariables):
@@ -61,7 +62,7 @@ class BatchDANSEvariables(DANSEvariables):
                     self.yCentrBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
                 )
                 # Convert back to time domain
-                self.dCentr[:, k] =self.get_istft(self.dHatCentr[:, :, k], k)\
+                self.dCentr[:, k] = self.get_istft(self.dHatCentr[:, :, k], k)\
                     / np.sum(self.winWOLAanalysis)
                 self.dCentr_s[:, k] = self.get_istft(self.dHatCentr_s[:, :, k], k)\
                     / np.sum(self.winWOLAanalysis)
@@ -197,10 +198,14 @@ class BatchDANSEvariables(DANSEvariables):
         k : int
             The node index.
         """
+        truncateBeg = 1000 # <-- discard first 1000 samples FIXME: hardcoded
+        truncateEnd = 1000 # <-- discard last 1000 samples FIXME: hardcoded
         # True desired signal
-        targetSig = self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor]
+        targetSig = self.cleanSpeechSignalsAtNodes[k][
+            truncateBeg:-truncateEnd, self.referenceSensor
+        ]
         self.mmseCost[self.i[k], k] = np.mean(
-            np.abs(targetSig - self.d[:, k])**2
+            np.abs(targetSig - self.d[truncateBeg:-truncateEnd, k])**2
         )
 
 

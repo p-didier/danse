@@ -849,7 +849,7 @@ def build_wasn(
             babbleFile=p.fileDiffuseBabble,
             T=p.sigDur,
         )
-        diffuseNoise = pyanfgen(cfg)
+        diffuseNoise = pyanfgen(cfg, plot=False)
         # Normalize
         diffuseNoise /= np.amax(diffuseNoise)
         # Apply desired power factor
