@@ -180,7 +180,33 @@ class DANSEoutputs(DANSEparameters):
         axes.set_yscale('log')  # logarithmic scale for better visualization
         fig.tight_layout()
         return fig
+    
+    def plot_mse_online_cost(self):
+        """Plots the evolution of the MSE cost in online-mode."""
+        mseCost = np.zeros((0, self.nNodes))
+        idxBegin = 0
+        idxEnd = self.DFTsize
+        while idxEnd <= self.TDdesiredSignals_est.shape[0]:
+            currMSE = np.mean(
+                np.abs(self.TDdesiredSignals_est[idxBegin:idxEnd, :] -\
+                    self.TDdesiredSignals_est_c[idxBegin:idxEnd, :])**2,
+                axis=0
+            )
+            mseCost = np.vstack((mseCost, currMSE))
+            idxBegin += self.Ns
+            idxEnd += self.Ns
 
+        # Plot MSE cost with logarithmic scale
+        fig, axes = plt.subplots(1,1)
+        fig.set_size_inches(8.5, 3.5)
+        axes.plot(mseCost, '.-')
+        axes.set_yscale('log')
+        axes.set_xlabel('Window index $i$')
+        axes.set_ylabel('MSE cost $E_N\{ | \\tilde{d}_k^i(n) - \\hat{d}_k(n) |^2 \}$')
+        axes.grid()
+        axes.legend([f'Node {k+1}' for k in range(self.nNodes)])
+        fig.tight_layout()
+        return fig
 
     def plot_filter_evol(
             self,
@@ -1291,11 +1317,15 @@ def plot_asc(
         fig.set_size_inches(6.5, 3.5)
         nCols = 2
     ax = fig.add_subplot(1, nCols, 1)
+    if p.nNoiseSources > 0:
+        noiseSourcePos = np.array([ii.position[:2] for ii in asc.sources[-p.nNoiseSources:]])
+    else:
+        noiseSourcePos = np.array([])
     plot_side_room(
         ax,
         p.rd[:2],
         np.array([ii.position[:2] for ii in asc.sources[:p.nDesiredSources]]), 
-        np.array([ii.position[:2] for ii in asc.sources[-p.nNoiseSources:]]), 
+        noiseSourcePos, 
         asc.mic_array.R[:2, :].T,
         sensorToNodeIdx,
         dotted=p.t60==0,
@@ -1312,6 +1342,10 @@ def plot_asc(
     ax.set(xlabel='$x$ [m]', ylabel='$y$ [m]', title='Top view')
     #
     ax = fig.add_subplot(1, nCols, 2)
+    if p.nNoiseSources > 0:
+        noiseSourcePos = np.array([ii.position[-2:] for ii in asc.sources[-p.nNoiseSources:]])
+    else:
+        noiseSourcePos = np.array([])
     plot_side_room(
         ax,
         p.rd[-2:],
@@ -1436,7 +1470,11 @@ def plot_distances_as_table(dists: np.ndarray, nDesired: int, nNoise: int):
 
 
 def plot_side_room(
-        ax, rd2D, rs, rn, r,
+        ax,
+        rd2D,
+        rs,
+        rn,
+        r,
         micToNodeTags,
         scatsize=20,
         dotted=False,
@@ -2119,6 +2157,10 @@ def export_danse_outputs(
             fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.png', dpi=300)
             fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.pdf')
             plt.close(fig)
+        elif p.danseParams.simType == 'online':
+            fig = out.plot_mse_online_cost()
+            fig.savefig(f'{p.exportParams.exportFolder}/mse_cost.png', dpi=300)
+            fig.savefig(f'{p.exportParams.exportFolder}/mse_cost.pdf')
 
         # Export filter coefficients
         if p.exportParams.filters:
@@ -2204,47 +2246,3 @@ def export_danse_outputs(
                 p.save()    # save `TestParameters` object as Pickle archive
 
     return out
-
-
-# def export_batch_danse_outputs(
-#         out: BatchDANSEoutputs,
-#         wasnObj: WASN,
-#         p: TestParameters
-#     ):
-#     """
-#     Post-processing after a batch DANSE run.
-
-#     Parameters
-#     ----------
-#     out : `danse.danse_toolbox.d_post.BatchDANSEoutputs` object
-#         Batch DANSE outputs.
-#     wasnObj : `WASN` object
-#         WASN under consideration, after DANSE processing.
-#     p : `TestParameters` object
-#         Test parameters.
-
-#     Returns
-#     -------
-#     out : `danse.danse_toolbox.d_post.BatchDANSEoutputs` object
-#         Batch DANSE outputs after post-processing.
-#     """
-        
-#     if not p.exportParams.bypassAllExports:
-#         # out.plot_filters_evol()  # TODO: figure out whether this is useful or not
-
-#         if p.exportParams.mmsePerfPlot:
-#             fig = out.plot_mmse_perf()
-#             fig.savefig(f'{p.exportParams.exportFolder}/mmseEvolution.png', dpi=300)
-#             fig.savefig(f'{p.exportParams.exportFolder}/mmseEvolution.pdf')
-
-#         # Plot waveforms and spectrograms
-#         if p.exportParams.waveformsAndSpectrograms:
-#             figs = out.plot_sigs()
-#             for k, fig in enumerate(figs):
-#                 fig.savefig(f'{p.exportParams.exportFolder}/waveforms_node{k + 1}.png', dpi=300)
-
-#         # Export .wav files
-#         if p.exportParams.wavFiles:
-#             out.export_sounds(wasnObj.wasn, p.exportParams.exportFolder)
-
-#     return out
