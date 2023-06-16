@@ -168,6 +168,9 @@ class TestParameters:
     originYaml: str = ''  # path to the YAML file from which the parameters were loaded
 
     def __post_init__(self):
+        self.wasnParams.__post_init__()
+        self.danseParams.__post_init__()
+        #
         np.random.seed(self.seed)  # set random seed
         random.seed(self.seed)  # set random seed
         #
@@ -279,7 +282,7 @@ class DANSEvariables(base.DANSEparameters):
     def import_params(self, p: base.DANSEparameters):
         self.__dict__.update(p.__dict__)
 
-    def init_from_wasn(self, wasn: list[Node]):
+    def init_from_wasn(self, wasn: list[Node], tiDANSEflag=False):
         """
         Initialize `DANSEvariables` object based on `wasn`
         list of `Node` objects.
@@ -291,8 +294,9 @@ class DANSEvariables(base.DANSEparameters):
         self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
-        # Check for TI-DANSE case
-        self.tidanseFlag = not check_if_fully_connected(wasn)
+        # # Check for TI-DANSE case
+        # self.tidanseFlag = not check_if_fully_connected(wasn)
+        self.tidanseFlag = tiDANSEflag
         # Check for non-sequential node-updating
         self.seqNUflag = 'seq' in self.nodeUpdating
 
@@ -2103,7 +2107,7 @@ class TIDANSEvariables(DANSEvariables):
 
     def __init__(self, p: base.DANSEparameters, wasn: list[Node]):
         self.import_params(p)           # import base DANSE parameters
-        self.init_from_wasn(wasn)       # import WASN parameters
+        self.init_from_wasn(wasn, tiDANSEflag=True) # import WASN parameters
         self.init_for_adhoc_topology()  # TI-DANSE-specific variables
     
     def init_for_adhoc_topology(self):

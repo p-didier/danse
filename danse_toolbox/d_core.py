@@ -460,7 +460,7 @@ def tidanse_batch(
     # Initialize TI-DANSE variables
     btidv = BatchTIDANSEvariables(p, wasnObj.wasn)
     btidv.import_params(p)
-    btidv.init_from_wasn(wasnObj.wasn)
+    btidv.init_from_wasn(wasnObj.wasn, tiDANSEflag=True)
     btidv.init_for_adhoc_topology()  # TI-DANSE-specific variables
     btidv.init()  # batch-mode-specific initialization
 

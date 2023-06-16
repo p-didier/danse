@@ -2,25 +2,26 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230615_tests/TIGEVDDANSE/online/1_baseline_seq_N1024_oneTree  # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230616_tests/sanityCheck_2nodes/3_tidanse_asy_w1  # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
   maxBatchUpdates: 30
-  # performGEVD: false
-  performGEVD: true
+  performGEVD: false
+  # performGEVD: true
   # simType: batch
   simType: online
-  # nodeUpdating: asy
-  nodeUpdating: seq
+  nodeUpdating: asy
+  # nodeUpdating: seq
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
   computeCentralised: true
   filterInitType: selectFirstSensor_andFixedValue
   # filterInitType: selectFirstSensor
+  # filterInitFixedValue: 0.01
   filterInitFixedValue: 1
   #
   # ------------ SRO stuff
@@ -37,11 +38,11 @@ danseParams:
   # DFTsize: 2048
   # DFTsize: 4096
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 30
-  t_expAvg50pExternalFilters: 30
+  t_expAvg50p: 10
+  t_expAvg50pExternalFilters: 10
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   # forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
-  timeBtwExternalFiltUpdates: 1
+  timeBtwExternalFiltUpdates: 0.25
   # timeBtwExternalFiltUpdates: 0.25
   printoutsAndPlotting:
     printout_profiler: false
@@ -49,8 +50,8 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Diffuse noise params
-  diffuseNoise: true
-  # diffuseNoise: false
+  # diffuseNoise: true
+  diffuseNoise: false
   diffuseNoisePowerFactor: -5
   # diffuseNoisePowerFactor: -9999
   # typeDiffuseNoise: noise
@@ -78,10 +79,10 @@ wasnParams:
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
   SROperNode: '[0]'  # [PPM]
-  nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[3, 3]'
   # nSensorPerNode: '[3, 3, 3]'
-  # nSensorPerNode: '[1, 1, 1]'
+  nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[2, 2, 2]'
   interSensorDist: 0.2
   #
@@ -91,8 +92,8 @@ wasnParams:
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2_16000Hz.wav
   nDesiredSources: 1
-  nNodes: 3
-  nNoiseSources: 2
+  nNodes: 2
+  nNoiseSources: 1
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
@@ -102,4 +103,5 @@ wasnParams:
     # topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
-    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists
+    # userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists
+    userDefinedTopo: '[[1, 1], [1, 1]]'  # compact way to write lists

@@ -6,6 +6,7 @@
 import sys
 import time
 import datetime
+from danse_toolbox.d_classes import TestParameters
 from pathlib import Path
 import tests.sandbox
 import tests.danse_robustness_to_sros

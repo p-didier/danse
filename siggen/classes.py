@@ -117,6 +117,8 @@ class TopologyParameters:
             # If fully connected, adapt fields
             if (self.userDefinedTopo == 1).all():
                 inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
+                while inp not in ['y', 'n', 'Y', 'N']:
+                    inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
                 if inp in ['y', 'Y']:
                     print('Setting field "topologyType" to "fully-connected" -> will compute DANSE (not TI-DANSE)')
                     self.topologyType = 'fully-connected'
@@ -142,6 +144,8 @@ class WASNparameters(AcousticScenarioParameters):
     def __post_init__(self):
         """Post-initialization commands, automatically conducted when invoking
         a class instance."""
+        self.topologyParams.__post_init__()
+        #
         if int(self.generateRandomWASNwithSeed) > 0:
             rng = np.random.default_rng(int(self.generateRandomWASNwithSeed))
             # Generate random WASN
