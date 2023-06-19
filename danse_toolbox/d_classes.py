@@ -1,4 +1,5 @@
 import copy
+import time
 import shutil
 import random
 import warnings
@@ -697,6 +698,7 @@ class DANSEvariables(base.DANSEparameters):
             cn_RyyCentr=copy.deepcopy(initCNlist),
             iter_cn_RyyCentr=copy.deepcopy(initIterCNlist),
         )
+        self.figs = []  # list of figures that are dynamically updated during debugging
         # Inform about which condition numbers are to be computed
         self.condNumbers.init(self.computeLocal, self.computeCentralised)
         # Information about the last saved condition number
@@ -2291,7 +2293,8 @@ class TIDANSEvariables(DANSEvariables):
                 self.zLocal_n[k] += self.zLocal_n[l]
 
         # At the root, the sum is complete
-        if len(self.downstreamNeighbors[k]) == 0:
+        if len(self.downstreamNeighbors[k]) == 0 and\
+            self.currentWasnTreeObj.rootIdx == k:  # redundant but safe check
             self.eta[k] = copy.deepcopy(self.zLocal[k])
             self.eta_s[k] = copy.deepcopy(self.zLocal_s[k])
             self.eta_n[k] = copy.deepcopy(self.zLocal_n[k])
@@ -2312,9 +2315,9 @@ class TIDANSEvariables(DANSEvariables):
             self.eta[l] = copy.deepcopy(self.eta[k])  # relay
             self.eta_s[l] = copy.deepcopy(self.eta_s[k])  # relay
             self.eta_n[l] = copy.deepcopy(self.eta_n[k])  # relay
-            self.etaMk[l] = self.eta[l] - self.zLocalPrime[l]  # $\eta_{-k}$
-            self.etaMk_s[l] = self.eta_s[l] - self.zLocalPrime_s[l]  # $\eta_{-k}$
-            self.etaMk_n[l] = self.eta_n[l] - self.zLocalPrime_n[l]  # $\eta_{-k}$
+            self.etaMk[l] = self.eta[l] - self.zLocalPrime[l]  # $\eta_{-l}$
+            self.etaMk_s[l] = self.eta_s[l] - self.zLocalPrime_s[l]  # $\eta_{-l}$
+            self.etaMk_n[l] = self.eta_n[l] - self.zLocalPrime_n[l]  # $\eta_{-l}$
 
     def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
         """
@@ -2343,7 +2346,7 @@ class TIDANSEvariables(DANSEvariables):
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
             self.build_ycentr(tCurr, fs, k)
-        if self.computeLocal:  # extract local info from `\tilde{y}_k`
+        if self.computeLocal:  # extract local info (most easily: from `\tilde{y}_k`)
             self.yLocal[k][:, self.i[k], :] =\
                 self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
             self.yLocal_s[k][:, self.i[k], :] =\
@@ -2363,6 +2366,36 @@ class TIDANSEvariables(DANSEvariables):
         
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
+
+        if k == 0:
+            if len(self.figs) == 0:
+                fig, axes = plt.subplots(2, 1)
+                plt.ion()
+                plt.show(block=False)
+                self.figs.append((fig, axes))
+            else:
+                self.figs[0][1][0].cla()
+                self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 0]))
+                self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 1]))
+                self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 1, 1]))
+                self.figs[0][1][0].legend(
+                    ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
+                )
+                self.figs[0][1][0].set_title(f'|Ryytilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s')
+                #
+                self.figs[0][1][1].cla()
+                self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 0]))
+                self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 1]))
+                self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 1, 1]))
+                self.figs[0][1][1].legend(
+                    ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
+                )
+                self.figs[0][1][1].set_title(f'|Rbnntilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s')
+                #
+                self.figs[0][0].canvas.draw()
+                self.figs[0][0].canvas.flush_events()
+                time.sleep(0.001)
+                stop = 1
 
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)
@@ -2583,6 +2616,7 @@ class TIDANSEvariables(DANSEvariables):
             # corresponding to the in-network sum.
             p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
                 self.wTildeExt[k][:, self.i[k], -1:]
+            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 
