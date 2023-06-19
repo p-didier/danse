@@ -175,7 +175,7 @@ class DANSEparameters(Hyperparameters):
         # - "topo-indep_seq": round-robin updating for TI-DANSE [5]
         # - "topo-indep_sim": simultaneous updating for TI-DANSE [5]
         # - "topo-indep_asy": asynchronous updating for TI-DANSE [5]
-    seqUpdateStartNodeIdx : int = 1  # index of node updating first.
+    seqUpdateStartNodeIdx : int = 0  # index of node updating first.
         # Used iff `'seq' in nodeUpdating`.
     broadcastType: str = 'wholeChunk'    # type of broadcast
         # -- 'wholeChunk': chunks of compressed signals in time-domain,
@@ -278,6 +278,8 @@ class DANSEparameters(Hyperparameters):
         # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
             # NB: according to Paul Didier's testings from December 2022,
             # 'kruskal' and 'prim' are faster and more scalable than 'boruvka'.
+    keepOriginalTree: bool = False  # if True, keep the original tree (do not
+        # form new ones at every iteration).
     # ---- Debugging
     saveConditionNumber: bool = False   # if True, save condition numbers of
         # relevant covariance matrices.
@@ -664,15 +666,18 @@ def prep_evmat_build(
             # ensure fusion occurs in all nodes before broadcasting (necessary
             # to compute partial in-network sums).
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
+            # if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
             reInstants = copy.deepcopy(fuInstants)  # same relay instants
+                # raise ValueError('WRONG: the relay instants depend on which node is the root!!!')
             # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            if 'seq' in p.nodeUpdating:
+            if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
                 # form new tree at every DANSE update
                 seqUpInstants, upNodeIndices = get_sequential_update_instants(
                     upInstants=upInstants,
                     startNodeIdx=p.seqUpdateStartNodeIdx
                 )
                 trInstants = copy.deepcopy(seqUpInstants)
+                trInstants[0] = 0  # the first tree formation happens at t=0 s.
             else:
                 # form tree at WASN initialization only
                 trInstants = np.array([0])
@@ -946,7 +951,7 @@ def build_events_matrix(
 
         # Check if a new tree topology must be formed
         if tiFlag:
-            if currInstant in trInstants and\
+            if currInstant in trInstants[:, 0] and\
                 currInstant != lastTreeFormationInstant:
                 treeFormationCounter += 1
                 lastTreeFormationInstant = currInstant
@@ -991,7 +996,6 @@ def build_events_matrix(
                     if nodesConcerned[ii] == np.mod(lastUpNode + 1, nNodes):
                         # Increment last updating node index
                         lastUpNodeUpdated = nodesConcerned[ii]
-                        # break  # break `for`-loop
                         bypassUpdate[ii] = False
                     else:
                         # Bypass update in other nodes
