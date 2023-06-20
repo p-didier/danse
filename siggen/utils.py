@@ -115,66 +115,101 @@ def build_room(p: classes.WASNparameters):
             maxR = p.rd[0]  # room width
 
         # Generate a random line offset with respect to the room floor
-        circRmin = 2 * p.interSensorDist * np.amax(p.nSensorPerNode)  # minimum nodes circle radius
-        xOffset = np.random.uniform(
-            p.minDistToWalls + circRmin, p.rd[0] - circRmin - p.minDistToWalls
-        )
-        yOffset = np.random.uniform(
-            p.minDistToWalls + circRmin, p.rd[1] - circRmin - p.minDistToWalls
-        )
-        
+        if p.spinTop_minInterNodeDist is not None:
+            circRmin = copy.deepcopy(p.spinTop_minInterNodeDist)
+        else:
+            circRmin = 2 * p.interSensorDist * np.amax(p.nSensorPerNode)
+
         # Generate node and sensor positions
         validNodePos = False
         attemptsCount = 0
         maxNumAttempts = 999  # <-- arbitrary... [PD06.04.2023]
         while not validNodePos:
-            print('Attempt number: ' + str(attemptsCount + 1))
+            if attemptsCount > maxNumAttempts:
+                raise ValueError("Could not find valid node positions.")
+            print('Spinning-top layout creation -- attempt #' + str(attemptsCount + 1))
+            
+            # Set a random spinning top axis center   
+            xOffset = np.random.normal(
+                p.minDistToWalls + circRmin, p.rd[0] - circRmin - p.minDistToWalls
+            )
+            yOffset = np.random.normal(
+                p.minDistToWalls + circRmin, p.rd[1] - circRmin - p.minDistToWalls
+            )
+
             # Generate a random line for the sources
             azimuthLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
             elevationLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
             
             # Generate speech sources along the line
-            desiredSourceCoords = np.zeros((3, p.nDesiredSources))
-            for ii in range(p.nDesiredSources):
-                # Generate random point on the line
-                x, y, z = random_point_on_line(
-                    azimuthLine,
-                    elevationLine,
-                    xOffset,
-                    yOffset,
-                    p.rd
-                )
-                desiredSourceCoords[:, ii] = np.array([x, y, z])
+            # desiredSourceCoords = np.zeros((3, p.nDesiredSources))
+            # for ii in range(p.nDesiredSources):
+            #     # Generate random point on the line
+            desiredSourceCoords = random_points_on_line(
+                azimuthLine,
+                elevationLine,
+                xOffset,
+                yOffset,
+                p.rd,
+                n=p.nDesiredSources,
+                minSpacing=p.spinTop_minSourceSpacing
+            )
+            
+                # desiredSourceCoords[:, ii] = np.array([x, y, z])
+            if desiredSourceCoords is None:
+                attemptsCount += 1
+                continue
+            desiredSourceCoords = desiredSourceCoords.T  # adapt for pyroomacoustics
 
             # Generate noise sources along the line
-            noiseSourceCoords = np.zeros((3, p.nNoiseSources))
-            for ii in range(p.nNoiseSources):
-                # Generate random point on the line
-                x, y, z = random_point_on_line(
-                    azimuthLine,
-                    elevationLine,
-                    xOffset,
-                    yOffset,
-                    p.rd
-                )
-                noiseSourceCoords[:, ii] = np.array([x, y, z])
+            # noiseSourceCoords = np.zeros((3, p.nNoiseSources))
+            noiseSourceCoords = random_points_on_line(
+                azimuthLine,
+                elevationLine,
+                xOffset,
+                yOffset,
+                p.rd,
+                n=p.nNoiseSources,
+                minSpacing=p.spinTop_minSourceSpacing
+            )
+            # for ii in range(p.nNoiseSources):
+            #     # Generate random point on the line
+            #     x, y, z = random_points_on_line(
+            #         azimuthLine,
+            #         elevationLine,
+            #         xOffset,
+            #         yOffset,
+            #         p.rd
+            #     )
+            #     noiseSourceCoords[:, ii] = np.array([x, y, z])
+            # if np.isnan(noiseSourceCoords).any():
+            if noiseSourceCoords is None:
+                attemptsCount += 1
+                continue
+            noiseSourceCoords = noiseSourceCoords.T  # adapt for pyroomacoustics
+
             
             # Generate random circle center
-            cx, cy, cz = random_point_on_line(
+            circCenter = random_points_on_line(
                 azimuthLine,
                 elevationLine,
                 xOffset,
                 yOffset,
                 p.rd
             )
+            circCenter = np.squeeze(circCenter)
+            if circCenter is None:
+                attemptsCount += 1
+                continue
             # Compute maximal circle radius based on room dimension
             if 'random' in p.layoutType:
                 refDistCenterCircle = np.sqrt(
-                    np.sum(np.array([cx, cy, cz]) ** 2)
+                    np.sum(np.array(circCenter) ** 2)
                 )  # distance from circle center to room origin
             elif 'vert' in p.layoutType:
+                circCenter[2] = 0
                 refDistCenterCircle = np.sqrt(
-                    np.sum(np.array([cx, cy, 0]) ** 2)
+                    np.sum(np.array(circCenter) ** 2)
                 )  # distance from circle center to room origin
             
             if refDistCenterCircle < maxR / 2:
@@ -187,15 +222,15 @@ def build_room(p: classes.WASNparameters):
             else:
                 circR = np.random.uniform(circRmin, circRmax)
 
-            sensorCoords = np.zeros((np.sum(p.nSensorPerNode), 3))
+            sensorsCoords = np.zeros((np.sum(p.nSensorPerNode), 3))
             # Generate array centers equally spaced on the circle
             angleArrayCenters = np.arange(0, 2 * np.pi, 2 * np.pi / p.nNodes)
             for k in range(p.nNodes):
                 # Generate node and sensors on the perimeter of the circle
                 r = angleArrayCenters[k]
-                x = cx + circR * np.cos(r)
-                y = cy + circR * np.sin(r)
-                z = cz
+                x = circCenter[0] + circR * np.cos(r)
+                y = circCenter[1] + circR * np.sin(r)
+                z = circCenter[2]
                 # If asked, add random wiggle to the array centers
                 if p.spinTop_randomWiggleAmount != 0:
                     print('Adding random wiggle to array centers... (amount = +/-' + str(p.spinTop_randomWiggleAmount) + ' m)')
@@ -212,7 +247,7 @@ def build_room(p: classes.WASNparameters):
                         p.spinTop_randomWiggleAmount
                     )
                 idxSensor = int(np.sum(p.nSensorPerNode[:k]))
-                sensorCoords[idxSensor:(idxSensor + p.nSensorPerNode[k]), :] =\
+                sensorsCoords[idxSensor:(idxSensor + p.nSensorPerNode[k]), :] =\
                     generate_array_pos(
                     np.array([x, y, z]),
                     p.nSensorPerNode[k],
@@ -223,20 +258,24 @@ def build_room(p: classes.WASNparameters):
             # Rotate coordinates so that the circle is perpendicular
             # to the source line.
             if 'random' in p.layoutType:
-                sensorCoords = rotate_array_yx(
-                    sensorCoords,
-                    targetVector=np.array([cx, cy, cz])
+                sensorsCoords = rotate_array_yx(
+                    sensorsCoords,
+                    targetVector=np.array(circCenter)
                 )
             
-            # Check that all microphones are in the room
-            if np.any(sensorCoords > p.rd - p.minDistToWalls) or\
-                np.any(sensorCoords < p.minDistToWalls):
+            # Check that all microphones and sources are in the room
+            if np.any(sensorsCoords > p.rd - p.minDistToWalls) or\
+                np.any(sensorsCoords < p.minDistToWalls) or\
+                np.any(desiredSourceCoords > p.rd - p.minDistToWalls) or\
+                np.any(desiredSourceCoords < p.minDistToWalls) or\
+                np.any(noiseSourceCoords > p.rd - p.minDistToWalls) or\
+                np.any(noiseSourceCoords < p.minDistToWalls):
                 validNodePos = False
                 attemptsCount += 1
-                if attemptsCount > maxNumAttempts:
-                    raise ValueError("Could not find valid node positions.")
             else:
                 validNodePos = True
+        
+        sensorsCoords = sensorsCoords.T  # adapt for `add_sensors_and_sources_to_room`
         
     # Add sensors and sources to room
     room, desiredSignalsRaw, noiseSignalsRaw = add_sensors_and_sources_to_room(
@@ -1296,7 +1335,7 @@ def rotate_array_yx(array, targetVector=None):
     return array
 
 
-def random_point_on_line(
+def random_points_on_line(
         az,
         el,
         minDistToWalls,
@@ -1304,6 +1343,8 @@ def random_point_on_line(
         rd,
         xOffset=0,
         yOffset=0,
+        n=1,
+        minSpacing=0
     ):
     """
     Generate a random point on a line.
@@ -1324,6 +1365,10 @@ def random_point_on_line(
         Offset on the x axis.
     yOffset : float, optional
         Offset on the y axis.
+    n : int, optional
+        Number of points to generate.
+    minSpacing : float, optional
+        Minimum spacing between points [m].
 
     Returns
     -------
@@ -1334,11 +1379,7 @@ def random_point_on_line(
     z : float
         z coordinate of the point.
     """
-    # Ensure the points are in the room
-    cond1, cond2, cond3 = True, True, True
-    x, y, z = -1, -1, -1
-    iterCount = 0
-    while cond1 or cond2 or cond3:
+    def get_rand_point():
         r = np.random.uniform(
             minDistToWalls,
             maxR - minDistToWalls
@@ -1348,14 +1389,38 @@ def random_point_on_line(
         x += xOffset
         y += yOffset
         z = r * np.cos(el)
-        # Update conditions
-        cond1 = x > rd[0] - minDistToWalls or x < minDistToWalls
-        cond2 = y > rd[1] - minDistToWalls or y < minDistToWalls
-        cond3 = z > rd[2] - minDistToWalls or z < minDistToWalls
-        iterCount += 1
-        if iterCount > 1000:
-            raise ValueError('Cannot find ASC for specified spinning-top layout parameters.')
-    return x, y, z
+        return x, y, z
+    
+    maxIter = 1000 # HARDCODED
+
+    allPoints = np.zeros((n, 3))
+    for ii in range(n):
+        # Ensure the points are in the room
+        cond1, cond2, cond3 = True, True, True
+        x, y, z = -1, -1, -1
+        iterCount = 0
+        while cond1 or cond2 or cond3:
+            x, y, z = get_rand_point()
+            # Update conditions
+            cond1 = x > rd[0] - minDistToWalls or x < minDistToWalls
+            cond2 = y > rd[1] - minDistToWalls or y < minDistToWalls
+            cond3 = z > rd[2] - minDistToWalls or z < minDistToWalls
+            iterCount += 1
+            if iterCount > maxIter:
+                return None
+        # Ensure the points are spaced enough
+        if ii > 0 and minSpacing > 0:
+            while np.any(np.linalg.norm(allPoints[:ii, :] - np.array([x, y, z]), axis=1) < minSpacing):
+                x, y, z = get_rand_point()
+                # Update conditions
+                cond1 = x > rd[0] - minDistToWalls or x < minDistToWalls
+                cond2 = y > rd[1] - minDistToWalls or y < minDistToWalls
+                cond3 = z > rd[2] - minDistToWalls or z < minDistToWalls
+                iterCount += 1
+                if iterCount > maxIter:
+                    return None
+        allPoints[ii, :] = np.array([x, y, z])
+    return allPoints
 
 
 def array_id(

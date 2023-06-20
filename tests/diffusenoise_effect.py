@@ -37,6 +37,7 @@ def main(
         currPowFact = int(dnPowFacts[ii])
         print(f'\n>>> Running test {ii+1}/{len(dnPowFacts)} for diffuse noise power factor = {currPowFact} dB...')
         currParams = copy.deepcopy(p)
+        currParams.wasnParams.diffuseNoise = True
         currParams.wasnParams.diffuseNoisePowerFactor = currPowFact
         currParams.exportParams.exportFolder =\
             f'{baseExportPath}/dnPowFact_{currPowFact}dB'

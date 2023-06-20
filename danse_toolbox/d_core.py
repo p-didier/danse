@@ -205,8 +205,6 @@ def tidanse(
                     fs[k],
                     bypassUpdate
                 )
-                if tidv.startUpdates[k]:
-                    stop = 1
                 if k == tidv.currentWasnTreeObj.rootIdx and\
                     bypassUpdate:
                     raise ValueError()

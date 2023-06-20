@@ -1749,8 +1749,8 @@ class DANSEvariables(base.DANSEparameters):
         current (external) DANSE filters. Works for both fully connected
         DANSE and TI-DANSE.
         """
-        if hasattr(self, 'eta'):  # TI-DANSE case
-            raise ValueError('TODO: `useThisFilter` parameter for TI-DANSE')
+        if self.tidanseFlag:  # TI-DANSE case
+            # raise ValueError('TODO: `useThisFilter` parameter for TI-DANSE')
             etaMkBatch = np.zeros((
                 self.yinSTFT[k].shape[0],
                 self.yinSTFT[k].shape[1]
@@ -1762,9 +1762,15 @@ class DANSEvariables(base.DANSEparameters):
                 # as `yinSTFT`.
             for idxNode in range(self.nNodes):
                 if idxNode != k:  # only sum over the other nodes
+                    if useThisFilter is not None:
+                        # Bypass `wTildeExt`
+                        fusionFilter = useThisFilter[idxNode]
+                    else:
+                        fusionFilter = self.wTildeExt[idxNode][:, self.i[idxNode], :]
                     # TI-DANSE fusion vector
-                    p = self.wTildeExt[idxNode][:, self.i[idxNode], :self.nSensorPerNode[idxNode]] /\
-                        self.wTildeExt[idxNode][:, self.i[idxNode], -1:]
+                    # p = fusionFilter[:, :self.nSensorPerNode[idxNode]] /\
+                    #     fusionFilter[:, -1:]
+                    p = fusionFilter[:, :self.nSensorPerNode[idxNode]]
                     # Compute sum
                     etaMkBatch += np.einsum(   # <-- `+=` is important
                         'ij,ikj->ik',
@@ -2707,9 +2713,9 @@ class TIDANSEvariables(DANSEvariables):
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
-                self.wTildeExt[k][:, self.i[k], -1:]
-            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
+            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
+            #     self.wTildeExt[k][:, self.i[k], -1:]
+            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 

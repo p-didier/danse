@@ -28,7 +28,7 @@ def main():
 
     tests.sandbox.main(
         cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-        plotASCearly=False,
+        plotASCearly=True,
     )
 
     # Benchmark tests for the TI-GEVD-DANSE online implementation.
@@ -66,13 +66,13 @@ def main():
 
     # Test the effect of the presence of diffuse noise in the DANSE simulations.
     #
-    # tests.diffusenoise_effect.main(
-    #     baseCfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-    #     baseExportPath=f'{Path(__file__).parent}/out/20230608_tests/dn_effect/batch_danse',
-    # )
+    tests.diffusenoise_effect.main(
+        baseCfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
+        baseExportPath=f'{Path(__file__).parent}/out/20230620_tests/dn_effect/online_danse_3noises_st',
+    )
     # tests.diffusenoise_effect_postproc.main(
-    #     forcedSNRylims=[-7, 45],
-    #     baseExportPath=f'{Path(__file__).parent}/out/20230608_tests/dn_effect/batch_danse',
+    #     # forcedSNRylims=[-7, 45],
+    #     baseExportPath=f'{Path(__file__).parent}/out/20230620_tests/dn_effect/online_danse',
     # )
 
     print(f'\n\nTotal runtime: {str(datetime.timedelta(seconds=time.time() - t0))}.')

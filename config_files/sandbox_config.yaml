@@ -2,7 +2,7 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230620_tests/covMatBatchInit/gevd/test3_randomCovMatsInit # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230620_tests/TIDANSE/seq/test3_baselineASC # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
@@ -10,12 +10,12 @@ exportParams:
 danseParams:
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 30
-  # performGEVD: false
-  performGEVD: true
+  performGEVD: false
+  # performGEVD: true
   # simType: batch
   simType: online
-  # nodeUpdating: asy
-  nodeUpdating: seq
+  nodeUpdating: asy
+  # nodeUpdating: seq
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
@@ -39,14 +39,14 @@ danseParams:
   # DFTsize: 2048
   # DFTsize: 4096
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 1
-  t_expAvg50pExternalFilters: 1
+  t_expAvg50p: 2
+  t_expAvg50pExternalFilters: 2
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   # forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
   timeBtwExternalFiltUpdates: 0.25
   # timeBtwExternalFiltUpdates: 0.25
-  covMatInitType: fully_random
-  # covMatInitType: batch_estimates
+  # covMatInitType: fully_random
+  covMatInitType: batch_estimates
   # covMatInitType: eye
   covMatEyeInitScaling: 1
   covMatSameInitForAllNodes: true
@@ -57,9 +57,9 @@ referenceSensor: 0
 snrYlimMax: null
 wasnParams:
   # Diffuse noise params
-  # diffuseNoise: true
-  diffuseNoise: false
-  diffuseNoisePowerFactor: -5
+  diffuseNoise: true
+  # diffuseNoise: false
+  diffuseNoisePowerFactor: 5
   # diffuseNoisePowerFactor: -9999
   # typeDiffuseNoise: noise
   typeDiffuseNoise: babble
@@ -70,16 +70,18 @@ wasnParams:
   VADwinLength: 0.04  # [s]
   vadMinProportionActive: 0.25 
   rd: '[5, 5, 5]'
-  minDistToWalls: 0.5
   sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
-  layoutType: random
+  # layoutType: random
   # layoutType: vert_spinning_top
-  # layoutType: random_spinning_top
+  layoutType: random_spinning_top
   # layoutType: predefined
+  minDistToWalls: 0.5
   predefinedLayoutFile: danse/config_files/asc_layouts/asc2_20230613_174233.yaml
   spinTop_randomWiggleAmount: 0.1  # [m]
+  spinTop_minInterNodeDist: 1  # [m]
+  spinTop_minSourceSpacing: 0.5  # [m]
   t60: 0.2  # [s]
   # t60: 0.0  # [s]
   # SROperNode: '[0, 100, 200]'  # [PPM]
@@ -101,7 +103,7 @@ wasnParams:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2_16000Hz.wav
   nDesiredSources: 1
   nNodes: 3
-  nNoiseSources: 2
+  nNoiseSources: 3
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
@@ -112,4 +114,4 @@ wasnParams:
     commDistance: 4.0
     plotTopo: false
     # userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists
-    userDefinedTopo: '[[1, 1], [1, 1]]'  # compact way to write lists
+    # userDefinedTopo: '[[1, 1], [1, 1]]'  # compact way to write lists

@@ -35,6 +35,10 @@ class AcousticScenarioParameters:
     #
     spinTop_randomWiggleAmount: float = 0.0  # [m] amount of random wiggle
         # in the node positions (only for the spinning top layout).
+    spinTop_minInterNodeDist: float = None  # [m] minimum distance between nodes
+        # (only for the spinning top layout).
+    spinTop_minSourceSpacing: float = None  # [m] minimum distance between
+        # sound sources (only for the spinning top layout).
     #    
     referenceSensor: int = 0    # Index of the reference sensor at each node
     interSensorDist: float = 0.1   # distance separating microphones
