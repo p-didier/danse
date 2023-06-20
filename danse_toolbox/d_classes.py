@@ -346,9 +346,8 @@ class DANSEvariables(base.DANSEparameters):
         )  # fixed arguments for `init_covmats` function
 
         # Covariance matrices initialization
-        if self.covMatInitType == 'batch_ground_truth':
-            raise NotImplementedError
-        elif self.covMatSameInitForAllNodes:
+        if not self.covMatInitType == 'batch_estimates' and\
+            self.covMatSameInitForAllNodes:
             if self.covMatSameInitForAllFreqs:
                 fullSlice = base.init_covmats(
                     (nSensorsTotal, nSensorsTotal), rng, *args
@@ -357,7 +356,7 @@ class DANSEvariables(base.DANSEparameters):
                 fullSlice = base.init_covmats(
                     (self.nPosFreqs, nSensorsTotal, nSensorsTotal), rng, *args
                 )
-        
+
         for k in range(nNodes):
             # Set number of received signal channels, on top of local signals
             if self.tidanseFlag:
@@ -381,52 +380,53 @@ class DANSEvariables(base.DANSEparameters):
             SROsResiduals.append(np.zeros((self.nIter, nSROestimates)))
             # ------- Covariance matrices initialization -------
             #
-            if not self.covMatSameInitForAllNodes:
+            if not self.covMatInitType == 'batch_estimates':
+                if not self.covMatSameInitForAllNodes:
+                    if self.covMatSameInitForAllFreqs:
+                        fullSlice = base.init_covmats(
+                            (nSensorsTotal, nSensorsTotal), rng, *args
+                        )
+                    else:
+                        fullSlice = base.init_covmats(
+                            (self.nPosFreqs, nSensorsTotal, nSensorsTotal), rng, *args
+                        )
                 if self.covMatSameInitForAllFreqs:
-                    fullSlice = base.init_covmats(
-                        (nSensorsTotal, nSensorsTotal), rng, *args
-                    )
+                    sliceTilde = fullSlice[:dimYTilde[k], :dimYTilde[k]]
+                    Rnntilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
+                    Ryytilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
+                    #
+                    sliceCentr = copy.deepcopy(fullSlice)
+                    Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+                    Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+                    #
+                    sliceLocal = fullSlice[:wasn[k].nSensors, :wasn[k].nSensors]
+                    Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
+                    Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
                 else:
-                    fullSlice = base.init_covmats(
-                        (self.nPosFreqs, nSensorsTotal, nSensorsTotal), rng, *args
+                    Rnntilde.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
+                    Ryytilde.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
+                    #
+                    Rnncentr.append(fullSlice)
+                    Ryycentr.append(fullSlice)
+                    #
+                    Rnnlocal.append(
+                        fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
                     )
-            if self.covMatSameInitForAllFreqs:
-                sliceTilde = fullSlice[:dimYTilde[k], :dimYTilde[k]]
-                Rnntilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
-                Ryytilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
-                #
-                sliceCentr = copy.deepcopy(fullSlice)
-                Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
-                Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
-                #
-                sliceLocal = fullSlice[:wasn[k].nSensors, :wasn[k].nSensors]
-                Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
-                Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
-            else:
-                Rnntilde.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
-                Ryytilde.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
-                #
-                Rnncentr.append(fullSlice)
-                Ryycentr.append(fullSlice)
-                #
-                Rnnlocal.append(
-                    fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
-                )
-                Ryylocal.append(
-                    fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
-                )
-            if not self.seqNUflag:  # simultaneous or asynchronous node-updating
-                if self.covMatSameInitForAllFreqs:
-                    sliceZ = fullSlice[:nReceivedChannels + 1, :nReceivedChannels + 1]
-                    Rznzn.append(np.tile(sliceZ, (self.nPosFreqs, 1, 1)))
-                    Rzz.append(np.tile(sliceZ, (self.nPosFreqs, 1, 1)))
-                else:
-                    Rznzn.append(
-                        fullSlice[:, :nReceivedChannels + 1, :nReceivedChannels + 1]
+                    Ryylocal.append(
+                        fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
                     )
-                    Rzz.append(
-                        fullSlice[:, :nReceivedChannels + 1, :nReceivedChannels + 1]
-                    )
+                if not self.seqNUflag:  # simultaneous or asynchronous node-updating
+                    if self.covMatSameInitForAllFreqs:
+                        sliceZ = fullSlice[:nReceivedChannels + 1, :nReceivedChannels + 1]
+                        Rznzn.append(np.tile(sliceZ, (self.nPosFreqs, 1, 1)))
+                        Rzz.append(np.tile(sliceZ, (self.nPosFreqs, 1, 1)))
+                    else:
+                        Rznzn.append(
+                            fullSlice[:, :nReceivedChannels + 1, :nReceivedChannels + 1]
+                        )
+                        Rzz.append(
+                            fullSlice[:, :nReceivedChannels + 1, :nReceivedChannels + 1]
+                        )
             # ------- Other variables initialization -------
             #
             t[:, k] = wasn[k].timeStamps
@@ -512,8 +512,6 @@ class DANSEvariables(base.DANSEparameters):
         # Create fields
         self.avgProdResiduals = avgProdResiduals
         self.bufferFlags = bufferFlags
-        self.cleanSpeechSignalsAtNodes = [node.cleanspeech for node in wasn]
-        self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
         self.d = np.zeros(
             (wasn[self.referenceSensor].data.shape[0], nNodes)
         )
@@ -549,14 +547,12 @@ class DANSEvariables(base.DANSEparameters):
         self.idxBegChunk = None
         self.idxEndChunk = None
         self.lastExtFiltUp = np.zeros(nNodes)
-        self.neighbors = [node.neighborsIdx for node in wasn]
         self.nCentrFilterUps = np.zeros(nNodes)
         self.nLocalFilterUps = np.zeros(nNodes)
         self.nInternalFilterUps = np.zeros(nNodes)
         self.nLocalMic = [node.data.shape[-1] for node in wasn]
         self.numUpdatesRyy = np.zeros(nNodes, dtype=int)
         self.numUpdatesRnn = np.zeros(nNodes, dtype=int)
-        self.oVADframes = [node.vadPerFrame for node in wasn]
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
         self.lastBroadcastInstant = np.zeros(nNodes)
@@ -581,7 +577,6 @@ class DANSEvariables(base.DANSEparameters):
         self.tStartForMetricsCentr = np.full(shape=(nNodes,), fill_value=None)
         self.tStartForMetricsLocal = np.full(shape=(nNodes,), fill_value=None)
         self.upstreamNeighbors = [node.upstreamNeighborsIdx for node in wasn]
-        self.yin = [node.data for node in wasn]
         self.yyH = yyH
         self.yyHuncomp = yyHuncomp
         self.yCentr = yCentr
@@ -621,6 +616,12 @@ class DANSEvariables(base.DANSEparameters):
         self.zLocal = zLocal
         self.zLocal_s = copy.deepcopy(zLocal)
         self.zLocal_n = copy.deepcopy(zLocal)
+        # Initialize variables that are used for both online and batch modes
+        self.cleanSpeechSignalsAtNodes = [node.cleanspeech for node in wasn]
+        self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
+        self.oVADframes = [node.vadPerFrame for node in wasn]
+        self.neighbors = [node.neighborsIdx for node in wasn]
+        self.yin = [node.data for node in wasn]
 
         # For centralised and local estimates
         self.yinStacked = np.concatenate(
@@ -644,8 +645,8 @@ class DANSEvariables(base.DANSEparameters):
         vadPerFrameCentr /= len(wasn)
         self.centrVADframes = vadPerFrameCentr.astype(bool)
 
-        # Variables for batch mode
-        if 'batch' in self.simType:
+        # Variables for batch mode or for initialization from batch estimates
+        if 'batch' in self.simType or self.covMatInitType == 'batch_estimates':
             # Compute STFTs of microphone signals
             self.yinSTFT = []
             self.yinSTFT_s = []  # clean speech
@@ -677,6 +678,10 @@ class DANSEvariables(base.DANSEparameters):
             self.yCentrBatch_n = np.concatenate(arraysSequenceCentr_n, axis=2)
             # Compute batch spatial covariance matrices for local and
             # centralized processing
+            self.Ryylocal = [None for _ in range(nNodes)]
+            self.Rnnlocal = [None for _ in range(nNodes)]
+            self.Ryycentr = [None for _ in range(nNodes)]
+            self.Rnncentr = [None for _ in range(nNodes)]
             for k in range(self.nNodes):
                 self.Ryylocal[k], self.Rnnlocal[k] = update_covmats_batch(
                     self.yinSTFT[k],  # use local pre-computed STFTs
@@ -686,6 +691,12 @@ class DANSEvariables(base.DANSEparameters):
                     self.yCentrBatch,
                     self.centrVADframes
                 )
+
+        # Covariance matrices initialization from batch estimates
+        if self.covMatInitType == 'batch_estimates':
+            print('Initializing covariance matrices from batch estimates...')
+            self.init_covmats_from_batch()  # <-- directly modifies the `self` covariance matrices fields
+            print('...done.')
 
         # For debugging purposes
         initCNlist = [np.empty((self.nPosFreqs, 0)) for _ in range(nNodes)]
@@ -707,6 +718,61 @@ class DANSEvariables(base.DANSEparameters):
         self.lastCondNumberSaveRyyCentr = [-1 for _ in range(nNodes)]
 
         return self
+    
+    def init_covmats_from_batch(self):
+        """
+        Initialize covariance matrices using batch estimates and initial
+        filters (for DANSE covariance matrices).
+        """
+        # Compute batch spatial covariance matrices for DANSE processing
+        self.Ryytilde = [None for _ in range(self.nNodes)]
+        self.Rnntilde = [None for _ in range(self.nNodes)]
+        if self.performGEVD:
+            filter_update_fcn = update_w_gevd
+            rank = self.GEVDrank
+        else:
+            filter_update_fcn = update_w
+            rank = 1  # <-- arbitrary, not used in this case
+        wTildeExt_1stEstimate = [None for _ in range(self.nNodes)]
+        for k in range(self.nNodes):
+            RyyTilde_1stEstimate, RnnTilde_1stEstimate = update_covmats_batch(
+                self.get_y_tilde_batch(k, False),  # use local pre-computed STFTs
+                self.oVADframes[k]
+            )
+            # First filter estimate based on those covariance matrices
+            curr = filter_update_fcn(
+                RyyTilde_1stEstimate,
+                RnnTilde_1stEstimate,
+                refSensorIdx=self.referenceSensor,
+                rank=rank
+            )
+            if self.tidanseFlag:
+                wTildeExt_1stEstimate[k] = curr
+            else:
+                wTildeExt_1stEstimate[k] = curr[:, :self.nSensorPerNode[k]]
+        for k in range(self.nNodes):
+            self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
+                self.get_y_tilde_batch(
+                    k,
+                    False,
+                    useThisFilter=wTildeExt_1stEstimate
+                ),  # use local pre-computed STFTs
+                self.oVADframes[k]
+            )
+        # Compute batch spatial covariance matrices for local and
+        # centralized processing
+        if self.computeLocal:
+            for k in range(self.nNodes):
+                self.Ryylocal[k], self.Rnnlocal[k] = update_covmats_batch(
+                    self.yinSTFT[k],  # use local pre-computed STFTs
+                    self.oVADframes[k]
+                )
+        if self.computeCentralised:
+            for k in range(self.nNodes):
+                self.Ryycentr[k], self.Rnncentr[k] = update_covmats_batch(
+                    self.yCentrBatch,
+                    self.centrVADframes
+                )
 
     def broadcast(self, tCurr, fs, k):
         """
@@ -1031,43 +1097,62 @@ class DANSEvariables(base.DANSEparameters):
             check3 = __full_rank_check(RnnMat)
             check4 = __full_rank_check(RyyMat)
             return check1 and check2 and check3 and check4
+        
+        def _check_validity_nogevd(RnnMat, RyyMat):
+            """Helper function: combine validity checks for no-GEVD updates."""
+            def __full_rank_check(mat):
+                """Helper subfunction: check full-rank property."""
+                return (np.linalg.matrix_rank(mat) == mat.shape[-1]).all()
+            check1 = __full_rank_check(RnnMat)
+            check2 = __full_rank_check(RyyMat)
+            return check1 and check2
 
-        if not self.startUpdates[k] and tCurr >= self.startUpdatesAfterAtLeast:
-            if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
-                self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
-                if self.performGEVD:
-                    if _check_validity_gevd(self.Rnntilde[k], self.Ryytilde[k]):
-                        self.startUpdates[k] = True# and self.startUpdatesCentr[k]
-                else:
-                    self.startUpdates[k] = True# and self.startUpdatesCentr[k]
-
-        if self.simType == 'online':
-            # Local estimate
-            if self.computeLocal and not self.startUpdatesLocal[k]\
-                and tCurr >= self.startUpdatesAfterAtLeast:
-                if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
-                    self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
-                    if self.performGEVD:
-                        if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
-                            self.startUpdatesLocal[k] = True# and\
-                                #self.startUpdates[k] and self.startUpdatesCentr[k]
-                    else:
-                        self.startUpdatesLocal[k] = True# and\
-                            #self.startUpdates[k] and self.startUpdatesCentr[k]
-
-            # Centralised estimate
-            if self.computeCentralised and not self.startUpdatesCentr[k]\
-                and tCurr >= self.startUpdatesAfterAtLeast:
-                if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
-                    self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
-                    if self.performGEVD:
-                        if _check_validity_gevd(self.Rnncentr[k], self.Ryycentr[k]):
-                            self.startUpdatesCentr[k] = True
-                    else:
-                        self.startUpdatesCentr[k] = True
-        elif self.simType == 'batch':  
+        if self.covMatInitType  == 'batch_estimates':
+            # If the covariance matrices are initialized from batch estimates,
+            # start updating the filters right away.
+            self.startUpdates[k] = True
             self.startUpdatesCentr[k] = True
             self.startUpdatesLocal[k] = True
+        else:
+            if not self.startUpdates[k] and tCurr >= self.startUpdatesAfterAtLeast:
+                if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
+                    self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
+                    if self.performGEVD:
+                        if _check_validity_gevd(self.Rnntilde[k], self.Ryytilde[k]):
+                            self.startUpdates[k] = True# and self.startUpdatesCentr[k]
+                    else:
+                        if _check_validity_nogevd(self.Rnntilde[k], self.Ryytilde[k]):
+                            self.startUpdates[k] = True# and self.startUpdatesCentr[k]
+
+            if self.simType == 'online':
+                # Local estimate
+                if self.computeLocal and not self.startUpdatesLocal[k]\
+                    and tCurr >= self.startUpdatesAfterAtLeast:
+                    if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
+                        self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
+                        if self.performGEVD:
+                            if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
+                                self.startUpdatesLocal[k] = True# and\
+                                    #self.startUpdates[k] and self.startUpdatesCentr[k]
+                        else:
+                            if _check_validity_nogevd(self.Rnnlocal[k], self.Ryylocal[k]):
+                                self.startUpdatesLocal[k] = True# and\
+                                    #self.startUpdates[k] and self.startUpdatesCentr[k]
+
+                # Centralised estimate
+                if self.computeCentralised and not self.startUpdatesCentr[k]\
+                    and tCurr >= self.startUpdatesAfterAtLeast:
+                    if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
+                        self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
+                        if self.performGEVD:
+                            if _check_validity_gevd(self.Rnncentr[k], self.Ryycentr[k]):
+                                self.startUpdatesCentr[k] = True
+                        else:
+                            if _check_validity_nogevd(self.Rnncentr[k], self.Ryycentr[k]):
+                                self.startUpdatesCentr[k] = True
+            elif self.simType == 'batch':  
+                self.startUpdatesCentr[k] = True
+                self.startUpdatesLocal[k] = True
 
 
     def build_ycentr(self, tCurr, fs, k):
@@ -1657,6 +1742,7 @@ class DANSEvariables(base.DANSEparameters):
             self,
             k,
             computeSpeechAndNoiseOnly=False,
+            useThisFilter=None
         ):
         """
         Compute complete yTilde for all nodes, all frames, using
@@ -1664,6 +1750,7 @@ class DANSEvariables(base.DANSEparameters):
         DANSE and TI-DANSE.
         """
         if hasattr(self, 'eta'):  # TI-DANSE case
+            raise ValueError('TODO: `useThisFilter` parameter for TI-DANSE')
             etaMkBatch = np.zeros((
                 self.yinSTFT[k].shape[0],
                 self.yinSTFT[k].shape[1]
@@ -1722,20 +1809,26 @@ class DANSEvariables(base.DANSEparameters):
                 # ^^^ ok because `yinSTFT_s` and `yinSTFT_n` have the same
                 # shape as `yinSTFT`.
             for ii, idxNode in enumerate(self.neighbors[k]):
+                if useThisFilter is not None:
+                    # Bypass `wTildeExt`
+                    fusionFilter = useThisFilter[idxNode]
+                else:
+                    fusionFilter = self.wTildeExt[idxNode][:, self.i[idxNode], :]
+                
                 zBatch[:, :, ii] = np.einsum(
                     'ij,ikj->ik',
-                    self.wTildeExt[idxNode][:, self.i[idxNode], :].conj(),
+                    fusionFilter.conj(),
                     self.yinSTFT[idxNode]
                 )
                 if computeSpeechAndNoiseOnly:
                     zBatch_s[:, :, ii] = np.einsum(
                         'ij,ikj->ik',
-                        self.wTildeExt[idxNode][:, self.i[idxNode], :].conj(),
+                        fusionFilter.conj(),
                         self.yinSTFT_s[idxNode]
                     )
                     zBatch_n[:, :, ii] = np.einsum(
                         'ij,ikj->ik',
-                        self.wTildeExt[idxNode][:, self.i[idxNode], :].conj(),
+                        fusionFilter.conj(),
                         self.yinSTFT_n[idxNode]
                     )
             # Construct yTilde
@@ -2367,35 +2460,35 @@ class TIDANSEvariables(DANSEvariables):
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
 
-        if k == 0:
-            if len(self.figs) == 0:
-                fig, axes = plt.subplots(2, 1)
-                plt.ion()
-                plt.show(block=False)
-                self.figs.append((fig, axes))
-            else:
-                self.figs[0][1][0].cla()
-                self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 0]))
-                self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 1]))
-                self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 1, 1]))
-                self.figs[0][1][0].legend(
-                    ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
-                )
-                self.figs[0][1][0].set_title(f'|Ryytilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s')
-                #
-                self.figs[0][1][1].cla()
-                self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 0]))
-                self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 1]))
-                self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 1, 1]))
-                self.figs[0][1][1].legend(
-                    ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
-                )
-                self.figs[0][1][1].set_title(f'|Rbnntilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s')
-                #
-                self.figs[0][0].canvas.draw()
-                self.figs[0][0].canvas.flush_events()
-                time.sleep(0.001)
-                stop = 1
+        # if k == 0 and self.i[k] % 10 == 0:
+        #     if len(self.figs) == 0:
+        #         fig, axes = plt.subplots(2, 1)
+        #         plt.ion()
+        #         plt.show(block=False)
+        #         self.figs.append((fig, axes))
+        #     else:
+        #         self.figs[0][1][0].cla()
+        #         self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 0]))
+        #         self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 1]))
+        #         self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 1, 1]))
+        #         self.figs[0][1][0].legend(
+        #             ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
+        #         )
+        #         self.figs[0][1][0].set_title(f'|Ryytilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s - VAD = {self.oVADframes[k][self.i[k]]}')
+        #         #
+        #         self.figs[0][1][1].cla()
+        #         self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 0]))
+        #         self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 1]))
+        #         self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 1, 1]))
+        #         self.figs[0][1][1].legend(
+        #             ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
+        #         )
+        #         self.figs[0][1][1].set_title(f'|Rnntilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s - VAD = {self.oVADframes[k][self.i[k]]}')
+        #         #
+        #         self.figs[0][0].canvas.draw()
+        #         self.figs[0][0].canvas.flush_events()
+        #         time.sleep(0.001)
+        #         stop = 1
 
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)

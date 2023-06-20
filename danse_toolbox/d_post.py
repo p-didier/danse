@@ -209,8 +209,8 @@ class DANSEoutputs(DANSEparameters):
         # Plot MSE cost with logarithmic scale
         fig, axes = plt.subplots(1,1)
         fig.set_size_inches(8.5, 3.5)
-        axes.plot(mseCost, '.-')
-        axes.plot(mseCost_c, '.--')
+        axes.plot(mseCost, '-')
+        axes.plot(mseCost_c, '--')
         axes.set_yscale('log')
         axes.set_xlabel('Window index $i$')
         axes.set_ylabel('MSE cost $E_N\{ | \\tilde{d}_k^i(n) - \\hat{d}_k(n) |^2 \}$')

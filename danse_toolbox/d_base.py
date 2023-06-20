@@ -230,8 +230,10 @@ class DANSEparameters(Hyperparameters):
     covMatInitType: str = 'fully_random'
         # type of complex covariance filter initialization:
         # -- 'fully_random' == all entries of the covariance matrix are random (but the same for each frequency)
+        # -- 'eye' == identity matrix
         # -- 'eye_and_random' == identity matrix to which is added an all-random matrix
-        # -- 'batch_ground_truth' == `Ryy = yy^H`, with `y` the entire (batch) signal.
+        # -- 'batch_estimates' == `Ryy = yy^H`, with `y` the entire (batch)
+        #       signal, using the initial DANSE filters.
     covMatEyeInitScaling: float = 1.
         # Value by which to scale the diagonal terms of the initial covariance
         # matrices - used iff `'eye' in covMatInitType`.
@@ -641,19 +643,19 @@ def prep_evmat_build(
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             # Expected DANSE update instants
-            upInstants = [
-                np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
-                int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-            ]
+            # upInstants = [
+            #     np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
+            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            # ]
 
             # Edit on 2023.05.08 we only start updating when we have enough
             # samples so that the first update is not affected by the WOLA
             # analysis window (no "fading in" of the data) -- see journal 2023
             # week19 MON entry --------vvvv--------
-            # upInstants = [
-            #     np.arange(np.ceil(2 * p.DFTsize / p.Ns),
-            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-            # ]
+            upInstants = [
+                np.arange(np.ceil(2 * p.DFTsize / p.Ns),
+                int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            ]
             # ^ note that we only start updating when we have enough samples.
             fuInstants = [
                 np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
@@ -2232,4 +2234,12 @@ def init_covmats(
         # Scale the random array and add an identity matrix
         # to each slice.
         fullSlice = eyePart + covMatRandomInitScaling * randArray
+    elif covMatInitType == 'eye':
+        if len(dims) == 2:
+            fullSlice = np.eye(dims[-1]) * covMatEyeInitScaling
+        elif len(dims) == 3:
+            fullSlice = np.tile(
+                np.eye(dims[-1]) * covMatEyeInitScaling,
+                (dims[0], 1, 1)
+            )
     return fullSlice

@@ -2,19 +2,20 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230616_tests/sanityCheck_2nodes/3_tidanse_asy_w1  # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230620_tests/covMatBatchInit/gevd/test3_randomCovMatsInit # folder to export outputs
   onlySNRandESTOIinPlots: true
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
+  startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 30
-  performGEVD: false
-  # performGEVD: true
+  # performGEVD: false
+  performGEVD: true
   # simType: batch
   simType: online
-  nodeUpdating: asy
-  # nodeUpdating: seq
+  # nodeUpdating: asy
+  nodeUpdating: seq
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
@@ -38,12 +39,18 @@ danseParams:
   # DFTsize: 2048
   # DFTsize: 4096
   startComputeMetricsAt: after_beginning_2nd_utterance_200
-  t_expAvg50p: 10
-  t_expAvg50pExternalFilters: 10
+  t_expAvg50p: 1
+  t_expAvg50pExternalFilters: 1
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   # forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
   timeBtwExternalFiltUpdates: 0.25
   # timeBtwExternalFiltUpdates: 0.25
+  covMatInitType: fully_random
+  # covMatInitType: batch_estimates
+  # covMatInitType: eye
+  covMatEyeInitScaling: 1
+  covMatSameInitForAllNodes: true
+  covMatSameInitForAllFreqs: true
   printoutsAndPlotting:
     printout_profiler: false
 referenceSensor: 0
@@ -79,10 +86,11 @@ wasnParams:
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
   SROperNode: '[0]'  # [PPM]
-  # nSensorPerNode: '[1, 2, 3]'
+  nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[3, 3]'
   # nSensorPerNode: '[3, 3, 3]'
-  nSensorPerNode: '[1, 1]'
+  # nSensorPerNode: '[1, 1]'
+  # nSensorPerNode: '[2, 2]'
   # nSensorPerNode: '[2, 2, 2]'
   interSensorDist: 0.2
   #
@@ -92,15 +100,15 @@ wasnParams:
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/tests/sigs/01_speech/speech2_16000Hz.wav
   nDesiredSources: 1
-  nNodes: 2
-  nNoiseSources: 1
+  nNodes: 3
+  nNoiseSources: 2
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
-    topologyType: user-defined
+    # topologyType: user-defined
+    topologyType: fully-connected
     seed: 12347
-    # topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     # userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists
