@@ -287,17 +287,13 @@ class DANSEoutputs(DANSEparameters):
             self,
             wasn,
             exportFolder=None,
-            onlySNRandESTOIinPlots=False,
+            metricsToPlot=False,
             snrYlimMax=None
         ):
         """Plots DANSE performance."""
         self.check_init()  # check if object is correctly initialised
-        self.metrics = compute_metrics(self, wasn)
-        figStatic, figDynamic = plot_metrics(
-            self,
-            onlySNRandESTOIinPlots,
-            snrYlimMax
-        )
+        self.metrics = compute_metrics(self, wasn, metricsToPlot)
+        figStatic, figDynamic = plot_metrics(self, metricsToPlot, snrYlimMax)
         if exportFolder is not None:
             figStatic.savefig(f'{exportFolder}/metrics.png', dpi=300)
             figStatic.savefig(f'{exportFolder}/metrics.pdf')
@@ -584,212 +580,10 @@ class DANSEoutputs(DANSEparameters):
                 figs[k].savefig(f'{exportFolder}/sigs_node{k+1}.png', dpi=300)
 
 
-# @dataclass
-# class BatchDANSEoutputs(DANSEparameters):
-#     """
-#     Dataclass to assemble all useful outputs
-#     of the batch DANSE algorithm.
-#     """
-#     initialised : bool = False
-#     # ^^^ turns to True when `self.from_variables()` is called
-    
-#     def import_params(self, p: DANSEparameters):
-#         self.__dict__.update(p.__dict__)
-    
-#     def from_variables(self, bdv: BatchDANSEvariables):
-#         """
-#         Selects useful output values from `BatchDANSEvariables` object
-#         after DANSE processing.
-#         """
-
-#         self.filters: list[np.ndarray] = bdv.wTilde
-#         if self.computeCentralised:
-#             self.filtersCentr: list[np.ndarray] = bdv.wCentr
-#         if self.computeLocal:
-#             self.filtersLocal: list[np.ndarray] = bdv.wLocal
-
-#         self.TDdesiredSignals_est = np.array(bdv.d)
-#         self.TDdesiredSignals_est_c = np.array(bdv.dCentr)
-#         self.TDdesiredSignals_est_l = np.array(bdv.dLocal)
-#         self.TDdesiredSignals = np.array(
-#             [x[:, bdv.referenceSensor] for x in bdv.cleanSpeechSignalsAtNodes]
-#         )
-#         self.noisySigs = np.array([
-#             bdv.yLocal[k][:, self.referenceSensor] for k in range(self.nNodes)
-#         ]).T
-
-#         self.fs: list[float] = bdv.fs
-
-#         # Show initialised status
-#         self.initialised = True
-
-#         return self
-
-#     def check_init(self):
-#         """Check if object is correctly initialised."""
-#         if not self.initialised:
-#             return ValueError('The DANSEoutputs object is empty.')
-        
-#     def export_sounds(self, wasn, exportFolder):
-#         """Export sounds to .wav files."""
-#         self.check_init()  # check if object is correctly initialised
-#         export_sounds(self, wasn, exportFolder)
-        
-#     def plot_filters_evol(self):
-#         """Plot filters evolution through time, at each node in the network."""
-#         self.check_init()
-        
-#         def _plot_single_set_filters(ax, f, ls, lab):
-#             """
-#             Plots a single set of filters.
-
-#             Parameters
-#             ----------
-#             ax : matplotlib.axes.Axes
-#                 Axes on which to plot.
-#             f : np.ndarray
-#                 Filters to plot.
-#             ls : str
-#                 Line style for plot.
-#             lab : str
-#                 Label for plot legend.
-#             """
-#             for m in range(f.shape[0]):
-#                 ax.plot(
-#                     f[m, :],
-#                     f'{ls}C{m}',
-#                     label=f'{lab} coeff. {m + 1}/{f.shape[0]}'
-#                 )
-
-#         nNodes = len(self.filters)
-#         figs = []
-#         # Get yaxis limits
-#         ymin = np.amin([np.amin(f) for f in self.filters])
-#         ymax = np.amax([np.amax(f) for f in self.filters])
-#         ymin = ymin - 0.1 * (ymax - ymin)  # 10% margin
-#         ymax = ymax + 0.1 * (ymax - ymin)  # 10% margin
-#         for k in range(nNodes):
-#             fig, axes = plt.subplots(1,1)
-#             fig.set_size_inches(8.5, 3.5)
-#             _plot_single_set_filters(axes, self.filters[k], '.-', 'DANSE')
-#             if self.computeCentralised:
-#                 _plot_single_set_filters(axes, self.filtersCentr[k], '--', 'Centr.')
-#             # _plot_single_set_filters(axes, self.filtersLocal[k], ':', 'Local')
-#             axes.set_title(f'Filters at node {k + 1}')
-#             axes.set_xlabel('DANSE iteration $i$')
-#             axes.set_ylabel('Coefficients')
-#             axes.set_xticks(axes.get_xticks())
-#             axes.set_xticklabels([int(i) for i in axes.get_xticks()])
-#             axes.set_xlim([0, len(self.filters[k][0, :])])
-#             axes.set_ylim([ymin, ymax])
-#             axes.legend()
-#             axes.grid()
-#             fig.tight_layout()
-#             figs.append(fig)
-#         return figs
-    
-#     def plot_mmse_perf(self):
-#         """
-#         Plot the MMSE cost as a function of DANSE iterations for the batch
-#         DANSE algorithm, at each node in the network.
-#         """
-#         # Compute MMSE cost
-#         mmse = np.mean(
-#             np.abs(self.TDdesiredSignals - self.TDdesiredSignals_est) ** 2, axis=1
-#         )
-#         mmseCentr = np.mean(
-#             np.abs(self.TDdesiredSignals - self.TDdesiredSignals_est_c) ** 2, axis=1
-#         )
-
-#         fig, axes = plt.subplots(1,1)
-#         fig.set_size_inches(8.5, 3.5)
-#         for m in range(mmse.shape[0]):
-#             axes.plot(mmse[m, :], f'.-C{m}', label=f'Node {m + 1}')
-#             axes.plot(mmseCentr[m, :], f'.--C{m}', label=f'Node {m + 1} (centr.)')
-#         axes.set_xlabel('DANSE iteration $i$')
-#         axes.set_ylabel('MMSE cost')
-#         axes.set_xticks(axes.get_xticks())
-#         axes.set_xticklabels([int(i) for i in axes.get_xticks()])
-#         axes.set_xlim([0, mmse.shape[1]])
-#         axes.legend()
-#         axes.grid()
-#         plt.tight_layout()
-
-#         return fig
-    
-#     def plot_sigs(self, win=np.sqrt(np.hanning(1024)), ovlp=0.5):
-#         """
-#         Plot time-domain signals, at each node in the network.
-
-#         Parameters
-#         ----------
-#         win : np.ndarray
-#             Windowing function to apply to the signals before plotting.
-#         ovlp : float
-#             Overlap between windows.
-
-#         Returns
-#         -------
-#         figs : list[matplotlib.figure.Figure]
-#             List of figures, one per node.
-#         """
-
-#         nNodes = len(self.filters)  # Number of nodes in the network
-        
-#         figs = []
-#         # Plot per node
-#         for k in range(nNodes):
-
-#             # Common parameters (to be unpacked)
-#             com = (self.fs[k], win, ovlp)
-            
-#             # Get STFTs
-#             d_k, f, t = get_stft(self.TDdesiredSignals[k, :, -1], *com)
-#             dHat_k, _, _ = get_stft(self.TDdesiredSignals_est[k, :, -1], *com)
-#             dHatCentr_k, _, _ = get_stft(self.TDdesiredSignals_est_c[k, :, -1], *com)
-#             y_k, _, _ = get_stft(self.noisySigs[:, k], *com)
-
-#             # Get color bar limits
-#             limLow = 20 * np.log10(np.amin([
-#                 np.amin(np.abs(d_k)),
-#                 np.amin(np.abs(dHat_k)),
-#                 np.amin(np.abs(dHatCentr_k)),
-#                 np.amin(np.abs(y_k))
-#             ]))
-#             limHigh = 20 * np.log10(np.amax([
-#                 np.amax(np.abs(d_k)),
-#                 np.amax(np.abs(dHat_k)),
-#                 np.amax(np.abs(dHatCentr_k)),
-#                 np.amax(np.abs(y_k))
-#             ]))
-
-#             fig, axes = plt.subplots(2, 2)
-#             fig.set_size_inches(8.5, 3.5)
-#             stft_subplot(
-#                 axes[0, 0], t, f, 20 * np.log10(np.abs(np.squeeze(y_k))),
-#                 [limLow, limHigh], 'Noisy signal'
-#             )
-#             stft_subplot(
-#                 axes[0, 1], t, f, 20 * np.log10(np.abs(np.squeeze(d_k))),
-#                 [limLow, limHigh], 'Desired signal'
-#             )
-#             stft_subplot(
-#                 axes[1, 0], t, f, 20 * np.log10(np.abs(np.squeeze(dHat_k))),
-#                 [limLow, limHigh], 'DANSE estimate'
-#             )
-#             stft_subplot(
-#                 axes[1, 1], t, f, 20 * np.log10(np.abs(np.squeeze(dHatCentr_k))),
-#                 [limLow, limHigh], 'Centralized estimate'
-#             )
-#             fig.tight_layout()
-#             figs.append(fig) 
-
-#         return figs
-
-
 def compute_metrics(
         out: DANSEoutputs,
-        wasn: list[Node]
+        wasn: list[Node],
+        metricsToPlot: list[str]=['snr', 'stoi']
     ) -> EnhancementMeasures:
     """
     Compute and store evaluation metrics after signal enhancement.
@@ -800,8 +594,13 @@ def compute_metrics(
         DANSE run outputs.
     wasn : list of `Node` objects
         WASN under consideration.
-    folder : str
-        Folder where to create the "wav" folder where to export files.
+    metricsToPlot : list of str, optional
+        List of metrics to compute. Possible values are:
+        - 'snr' : unweighted SNR
+        - 'sisnr' : speech-intelligibility-weighted SNR
+        - 'fwSNRseg' : frequency-weighted segmental SNR
+        - 'stoi'/'estoi' : extended Short-Time Objective Intelligibility
+        - 'pesq' : Perceptual Evaluation of Speech Quality
     
     Returns
     -------
@@ -817,6 +616,7 @@ def compute_metrics(
     startIdx = np.zeros(out.nNodes, dtype=int)
     endIdx = np.zeros(out.nNodes, dtype=int)
     snr = _ndict(out.nNodes)  # Unweighted SNR
+    sisnr = _ndict(out.nNodes)  # Speech-Intelligibility-weighted SNR
     fwSNRseg = _ndict(out.nNodes)  # Frequency-weighted segmental SNR
     stoi = _ndict(out.nNodes)  # (extended) Short-Time Objective Intelligibility
     pesq = _ndict(out.nNodes)  # Perceptual Evaluation of Speech Quality
@@ -849,18 +649,18 @@ def compute_metrics(
             # Use all signal until the end
             endIdx[k] = int(wasn[k].cleanspeechRefSensor.shape[0])
         
-        out0, out1, out2, out3 = get_metrics(
+        metricsDict = get_metrics(
             # Clean speech mixture (desired signal)
             clean=np.squeeze(wasn[k].cleanspeechRefSensor),
             noiseOnly=np.squeeze(wasn[k].cleannoiseRefSensor),
             # Microphone signals
             noisy=wasn[k].data[:, out.referenceSensor],
-            filteredSpeech=out.TDfiltSpeech[:, k],
-            filteredNoise=out.TDfiltNoise[:, k],
-            filteredSpeech_c=TDfilteredSpeech_c,
-            filteredNoise_c=TDfilteredNoise_c,
-            filteredSpeech_l=TDfilteredSpeech_l,
-            filteredNoise_l=TDfilteredNoise_l,
+            filtSpeech=out.TDfiltSpeech[:, k],
+            filtNoise=out.TDfiltNoise[:, k],
+            filtSpeech_c=TDfilteredSpeech_c,
+            filtNoise_c=TDfilteredNoise_c,
+            filtSpeech_l=TDfilteredSpeech_l,
+            filtNoise_l=TDfilteredNoise_l,
             # DANSE outputs (desired signal estimates)
             enhan=out.TDdesiredSignals_est[:, k],
             enhan_c=TDdesiredSignals_est_c,
@@ -873,13 +673,21 @@ def compute_metrics(
             vad=wasn[k].vadCombined,
             dynamic=out.dynMetrics,
             gamma=out.gammafwSNRseg,
-            fLen=out.frameLenfwSNRseg
+            fLen=out.frameLenfwSNRseg,
+            metricsToPlot=metricsToPlot
         )
 
-        snr[f'Node{k + 1}'] = out0
-        fwSNRseg[f'Node{k + 1}'] = out1
-        stoi[f'Node{k + 1}'] = out2
-        pesq[f'Node{k + 1}'] = out3
+        for key in metricsDict.keys():
+            if key == 'snr':
+                snr[f'Node{k + 1}'] = metricsDict[key]
+            elif key == 'sisnr':
+                sisnr[f'Node{k + 1}'] = metricsDict[key]
+            elif key == 'fwSNRseg':
+                fwSNRseg[f'Node{k + 1}'] = metricsDict[key]
+            elif key == 'stoi':
+                stoi[f'Node{k + 1}'] = metricsDict[key]
+            elif key == 'pesq':
+                pesq[f'Node{k + 1}'] = metricsDict[key]
 
     print(f'All signal enhancement evaluation metrics computed in {np.round(time.perf_counter() - tStart, 3)} s.')
 
@@ -889,6 +697,7 @@ def compute_metrics(
         stoi=stoi,
         pesq=pesq,
         snr=snr,
+        sisnr=sisnr,
         startIdx=startIdx,
         endIdx=endIdx
     )
@@ -897,7 +706,7 @@ def compute_metrics(
 
 def plot_metrics(
         out: DANSEoutputs,
-        onlySNRandESTOIinPlots=False,
+        metricsToPlot=['snr', 'estoi'],
         snrYlimMax=None
     ):
     """
@@ -907,45 +716,68 @@ def plot_metrics(
     ----------
     out : `DANSEoutputs` object
         DANSE outputs.
-    onlySNRandESTOIinPlots : bool
-        If True, only include the SNR and the eSTOI.
+    metricsToPlot : list[str]
+        List of metrics to plot. Possible values are:
+        - 'snr' : unweighted SNR
+        - 'sisnr' : speech intelligibility-weighted SNR
+        - 'estoi'/'stoi' : extended STOI
+        - 'fwSNRseg' : frequency-weighted segmental SNR
+        - 'pesq' : PESQ
     snrYlimMax : float or int
         If not None, set a particular y-axis limit for the SNR plot.
     """
 
     # Hard-coded variables
     barWidth = 1
+    titlesDict = {
+        'snr': 'SNR',
+        'sisnr': 'SI-SNR',
+        'estoi': 'eSTOI',
+        'stoi': 'eSTOI',
+        'fwSNRseg': 'fwSNRseg',
+        'pesq': 'PESQ'
+    }
+    yLabelsDict = {
+        'snr': '[dB]',
+        'sisnr': '[dB]',
+        'estoi': '[-]',
+        'stoi': '[-]',
+        'fwSNRseg': '[dB]',
+        'pesq': '[-]'
+    }
 
-    if onlySNRandESTOIinPlots:
-        nCols = 2
-        fig1 = plt.figure(figsize=(8,3))
-    else:
-        nCols = 4
-        fig1 = plt.figure(figsize=(12,3))
+    # Prepare subplots for static metrics
+    nCols = len(metricsToPlot)
+    fig1 = plt.figure(figsize=(4 * len(metricsToPlot),3))
     
-    ax = fig1.add_subplot(1, nCols, 1)   # Unweighted SNR
-    metrics_subplot(ax, barWidth, out.metrics.snr)
-    ax.set(title='SNR', ylabel='[dB]')
-    if snrYlimMax is not None:
-        ax.set_ylim([0, snrYlimMax])
-    #
-    ax = fig1.add_subplot(1, nCols, 2)   # STOI
-    metrics_subplot(ax, barWidth, out.metrics.stoi)
-    ax.set(title='eSTOI')
-    ax.set_ylim([0, 1])
-    #
-    if not onlySNRandESTOIinPlots:
-        ax = fig1.add_subplot(1, nCols, 3)   # fwSNRseg
-        metrics_subplot(ax, barWidth, out.metrics.fwSNRseg)
-        ax.set(title='fwSNRseg', ylabel='[dB]')
-        #
-        ax = fig1.add_subplot(1, nCols, 4)   # PESQ
-        metrics_subplot(ax, barWidth, out.metrics.pesq)
-        ax.set(title='PESQ')
-    #
+    for ii in range(nCols):
+        ax = fig1.add_subplot(1, nCols, ii + 1)
+        
+        if metricsToPlot[ii] == 'snr':
+            metricToPlot = out.metrics.snr
+        elif metricsToPlot[ii] == 'sisnr':
+            metricToPlot = out.metrics.sisnr
+        elif 'stoi' in metricsToPlot[ii]:
+            metricToPlot = out.metrics.stoi
+        elif metricsToPlot[ii] == 'fwSNRseg':
+            metricToPlot = out.metrics.fwSNRseg
+        elif metricsToPlot[ii] == 'pesq':
+            metricToPlot = out.metrics.pesq
+        else:
+            raise ValueError(f'Unknown metric {metricsToPlot[ii]}')
+        
+        # Plot
+        metrics_subplot(ax, barWidth, metricToPlot)
+        ax.set(
+            title=titlesDict[metricsToPlot[ii]],
+            ylabel=yLabelsDict[metricsToPlot[ii]]
+        )
+        if 'snr' in metricsToPlot[ii] and snrYlimMax is not None:
+            ax.set_ylim([0, snrYlimMax])
+        elif 'stoi' in metricsToPlot[ii]:
+            ax.set_ylim([0, 1])
     ax.legend(bbox_to_anchor=(1, 0), loc="lower left")
 
-    # fig1.suptitle("Speech enhancement metrics")
     plt.tight_layout()
 
     # Check where dynamic metrics were computed
@@ -976,7 +808,7 @@ def plot_metrics(
 
         # Plot
         for ii, dynMetric in enumerate(dynMetrics):
-            for nodeRef, value in dynMetric.items():        # loop over nodes
+            for nodeRef, value in dynMetric.items():
                 metric = value.dynamicMetric
                 idxColor = int(nodeRef[-1]) - 1
                 axes[ii].plot(
@@ -999,7 +831,6 @@ def plot_metrics(
                 axes[ii].legend(loc='lower left', fontsize=8)
             axes[ii].set_xlabel('$t$ [s]')  
         plt.tight_layout()
-        # fig2.suptitle("Dynamic speech enhancement metrics")
     else:
         fig2 = None
 
@@ -2259,7 +2090,7 @@ def export_danse_outputs(
             out.plot_perf(
                 wasnObj.wasn,
                 exportFolder,
-                p.exportParams.onlySNRandESTOIinPlots,
+                p.exportParams.metricsInPlots,
                 snrYlimMax=p.snrYlimMax,
             )
 

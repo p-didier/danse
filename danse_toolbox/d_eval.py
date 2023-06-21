@@ -10,6 +10,7 @@ from danse_toolbox.mypystoi import stoi_any_fs as stoi_fcn
 class EnhancementMeasures:
     """Class for storing speech enhancement metrics values"""
     snr: dict = field(default_factory=dict)         # Unweighted SNR
+    sisnr: dict = field(default_factory=dict)       # Speech-Intelligibility-weighted SNR
     fwSNRseg: dict = field(default_factory=dict)    # Frequency-weighted segmental SNR
     stoi: dict = field(default_factory=dict)        # Short-Time Objective Intelligibility
     pesq: dict = field(default_factory=dict)        # Perceptual Evaluation of Speech Quality
@@ -67,12 +68,12 @@ def get_metrics(
         clean,
         noiseOnly,
         noisy,
-        filteredSpeech,
-        filteredNoise,
-        filteredSpeech_c,
-        filteredNoise_c,
-        filteredSpeech_l,
-        filteredNoise_l,
+        filtSpeech,
+        filtNoise,
+        filtSpeech_c,
+        filtNoise_c,
+        filtSpeech_l,
+        filtNoise_l,
         enhan,
         enhan_c=None,
         enhan_l=None,
@@ -82,7 +83,8 @@ def get_metrics(
         startIdx=0,
         endIdx=0,
         gamma=0.2,
-        fLen=0.03
+        fLen=0.03,
+        metricsToPlot: list[str]=['snr', 'stoi'],
     ):
     """
     Compute evaluation metrics for signal enhancement
@@ -96,17 +98,17 @@ def get_metrics(
         The speech-free (noise only) signal captured at the reference mic.
     noisy : [N x 1] np.ndarray (float)
         The noisy signal (pre-signal enhancement).
-    filteredSpeech : [N x 1] np.ndarray (float)
+    filtSpeech : [N x 1] np.ndarray (float)
         The filtered speech-only signal (post-signal enhancement).
-    filteredNoise : [N x 1] np.ndarray (float)
+    filtNoise : [N x 1] np.ndarray (float)
         The filtered noise-only signal (post-signal enhancement).
-    filteredSpeech_c : [N x 1] np.ndarray (float)
+    filtSpeech_c : [N x 1] np.ndarray (float)
         The filtered speech-only signal (after centralised processing).
-    filteredNoise_c : [N x 1] np.ndarray (float)
+    filtNoise_c : [N x 1] np.ndarray (float)
         The filtered noise-only signal (after centralised processing).
-    filteredSpeech_l : [N x 1] np.ndarray (float)
+    filtSpeech_l : [N x 1] np.ndarray (float)
         The filtered speech-only signal (after local processing).
-    filteredNoise_l : [N x 1] np.ndarray (float)
+    filtNoise_l : [N x 1] np.ndarray (float)
         The filtered noise-only signal (after local processing).
     enhan : [N x 1] np.ndarray (float)
         The enhanced signal (post-signal enhancement).
@@ -128,24 +130,21 @@ def get_metrics(
         Gamma exponent for fwSNRseg computation.
     fLen : float
         Time window duration for fwSNRseg computation [s].
+    metricsToPlot : list of str
+        List of metrics to compute. Possible values are:
+        - 'snr' : unweighted SNR
+        - 'sisnr' : speech-intelligibility-weighted SNR
+        - 'fwSNRseg' : frequency-weighted segmental SNR
+        - 'stoi'/'estoi' : extended Short-Time Objective Intelligibility
+        - 'pesq' : Perceptual Evaluation of Speech Quality
     
     Returns
     -------
-    snr : Metric object
-        Unweighted signal-to-noise ratio (SNR).
-    fwSNRseg : Metric object
-        Frequency-weighted segmental SNR.
-    myStoi : Metric object
-        Short-Time Objective Intelligibility.
-    myPesq : Metric object
-        Perceptual Evaluation of Speech Quality.
+    metricsDict : dict of Metric objects
+        Dictionary of metrics.
     """
 
-    # Init output arrays
-    snr = Metric()
-    fwSNRseg = Metric()
-    myStoi = Metric()
-    myPesq = Metric()
+    metricsDict = dict()
 
     # Trim to correct lengths (avoiding initial filter convergence
     # in calculation of metrics)
@@ -164,65 +163,89 @@ def get_metrics(
     enhan = enhan[startIdx:endIdx]
     noisy = noisy[startIdx:endIdx]
     vad = vad[startIdx:endIdx]
-    filteredSpeech = filteredSpeech[startIdx:endIdx]
-    filteredNoise = filteredNoise[startIdx:endIdx]
-    if filteredSpeech_c is not None:
-        filteredSpeech_c = filteredSpeech_c[startIdx:endIdx]
-        filteredNoise_c = filteredNoise_c[startIdx:endIdx]
-    if filteredSpeech_l is not None:
-        filteredSpeech_l = filteredSpeech_l[startIdx:endIdx]
-        filteredNoise_l = filteredNoise_l[startIdx:endIdx]
-    
-    # Unweighted SNR
-    snr.before = get_snr(clean, noiseOnly, vad)
-    snr.after = get_snr(filteredSpeech, filteredNoise, vad)
-    snr.diff = snr.after - snr.before
-    # Frequency-weight segmental SNR
-    fwSNRseg_allFrames = get_fwsnrseg(
-        clean, noisy, fs, fLen, gamma
-    )
-    fwSNRseg.before = np.mean(fwSNRseg_allFrames)
-    fwSNRseg_allFrames = get_fwsnrseg(
-        clean, enhan, fs, fLen, gamma
-    )
-    fwSNRseg.after = np.mean(fwSNRseg_allFrames)
-    fwSNRseg.diff = fwSNRseg.after - fwSNRseg.before
-    # Short-Time Objective Intelligibility (STOI)
-    myStoi.before = stoi_fcn(clean, noisy, fs, extended=True)
-    myStoi.after = stoi_fcn(clean, enhan, fs, extended=True)
-    myStoi.diff = myStoi.after - myStoi.before
-    # Perceptual Evaluation of Speech Quality (PESQ)
-    if fs in [8e3, 16e3]:
-        if fs == 8e3:
-            mode = 'nb'  # narrowband PESQ
-        elif fs == 16e3:
-            mode = 'wb'  # wideband PESQ
-            
-        myPesq.before = pesq(fs, clean, noisy, mode)
-        myPesq.after = pesq(fs, clean, enhan, mode)
-        myPesq.diff = myPesq.after - myPesq.before
-        if enhan_c is not None:
-            myPesq.afterCentr = pesq(fs, clean_c, enhan_c, mode)
-        if enhan_l is not None:
-            myPesq.afterLocal = pesq(fs, clean_l, enhan_l, mode)
-    else:
-        print(f'Cannot calculate PESQ for fs different from 16 or 8 kHz (current value: {fs/1e3} kHz). Keeping `myPesq` attributes at 0.')
+    filtSpeech = filtSpeech[startIdx:endIdx]
+    filtNoise = filtNoise[startIdx:endIdx]
+    if filtSpeech_c is not None:
+        filtSpeech_c = filtSpeech_c[startIdx:endIdx]
+        filtNoise_c = filtNoise_c[startIdx:endIdx]
+    if filtSpeech_l is not None:
+        filtSpeech_l = filtSpeech_l[startIdx:endIdx]
+        filtNoise_l = filtNoise_l[startIdx:endIdx]
+
+    if 'snr' in metricsToPlot:
+        # Unweighted SNR
+        snr = Metric()
+        snr.before = get_snr(clean, noiseOnly, vad)
+        snr.after = get_snr(filtSpeech, filtNoise, vad)
+        snr.diff = snr.after - snr.before
+    if 'sisnr' in metricsToPlot:
+        # SI-SNR
+        sisnr = Metric()
+        sisnr.before = get_sisnr(clean, noiseOnly, vad, fs)
+        sisnr.after = get_sisnr(filtSpeech, filtNoise, vad, fs)
+        sisnr.diff = sisnr.after - snr.before
+    if 'fwSNRseg' in metricsToPlot:
+        # Frequency-weight segmental SNR
+        fwSNRseg = Metric()
+        fwSNRseg_allFrames = get_fwsnrseg(
+            clean, noisy, fs, fLen, gamma
+        )
+        fwSNRseg.before = np.mean(fwSNRseg_allFrames)
+        fwSNRseg_allFrames = get_fwsnrseg(
+            clean, enhan, fs, fLen, gamma
+        )
+        fwSNRseg.after = np.mean(fwSNRseg_allFrames)
+        fwSNRseg.diff = fwSNRseg.after - fwSNRseg.before
+    if 'stoi' in metricsToPlot or 'estoi' in metricsToPlot:
+        # Short-Time Objective Intelligibility (STOI)
+        myStoi = Metric()
+        myStoi.before = stoi_fcn(clean, noisy, fs, extended=True)
+        myStoi.after = stoi_fcn(clean, enhan, fs, extended=True)
+        myStoi.diff = myStoi.after - myStoi.before
+    if 'pesq' in metricsToPlot:
+        # Perceptual Evaluation of Speech Quality (PESQ)
+        myPesq = Metric()
+        if fs in [8e3, 16e3]:
+            if fs == 8e3:
+                mode = 'nb'  # narrowband PESQ
+            elif fs == 16e3:
+                mode = 'wb'  # wideband PESQ
+                
+            myPesq.before = pesq(fs, clean, noisy, mode)
+            myPesq.after = pesq(fs, clean, enhan, mode)
+            myPesq.diff = myPesq.after - myPesq.before
+            if enhan_c is not None:
+                myPesq.afterCentr = pesq(fs, clean_c, enhan_c, mode)
+            if enhan_l is not None:
+                myPesq.afterLocal = pesq(fs, clean_l, enhan_l, mode)
+        else:
+            print(f'Cannot calculate PESQ for fs different from 16 or 8 kHz (current value: {fs/1e3} kHz). Keeping `myPesq` attributes at 0.')
 
     # Consider centralised and local estimates
     if enhan_c is not None:
-        snr.afterCentr = get_snr(filteredSpeech_c, filteredNoise_c, vad_c)
-        fwSNRseg_allFrames = get_fwsnrseg(
-            clean_c, enhan_c, fs, fLen, gamma
-        )
-        fwSNRseg.afterCentr = np.mean(fwSNRseg_allFrames)
-        myStoi.afterCentr = stoi_fcn(clean_c, enhan_c, fs, extended=True)
+        if 'snr' in metricsToPlot:
+            snr.afterCentr = get_snr(filtSpeech_c, filtNoise_c, vad_c)
+        if 'sisnr' in metricsToPlot:
+            sisnr.afterCentr = get_sisnr(filtSpeech_c, filtNoise_c, vad_c, fs)
+        if 'fwSNRseg' in metricsToPlot:
+            fwSNRseg_allFrames = get_fwsnrseg(
+                clean_c, enhan_c, fs, fLen, gamma
+            )
+            fwSNRseg.afterCentr = np.mean(fwSNRseg_allFrames)
+        if 'stoi' in metricsToPlot or 'estoi' in metricsToPlot:
+            myStoi.afterCentr = stoi_fcn(clean_c, enhan_c, fs, extended=True)
     if enhan_l is not None:
-        snr.afterLocal = get_snr(filteredSpeech_l, filteredNoise_l, vad_l)
-        fwSNRseg_allFrames = get_fwsnrseg(
-            clean_l, enhan_l, fs, fLen, gamma
-        )
-        fwSNRseg.afterLocal = np.mean(fwSNRseg_allFrames)
-        myStoi.afterLocal = stoi_fcn(clean_l, enhan_l, fs, extended=True)
+        if 'snr' in metricsToPlot:
+            snr.afterLocal = get_snr(filtSpeech_l, filtNoise_l, vad_l)
+        if 'sisnr' in metricsToPlot:
+            sisnr.afterLocal = get_sisnr(filtSpeech_l, filtNoise_l, vad_l, fs)
+        if 'fwSNRseg' in metricsToPlot:
+            fwSNRseg_allFrames = get_fwsnrseg(
+                clean_l, enhan_l, fs, fLen, gamma
+            )
+            fwSNRseg.afterLocal = np.mean(fwSNRseg_allFrames)
+        if 'stoi' in metricsToPlot or 'estoi' in metricsToPlot:
+            myStoi.afterLocal = stoi_fcn(clean_l, enhan_l, fs, extended=True)
 
     # Compute dynamic metrics
     # TODO: go through this if needed + account for centralised
@@ -252,7 +275,19 @@ def get_metrics(
             elif 'pesq' in key:
                 myPesq.import_dynamic_metric(value)
 
-    return snr, fwSNRseg, myStoi, myPesq
+    # Store metrics
+    if 'snr' in metricsToPlot:
+        metricsDict['snr'] = snr
+    if 'sisnr' in metricsToPlot:
+        metricsDict['sisnr'] = sisnr
+    if 'fwSNRseg' in metricsToPlot:
+        metricsDict['fwSNRseg'] = fwSNRseg
+    if 'stoi' in metricsToPlot or 'estoi' in metricsToPlot:
+        metricsDict['stoi'] = myStoi
+    if 'pesq' in metricsToPlot:
+        metricsDict['pesq'] = myPesq
+
+    return metricsDict
 
 
 def get_dynamic_metric(
@@ -363,7 +398,26 @@ def get_dynamic_metric(
     return dynObjs
 
 
-def get_sisnr(x, Fs, VAD):
+def get_sisnr(s, n, vad, fs):
+    """
+    Estimate SI-SNR based on (filtered) speech and (filtered) noise (+ VAD).
+
+    Parameters
+    ----------
+    s : [Nt x Nchannels] np.ndarray[float]
+        Time-domain (filtered) speech signal (no noise).
+    n : [Nt x Nchannels] np.ndarray[float]
+        Time-domain (filtered) noise signal (no speech).
+    vad : [Nt x Nchannels] np.ndarray[bool or int (1 or 0) or float (1. or 0.)]
+        Corresponding voice activity detector (VAD).
+    fs : int
+        Sampling frequency [samples/s].
+    
+    Returns
+    -------
+    sisnrEst : [Nchannels x 1] np.ndarray[float] or float if `Nchannels == 1`
+        Speech intelligibility-weighted signal-to-noise ratio estimate [dB].
+    """
 
     # Speech intelligibility indices (ANSI-S3.5-1997)
     Indices = 1e-4 * np.array([83.0, 95.0, 150.0, 289.0, 440.0, 578.0, 653.0,\
@@ -377,14 +431,18 @@ def get_sisnr(x, Fs, VAD):
     for ii, fc_curr in enumerate(fc):
 
         # Filter in 1/3-octave bands
-        Wn = 1/Fs * np.array([fc_curr*2**(-1/6), fc_curr*2**(1/6)])
+        Wn = 1 / fs * np.array([
+            fc_curr * 2 ** (-1/6),
+            fc_curr * 2 ** (1/6)
+        ])
         sos = sig.butter(
             10, Wn, btype='bandpass', analog=False, output='sos', fs=2*np.pi
         )
-        x_filtered = sig.sosfilt(sos, x)
+        s_filtered = sig.sosfilt(sos, s)  # filter speech-only
+        n_filtered = sig.sosfilt(sos, n)  # filter noise-only
 
         # Build the SI-SNR sum
-        sisnr += Indices[ii] * get_snr(x_filtered,VAD)
+        sisnr += Indices[ii] * get_snr(s_filtered, n_filtered, vad)
 
     return sisnr
 

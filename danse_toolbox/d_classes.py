@@ -147,8 +147,12 @@ class ExportParameters:
     # vvv Global
     bypassAllExports: bool = False  # if True, all exports are bypassed
     exportFolder: str = ''  # folder to export outputs
-    onlySNRandESTOIinPlots: bool = False   # if True, only include the SNR and
-        # the eSTOI in the metrics plot.
+    metricsInPlots: list[str] = field(default_factory=list)  # list of metrics
+        # to plot in the metrics plot
+
+    def __post_init__(self):
+        if len(self.metricsInPlots) == 0:
+            self.metricsInPlots = ['snr', 'estoi']  # default metrics to plot
 
 @dataclass
 class TestParameters:
@@ -2419,9 +2423,14 @@ class TIDANSEvariables(DANSEvariables):
             self.eta[l] = copy.deepcopy(self.eta[k])  # relay
             self.eta_s[l] = copy.deepcopy(self.eta_s[k])  # relay
             self.eta_n[l] = copy.deepcopy(self.eta_n[k])  # relay
-            self.etaMk[l] = self.eta[l] - self.zLocalPrime[l]  # $\eta_{-l}$
-            self.etaMk_s[l] = self.eta_s[l] - self.zLocalPrime_s[l]  # $\eta_{-l}$
-            self.etaMk_n[l] = self.eta_n[l] - self.zLocalPrime_n[l]  # $\eta_{-l}$
+            if len(self.eta[l]) > 0:
+                self.etaMk[l] = self.eta[l] - self.zLocalPrime[l]  # $\eta_{-l}$
+                self.etaMk_s[l] = self.eta_s[l] - self.zLocalPrime_s[l]  # $\eta_{-l}$
+                self.etaMk_n[l] = self.eta_n[l] - self.zLocalPrime_n[l]  # $\eta_{-l}$
+            else:   # <-- case where $\eta$ has not yet been computed, e.g., due to SROs
+                self.etaMk[l] = np.array([])
+                self.etaMk_s[l] = np.array([])
+                self.etaMk_n[l] = np.array([])
 
     def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
         """

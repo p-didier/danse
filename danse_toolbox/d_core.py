@@ -249,90 +249,6 @@ def tidanse(
     return out, wasnObj
 
 
-def prep_for_danse(p: TestParameters, wasnObj: WASN):
-    """
-    Checks that all test parameters are up to date and updates the WASN object
-    accordingly.
-
-    Parameters
-    ----------
-    p : TestParameters object
-        Test parameters.
-    wasnObj : `WASN` object
-        WASN under consideration.
-
-    Returns
-    -------
-    p : TestParameters object  
-        Test parameters (updated).
-    wasnObj : `WASN` object
-        WASN under consideration (updated).
-    """
-    def _get_beta_from_t50p(t50p, fs, Ns):
-        """
-        Returns exponential averaging factor from 50% rise time.
-
-        Parameters
-        ----------
-        t50p : float
-            50% rise time.
-        fs : float
-            Sampling frequency.
-        Ns : int
-            Number of samples.
-
-        Returns
-        -------
-        beta : float
-            Exponential averaging factor.
-        """
-        return np.exp(np.log(0.5) / (t50p * fs / Ns))
-
-    for k in range(p.wasnParams.nNodes):  # for each node
-        # Set exponential averaging factor for `Ryy` and `Rnn` updates
-        params = (wasnObj.wasn[k].fs, p.danseParams.Ns)
-        if p.danseParams.forcedBeta is None:
-            wasnObj.wasn[k].beta = _get_beta_from_t50p(
-                p.danseParams.t_expAvg50p, *params
-            )
-        else:
-            wasnObj.wasn[k].beta = p.danseParams.forcedBeta
-        # Set exponential averaging factor for `wEXT` updates
-        if p.danseParams.forcedBetaExternalFilters is None:
-            wasnObj.wasn[k].betaWext = _get_beta_from_t50p(
-                p.danseParams.t_expAvg50pExternalFilters, *params
-            )
-        else:
-            wasnObj.wasn[k].betaWext = p.danseParams.forcedBetaExternalFilters
-    
-    # If random-noise (unusable) signals have been added...
-    if any(p.wasnParams.addedNoiseSignalsPerNode > 0):
-        # Coopy base `nSensorPerNode` and `sensorToNodeIndices` for ASC plots.
-        p.wasnParams.nSensorPerNodeASC =\
-            copy.deepcopy(p.wasnParams.nSensorPerNode)
-        p.wasnParams.sensorToNodeIndicesASC =\
-            copy.deepcopy(p.wasnParams.sensorToNodeIndices)
-        # Update number of sensors per node
-        for ii, n in enumerate(p.wasnParams.addedNoiseSignalsPerNode):
-            p.wasnParams.nSensorPerNode[ii] += n
-        # Update sensor-to-node indices
-        p.wasnParams.sensorToNodeIndices = np.array(
-            list(itertools.chain(*[[ii] * p.wasnParams.nSensorPerNode[ii]\
-            for ii in range(len(p.wasnParams.nSensorPerNode))]))
-        )
-        # Update WASN info in DANSE parameters
-        p.danseParams.get_wasn_info(p.wasnParams)
-
-    # Compute VAD per STFT frame for each node
-    wasnObj.get_vad_per_frame(
-        frameLen=p.danseParams.DFTsize,
-        frameShift=p.danseParams.Ns,
-        minProportionActive=p.wasnParams.vadMinProportionActive
-    )
-
-    return p, wasnObj
-
-
 def danse_batch(
         wasnObj: WASN,
         p: base.DANSEparameters
@@ -546,4 +462,88 @@ def tidanse_batch(
             wasnObj.wasn[k].enhancedData_l = btidv.dLocal[:, k]
 
     return out, wasnObj
+
+
+def prep_for_danse(p: TestParameters, wasnObj: WASN):
+    """
+    Checks that all test parameters are up to date and updates the WASN object
+    accordingly.
+
+    Parameters
+    ----------
+    p : TestParameters object
+        Test parameters.
+    wasnObj : `WASN` object
+        WASN under consideration.
+
+    Returns
+    -------
+    p : TestParameters object  
+        Test parameters (updated).
+    wasnObj : `WASN` object
+        WASN under consideration (updated).
+    """
+    def _get_beta_from_t50p(t50p, fs, Ns):
+        """
+        Returns exponential averaging factor from 50% rise time.
+
+        Parameters
+        ----------
+        t50p : float
+            50% rise time.
+        fs : float
+            Sampling frequency.
+        Ns : int
+            Number of samples.
+
+        Returns
+        -------
+        beta : float
+            Exponential averaging factor.
+        """
+        return np.exp(np.log(0.5) / (t50p * fs / Ns))
+
+    for k in range(p.wasnParams.nNodes):  # for each node
+        # Set exponential averaging factor for `Ryy` and `Rnn` updates
+        params = (wasnObj.wasn[k].fs, p.danseParams.Ns)
+        if p.danseParams.forcedBeta is None:
+            wasnObj.wasn[k].beta = _get_beta_from_t50p(
+                p.danseParams.t_expAvg50p, *params
+            )
+        else:
+            wasnObj.wasn[k].beta = p.danseParams.forcedBeta
+        # Set exponential averaging factor for `wEXT` updates
+        if p.danseParams.forcedBetaExternalFilters is None:
+            wasnObj.wasn[k].betaWext = _get_beta_from_t50p(
+                p.danseParams.t_expAvg50pExternalFilters, *params
+            )
+        else:
+            wasnObj.wasn[k].betaWext = p.danseParams.forcedBetaExternalFilters
+    
+    # If random-noise (unusable) signals have been added...
+    if any(p.wasnParams.addedNoiseSignalsPerNode > 0):
+        # Coopy base `nSensorPerNode` and `sensorToNodeIndices` for ASC plots.
+        p.wasnParams.nSensorPerNodeASC =\
+            copy.deepcopy(p.wasnParams.nSensorPerNode)
+        p.wasnParams.sensorToNodeIndicesASC =\
+            copy.deepcopy(p.wasnParams.sensorToNodeIndices)
+        # Update number of sensors per node
+        for ii, n in enumerate(p.wasnParams.addedNoiseSignalsPerNode):
+            p.wasnParams.nSensorPerNode[ii] += n
+        # Update sensor-to-node indices
+        p.wasnParams.sensorToNodeIndices = np.array(
+            list(itertools.chain(*[[ii] * p.wasnParams.nSensorPerNode[ii]\
+            for ii in range(len(p.wasnParams.nSensorPerNode))]))
+        )
+        # Update WASN info in DANSE parameters
+        p.danseParams.get_wasn_info(p.wasnParams)
+
+    # Compute VAD per STFT frame for each node
+    wasnObj.get_vad_per_frame(
+        frameLen=p.danseParams.DFTsize,
+        frameShift=p.danseParams.Ns,
+        minProportionActive=p.wasnParams.vadMinProportionActive
+    )
+
+    return p, wasnObj
 

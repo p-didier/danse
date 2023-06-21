@@ -2,18 +2,21 @@ seed: 12350
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230621_tests/tigevddanse/5_online_asy_tauExt2 # folder to export outputs
-  onlySNRandESTOIinPlots: true
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230621_tests/metrics_plot_tests/1_base # folder to export outputs
+  metricsInPlots:
+  - snr
+  - sisnr
+  - estoi
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
 danseParams:
   startUpdatesAfterAtLeast: 0 # [s]
-  maxBatchUpdates: 30
-  # performGEVD: false
-  performGEVD: true
-  # simType: batch
-  simType: online
+  maxBatchUpdates: 1
+  performGEVD: false
+  # performGEVD: true
+  simType: batch
+  # simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
   # noExternalFilterRelaxation: true

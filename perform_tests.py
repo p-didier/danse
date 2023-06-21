@@ -26,10 +26,10 @@ def main():
 
     t0 = time.time()
 
-    # tests.sandbox.main(
-    #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
-    #     plotASCearly=False,
-    # )
+    tests.sandbox.main(
+        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
+        plotASCearly=False,
+    )
 
     # Benchmark tests for the TI-GEVD-DANSE online implementation.
     # Various combinations of the following parameters are tested:
@@ -49,10 +49,10 @@ def main():
 
     # Test the inherent robustness of the DANSE algorithm to SROs.
     #
-    tests.danse_robustness_to_sros.main(
-        cfgFilename=f'{CONFIG_FILES_FOLDER}/sros_effect.yaml',
-        outputFolder='20230621_tests/sros_effect/online_rSTIGEVDDANSE',  # relative to `danse/out`
-    )
+    # tests.danse_robustness_to_sros.main(
+    #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sros_effect.yaml',
+    #     outputFolder='20230621_tests/sros_effect/online_rSTIGEVDDANSE',  # relative to `danse/out`
+    # )
     # tests.danse_robustness_to_sros_postproc.main(
     #     folder=f'{Path(__file__).parent}/out/20230613_tests/sros_effect/batch_rSGEVDDANSE',
     #     forcedYlimsMetrics=[-8, 20],
