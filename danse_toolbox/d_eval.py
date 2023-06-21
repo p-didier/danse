@@ -13,7 +13,8 @@ class EnhancementMeasures:
     fwSNRseg: dict = field(default_factory=dict)    # Frequency-weighted segmental SNR
     stoi: dict = field(default_factory=dict)        # Short-Time Objective Intelligibility
     pesq: dict = field(default_factory=dict)        # Perceptual Evaluation of Speech Quality
-    startIdx: int = 0   # sample index at which the metrics were started to be computed
+    startIdx: int = 0   # sample index at which the metrics start to be computed
+    endIdx: int = 0     # sample index at which the metrics stop to be computed
 
 @dataclass
 class Metric:
@@ -79,6 +80,7 @@ def get_metrics(
         vad=None,
         dynamic: DynamicMetricsParameters=None,
         startIdx=0,
+        endIdx=0,
         gamma=0.2,
         fLen=0.03
     ):
@@ -120,6 +122,8 @@ def get_metrics(
         Parameters for dynamic metrics estimation
     startIdx : int
         Sample index to start at when computing the metrics.
+    endIdx : int
+        Sample index to end at when computing the metrics.
     gamma : float
         Gamma exponent for fwSNRseg computation.
     fLen : float
@@ -145,29 +149,29 @@ def get_metrics(
 
     # Trim to correct lengths (avoiding initial filter convergence
     # in calculation of metrics)
-    clean_c = clean[startIdx:]
-    clean_l = clean[startIdx:]
-    clean = clean[startIdx:]
-    # noiseOnly_c = noiseOnly[startIdx:]
-    # noiseOnly_l = noiseOnly[startIdx:]
-    noiseOnly = noiseOnly[startIdx:]
+    clean_c = clean[startIdx:endIdx]
+    clean_l = clean[startIdx:endIdx]
+    clean = clean[startIdx:endIdx]
+    # noiseOnly_c = noiseOnly[startIdx:endIdx]
+    # noiseOnly_l = noiseOnly[startIdx:endIdx]
+    noiseOnly = noiseOnly[startIdx:endIdx]
     if enhan_c is not None:
-        enhan_c = enhan_c[startIdx:]
-        vad_c = vad[startIdx:]
+        enhan_c = enhan_c[startIdx:endIdx]
+        vad_c = vad[startIdx:endIdx]
     if enhan_l is not None:
-        enhan_l = enhan_l[startIdx:]
-        vad_l = vad[startIdx:]
-    enhan = enhan[startIdx:]
-    noisy = noisy[startIdx:]
-    vad = vad[startIdx:]
-    filteredSpeech = filteredSpeech[startIdx:]
-    filteredNoise = filteredNoise[startIdx:]
+        enhan_l = enhan_l[startIdx:endIdx]
+        vad_l = vad[startIdx:endIdx]
+    enhan = enhan[startIdx:endIdx]
+    noisy = noisy[startIdx:endIdx]
+    vad = vad[startIdx:endIdx]
+    filteredSpeech = filteredSpeech[startIdx:endIdx]
+    filteredNoise = filteredNoise[startIdx:endIdx]
     if filteredSpeech_c is not None:
-        filteredSpeech_c = filteredSpeech_c[startIdx:]
-        filteredNoise_c = filteredNoise_c[startIdx:]
+        filteredSpeech_c = filteredSpeech_c[startIdx:endIdx]
+        filteredNoise_c = filteredNoise_c[startIdx:endIdx]
     if filteredSpeech_l is not None:
-        filteredSpeech_l = filteredSpeech_l[startIdx:]
-        filteredNoise_l = filteredNoise_l[startIdx:]
+        filteredSpeech_l = filteredSpeech_l[startIdx:endIdx]
+        filteredNoise_l = filteredNoise_l[startIdx:endIdx]
     
     # Unweighted SNR
     snr.before = get_snr(clean, noiseOnly, vad)

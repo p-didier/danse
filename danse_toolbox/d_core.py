@@ -474,7 +474,9 @@ def tidanse_batch(
     t0 = time.perf_counter()    # timing
 
     # Get centralized and local estimates (no iterations for those)
+    print('Computing centralized and local estimates...')
     btidv.get_centralized_and_local_estimates()
+    print('...done.')
     # Perform batch TI-DANSE
     if 'seq' in p.nodeUpdating:  # sequential updates
         upNodeIdx = 0

@@ -693,10 +693,14 @@ class DANSEvariables(base.DANSEparameters):
                 )
 
         # Covariance matrices initialization from batch estimates
-        if self.covMatInitType == 'batch_estimates':
-            print('Initializing covariance matrices from batch estimates...')
-            self.init_covmats_from_batch()  # <-- directly modifies the `self` covariance matrices fields
-            print('...done.')
+        if self.simType == 'batch':
+            self.Ryytilde = [None for _ in range(self.nNodes)]
+            self.Rnntilde = [None for _ in range(self.nNodes)]
+        else:
+            if self.covMatInitType == 'batch_estimates':
+                print('Initializing covariance matrices from batch estimates...')
+                self.init_covmats_from_batch()  # <-- directly modifies the `self` covariance matrices fields
+                print('...done.')
 
         # For debugging purposes
         initCNlist = [np.empty((self.nPosFreqs, 0)) for _ in range(nNodes)]
@@ -733,6 +737,7 @@ class DANSEvariables(base.DANSEparameters):
         else:
             filter_update_fcn = update_w
             rank = 1  # <-- arbitrary, not used in this case
+
         wTildeExt_1stEstimate = [None for _ in range(self.nNodes)]
         for k in range(self.nNodes):
             RyyTilde_1stEstimate, RnnTilde_1stEstimate = update_covmats_batch(

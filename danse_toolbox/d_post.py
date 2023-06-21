@@ -815,13 +815,14 @@ def compute_metrics(
 
     # Initialisations
     startIdx = np.zeros(out.nNodes, dtype=int)
+    endIdx = np.zeros(out.nNodes, dtype=int)
     snr = _ndict(out.nNodes)  # Unweighted SNR
     fwSNRseg = _ndict(out.nNodes)  # Frequency-weighted segmental SNR
     stoi = _ndict(out.nNodes)  # (extended) Short-Time Objective Intelligibility
     pesq = _ndict(out.nNodes)  # Perceptual Evaluation of Speech Quality
     tStart = time.perf_counter()
     for k in range(out.nNodes):
-        # Derive starting sample for metrics computations
+        # Derive starting/ending samples for metrics computations
         startIdx[k] = int(np.floor(wasn[k].metricStartTime * wasn[k].fs))
         print(f"Node {k+1}: computing metrics from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s --> discard early filters updates)...")
         print(f'Computing metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
@@ -841,6 +842,13 @@ def compute_metrics(
             TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
             print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
         
+        if out.simType == 'batch':
+            # Discard the very end of the signal due to STFT/ISTFT artefacts
+            endIdx[k] = int(wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize)
+        else:
+            # Use all signal until the end
+            endIdx[k] = int(wasn[k].cleanspeechRefSensor.shape[0])
+        
         out0, out1, out2, out3 = get_metrics(
             # Clean speech mixture (desired signal)
             clean=np.squeeze(wasn[k].cleanspeechRefSensor),
@@ -857,8 +865,9 @@ def compute_metrics(
             enhan=out.TDdesiredSignals_est[:, k],
             enhan_c=TDdesiredSignals_est_c,
             enhan_l=TDdesiredSignals_est_l,
-            # Start indices
+            # Start/end indices
             startIdx=startIdx[k],
+            endIdx=endIdx[k],
             # Other parameters
             fs=wasn[k].fs,
             vad=wasn[k].vadCombined,
@@ -880,7 +889,8 @@ def compute_metrics(
         stoi=stoi,
         pesq=pesq,
         snr=snr,
-        startIdx=startIdx
+        startIdx=startIdx,
+        endIdx=endIdx
     )
 
     return metrics
@@ -1654,7 +1664,8 @@ def plot_signals_all_nodes(
         fig, axForTitle = plot_signals(
             node=wasn[k],
             win=win,
-            ovlp=out.WOLAovlp
+            ovlp=out.WOLAovlp,
+            batchMode=out.simType == 'batch'
         )
         ti = f'Node {k + 1}, {out.nSensorPerNode[k]} sensor(s)'
         if out.simType == 'online':
@@ -1666,7 +1677,7 @@ def plot_signals_all_nodes(
     return figs
 
 
-def plot_signals(node: Node, win, ovlp):
+def plot_signals(node: Node, win, ovlp, batchMode=False):
     """
     Creates a visual representation of the signals at a particular sensor.
 
@@ -1731,12 +1742,22 @@ def plot_signals(node: Node, win, ovlp):
             label='Enhanced (centr.)'
         )
     # Plot start of enhancement metrics computations
+    ymin, ymax = np.amin(ax.get_ylim()), np.amax(ax.get_ylim())
     ax.vlines(
         x=node.metricStartTime,
-        ymin=np.amin(ax.get_ylim()),
-        ymax=np.amax(ax.get_ylim()),
-        colors='0.5',
+        ymin=ymin,
+        ymax=ymax,
+        colors='0.75',
     )
+    if batchMode:
+        # Plot end of enhancement metrics computations
+        ax.vlines(
+            x=(node.cleannoise.shape[0] - len(win)) / node.fs,
+            # ^^^ discard last window in batch mode due to STFT/ISTFT transforms artefacts
+            ymin=ymin,
+            ymax=ymax,
+            colors='0.75',
+        )
 
     ax.set_yticklabels([])
     ax.set(xlabel='$t$ [s]')

@@ -15,14 +15,12 @@ from danse_toolbox.d_base import DANSEparameters, CohDriftParameters, PrintoutsA
 # PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect_20230406.yaml'
 PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sros_effect.yaml'
 N_SRO_TESTS = 10    # number of SRO tests to run
-MAX_SRO_PPM = 500   # maximum SRO in PPM
+MAX_SRO_PPM = 400   # maximum SRO in PPM
 EXPORT_DATA = True
 OUT_FOLDER = '20230508_tests/sros_effect_danse/'  # export path relative to `danse/out`
 # OUT_FOLDER = '20230414_tests/sros_effect/test_new2'  # export path relative to `danse/out`
 SKIP_ALREADY_RUN = True  # if True, skip tests that have already been run
 SIGNALS_PATH = f'{Path(__file__).parent.parent}/tests/sigs'
-
-NNODES_IN_WASN = 4
 
 def main(
         cfgFilename: str = PATH_TO_CONFIG_FILE,
@@ -30,18 +28,9 @@ def main(
     ):
     """Main function (called by default when running script)."""
 
-    # SROs to consider
-    srosToConsider = [np.round(np.linspace(
-        start=ii / (NNODES_IN_WASN - 1),
-        stop=ii,
-        num=NNODES_IN_WASN - 1,
-        endpoint=True
-    ) * MAX_SRO_PPM / N_SRO_TESTS) for ii in np.arange(0, N_SRO_TESTS)]
-    
     # Run tests
-    res = run_test_batch(
+    res, srosToConsider = run_test_batch(
         configFilePath=cfgFilename,
-        srosToConsider=srosToConsider,
         outputFolder=outputFolder,
     )
 
@@ -156,7 +145,6 @@ def setup_config(filePath: str):
 
 def run_test_batch(
         configFilePath: str,
-        srosToConsider: list,
         outputFolder: str
     ) -> list[dict]:
     """
@@ -166,8 +154,6 @@ def run_test_batch(
     ----------
     configFilePath : str
         Path to YAML configuration file.
-    srosToConsider : list[list[float]]
-        List of lists of SROs to consider (per node) [PPM].
     outputFolder : str
         Name of output folder.
     
@@ -180,6 +166,15 @@ def run_test_batch(
     """
     # Set up configuration
     testParams = setup_config(configFilePath)
+    
+    # SROs to consider
+    nNodesInWASN = testParams.wasnParams.nNodes
+    srosToConsider = [np.round(np.linspace(
+        start=ii / (nNodesInWASN - 1),
+        stop=ii,
+        num=nNodesInWASN - 1,
+        endpoint=True
+    ) * MAX_SRO_PPM / N_SRO_TESTS) for ii in np.arange(0, N_SRO_TESTS)]
     
     allVals = []
     for ii, sros in enumerate(srosToConsider):
@@ -209,7 +204,7 @@ def run_test_batch(
         allVals.append(vals)
         plt.close(fig='all')  # close all figures (avoid memory overload)
 
-    return allVals
+    return allVals, srosToConsider
 
 
 def extract_single_test_results(res: DANSEoutputs):
