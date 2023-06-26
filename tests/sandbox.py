@@ -47,7 +47,7 @@ def main(
 
     # Build room
     print('Building room...')
-    room, vad, wetSpeeches, wetNoises = sig_ut.build_room(p.wasnParams)
+    room, vad, wetSpeeches, wetNoises = sig_ut.build_scenario(p.wasnParams)
     # Complete parameters (useful in case of YAML-loaded layout)
     p.danseParams.get_wasn_info(p.wasnParams)
     print('Room built.')

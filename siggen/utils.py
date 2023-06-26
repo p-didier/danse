@@ -14,6 +14,240 @@ from pyANFgen.pyanfgen.utils import pyanfgen, ANFgenConfig
 from scipy.spatial.transform import Rotation as rot
 
 
+def build_scenario(p: classes.WASNparameters):
+    """
+    Interprets parameters to decide whether to simulate an actual room,
+    or to generate random impulse responses.
+
+    
+    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
+        VAD per sample, per node, and per speech source.
+    wetSpeeches : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
+        Wet (RIR-affected) speech signal at each sensor of each node.
+        `Nm[k]` is the number of microphones at node `k`.
+    wetNoises : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
+        Wet (RIR-affected) noise signal at each sensor of each node.
+    """
+
+    # Get impulse responses
+    if p.trueRoom:
+        room, irs_d, irs_n = build_room(p)
+    else:
+        irs_d, irs_n = generate_random_impulse_responses(p)
+        room = None
+    
+    # Get raw source signals
+    dRaw, nRaw = get_raw_source_signals(p)
+    
+    # Get wet speech and compute VAD
+    vad, wetSpeeches = get_vad(
+        irs_d,
+        dRaw,
+        p
+    )
+    if p.nNoiseSources > 0:
+        # Get wet noise
+        _, wetNoises = get_vad(
+            irs_n,
+            nRaw,
+            p,
+            bypassVADcomputation=True  # save computation time
+        )
+    else:
+        wetNoises = None
+
+    return room, vad, wetSpeeches, wetNoises
+
+
+# def apply_rirs(signals: np.ndarray, rirs: list) -> np.ndarray:
+#     """
+#     Apply RIRs to signals.
+
+#     Parameters
+#     ----------
+#     signals : [N x Nsources] np.ndarray (float)
+#         Signals to which to apply RIRs.
+#     rirs : [Nnodes x 1] list of [Nm[k] x 1] lists of [Nsource x N] np.ndarray (float)
+#         RIRs at each sensor of each node, for each source.
+#         `Nm[k]` is the number of microphones at node `k`.
+
+#     Returns
+#     -------
+#     signalsOut : [Nnodes x 1] list of [N x Nm[k]] np.ndarray (float)
+#     """
+
+#     # Apply RIRs
+#     signalsOut = []
+#     for k in range(len(rirs)):  # loop over nodes
+#         # Loop over sensors
+#         signalsOut.append(np.zeros((signals.shape[0], len(rirs[k]))))
+#         for ii in range(len(rirs[k])):  # loop over sensors
+#             # Loop over sources
+#             for jj in range(len(rirs[k][ii])):  # loop over sources
+#                 # Apply RIR
+#                 currSourceContribution = sig.lfilter(rirs[k][ii][jj], 1, signals[:, jj])
+#                 # Add to output
+#                 if jj == 0:
+#                     signalsOut[k][:, ii] = currSourceContribution
+#                 else:
+#                     signalsOut[k][:, ii] += currSourceContribution
+
+#     return signalsOut
+
+
+def get_raw_source_signals(p: classes.WASNparameters):
+    """
+    Obtain raw (unprocessed) source signals.
+
+    Parameters
+    ----------
+    p : `WASNparameters` object
+        Parameters.
+
+    Returns
+    -------
+    desiredSignalsRaw : [N x Ndesired] np.ndarray (float)
+        Raw (unprocessed) desired source signals.
+    noiseSignalsRaw : [N x Nnoise] np.ndarray (float)
+        Raw (unprocessed) noise source signals.
+    """
+
+    def _get_source_signal(file):
+        """Helper function to load and process source signal."""
+        # Load
+        y, fsOriginal = librosa.load(file, sr=None)
+        # Resample
+        if fsOriginal != p.fs:
+            print(f'Resampling {file} from {fsOriginal} Hz to {p.fs} Hz...')
+            y = resampy.resample(y, fsOriginal, p.fs)
+        # Adjust length
+        if len(y) > desiredNumSamples:
+            y = y[:desiredNumSamples]
+        elif len(y) < desiredNumSamples:
+            while len(y) < desiredNumSamples:
+                y = np.concatenate((y, y))  # loop
+                y = y[:desiredNumSamples]
+        # Whiten
+        y = (y - np.mean(y)) / np.std(y)  # whiten
+        return y
+
+    # Desired number of samples
+    desiredNumSamples = int(p.sigDur * p.fs)
+
+    # Add desired sources
+    desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
+    for ii in range(p.nDesiredSources):
+        if p.signalType == 'from_file':
+            # Load sound file
+            y = _get_source_signal(p.desiredSignalFile[ii])
+        elif p.signalType == 'random':
+            # Generate random signal
+            y = generate_rand_signal(
+                p.randSignalsParams,
+                desiredNumSamples,
+                p.fs
+            )
+        desiredSignalsRaw[:, ii] = y
+
+    # Add noise sources
+    noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
+    for ii in range(p.nNoiseSources):
+        if p.signalType == 'from_file':
+            # Load sound file
+            y = _get_source_signal(p.noiseSignalFile[ii])
+        elif p.signalType == 'random':
+            # Generate random signal
+            y = generate_rand_signal(
+                p.randSignalsParams,
+                desiredNumSamples,
+                p.fs,
+                noPauses=True  # no pauses for noise signals
+            )
+        y *= 10 ** (-p.baseSNR / 20)    # gain to set SNR
+        noiseSignalsRaw[:, ii] = y
+
+    return desiredSignalsRaw, noiseSignalsRaw
+
+
+def generate_random_impulse_responses(p: classes.WASNparameters):
+    """
+    Generate random impulse responses.
+
+    Parameters
+    ----------
+    p : `WASNparameters` object
+        Parameters.
+
+    Returns
+    -------
+    rirsDesiredSources : [Nnodes x 1] list of [Nm[k] x 1] lists of
+                        [Ndesired x 1] lists of [N x 1] np.ndarray (float)
+        RIRs from desired sources at each sensor of each node.
+        `Nm[k]` is the number of microphones at node `k`.
+    rirsNoiseSources : [Nnodes x 1] list of [Nm[k] x 1] lists of
+                        [Nnoise x 1] lists of [N x 1] np.ndarray (float)
+        RIRs from noise sources at each sensor of each node.
+    """
+
+    # Generate random impulse responses
+    rirsDesiredSources = []
+    rirsNoiseSources = []
+    for k in range(p.nNodes):
+        currNodeRirsDesiredSources = []
+        currNodeRirsNoiseSources = []
+        for _ in range(p.nSensorPerNode[k]):
+            # Generate desired source RIRs
+            currNodeRirsDesiredSources.append(
+                generate_random_rir(
+                    p.randIRsParams,
+                    p.nDesiredSources,
+                    p.fs
+                )
+            )
+            # Generate noise source RIRs
+            currNodeRirsNoiseSources.append(
+                generate_random_rir(
+                    p.randIRsParams,
+                    p.nNoiseSources,
+                    p.fs
+                )
+            )
+        rirsDesiredSources.append(currNodeRirsDesiredSources)
+        rirsNoiseSources.append(currNodeRirsNoiseSources)
+    
+    return rirsDesiredSources, rirsNoiseSources
+
+
+def generate_random_rir(
+        prir: classes.RandomIRParameters,
+        n: int,
+        fs: float
+    ) -> np.ndarray:
+
+    # Generate random RIRs
+    if prir.distribution == 'uniform':
+        gen_func = np.random.uniform
+    elif prir.distribution == 'normal':
+        gen_func = np.random.normal
+
+    # Generate random RIRs
+    rirs = []
+    for _ in range(n):
+        # Generate random RIR
+        rir = gen_func(
+            prir.minValue,
+            prir.maxValue,
+            (int(prir.duration * fs),)
+        )
+        # Add exponential decay if asked
+        if prir.decay == 'exponential':
+            rir *= np.exp(-np.arange(len(rir)) /\
+                (prir.decayTimeConstant * fs))
+        # Normalize
+        rirs.append(rir)
+    return rirs
+
+
 def build_room(p: classes.WASNparameters):
     """
     Builds room, adds nodes and sources, simulates RIRs
@@ -28,13 +262,13 @@ def build_room(p: classes.WASNparameters):
     -------
     room : `pyroomacoustics.room.ShoeBox` object
         Room (acoustic scenario) object.
-    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
-        VAD per sample, per node, and per speech source.
-    wetSpeeches : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
-        Wet (RIR-affected) speech signal at each sensor of each node.
+    rirsDesiredSources : [Nnodes x 1] list of [Nm[k] x 1] lists of
+                    [Ndesired x 1] lists of [N x 1] np.ndarray (float)
+        RIRs from desired sources at each sensor of each node.
         `Nm[k]` is the number of microphones at node `k`.
-    wetNoises : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
-        Wet (RIR-affected) noise signal at each sensor of each node.
+    rirsNoiseSources : [Nnodes x 1] list of [Nm[k] x 1] lists of
+                    [Nnoise x 1] lists of [N x 1] np.ndarray (float)
+        RIRs from noise sources at each sensor of each node.
     """
 
     # Invert Sabine's formula to obtain the parameters for the ISM simulator
@@ -58,7 +292,7 @@ def build_room(p: classes.WASNparameters):
         p.align_with_loaded_yaml_layout(layoutInfo)
 
         if any(np.array(layoutInfo['rd']) != p.rd.astype(float)):
-            raise ValueError('Room dimensions do not match.')  # FIXME: make sure the parameters read from YAML match those in the `TestParameters`
+            raise ValueError('Room dimensions do not match.')
         
         # Extract sensor coordinates
         sensorsCoords = []
@@ -142,9 +376,6 @@ def build_room(p: classes.WASNparameters):
             elevationLine = np.random.uniform(np.pi / 8, np.pi / 2 - np.pi / 8)
             
             # Generate speech sources along the line
-            # desiredSourceCoords = np.zeros((3, p.nDesiredSources))
-            # for ii in range(p.nDesiredSources):
-            #     # Generate random point on the line
             desiredSourceCoords = random_points_on_line(
                 azimuthLine,
                 elevationLine,
@@ -154,15 +385,12 @@ def build_room(p: classes.WASNparameters):
                 n=p.nDesiredSources,
                 minSpacing=p.spinTop_minSourceSpacing
             )
-            
-                # desiredSourceCoords[:, ii] = np.array([x, y, z])
             if desiredSourceCoords is None:
                 attemptsCount += 1
                 continue
             desiredSourceCoords = desiredSourceCoords.T  # adapt for pyroomacoustics
 
             # Generate noise sources along the line
-            # noiseSourceCoords = np.zeros((3, p.nNoiseSources))
             noiseSourceCoords = random_points_on_line(
                 azimuthLine,
                 elevationLine,
@@ -172,22 +400,10 @@ def build_room(p: classes.WASNparameters):
                 n=p.nNoiseSources,
                 minSpacing=p.spinTop_minSourceSpacing
             )
-            # for ii in range(p.nNoiseSources):
-            #     # Generate random point on the line
-            #     x, y, z = random_points_on_line(
-            #         azimuthLine,
-            #         elevationLine,
-            #         xOffset,
-            #         yOffset,
-            #         p.rd
-            #     )
-            #     noiseSourceCoords[:, ii] = np.array([x, y, z])
-            # if np.isnan(noiseSourceCoords).any():
             if noiseSourceCoords is None:
                 attemptsCount += 1
                 continue
             noiseSourceCoords = noiseSourceCoords.T  # adapt for pyroomacoustics
-
             
             # Generate random circle center
             circCenter = random_points_on_line(
@@ -278,7 +494,8 @@ def build_room(p: classes.WASNparameters):
         sensorsCoords = sensorsCoords.T  # adapt for `add_sensors_and_sources_to_room`
         
     # Add sensors and sources to room
-    room, desiredSignalsRaw, noiseSignalsRaw = add_sensors_and_sources_to_room(
+    # room, desiredSignalsRaw, noiseSignalsRaw = add_sensors_and_sources_to_room(
+    room = add_sensors_and_sources_to_room(
         sensorsCoords=sensorsCoords,
         desiredSourceCoords=desiredSourceCoords,
         noiseSourceCoords=noiseSourceCoords,
@@ -288,10 +505,10 @@ def build_room(p: classes.WASNparameters):
 
     # Compute RIRs
     room.compute_rir()
-    room.simulate()
+    # room.simulate()
 
-    # Truncate signals (no need for reverb tail)
-    room.mic_array.signals = room.mic_array.signals[:, :int(p.fs * p.sigDur)]
+    # # Truncate signals (no need for reverb tail)
+    # room.mic_array.signals = room.mic_array.signals[:, :int(p.fs * p.sigDur)]
 
     # Extract desired source RIRs per node
     rirsDesiredSources = []
@@ -305,24 +522,8 @@ def build_room(p: classes.WASNparameters):
         rirsCurr = [room.rir[ii][-p.nNoiseSources:]\
             for ii in range(len(room.rir)) if p.sensorToNodeIndices[ii] == k]
         rirsNoiseSources.append(rirsCurr)
-    # Get wet speech and compute VAD
-    vad, wetSpeeches = get_vad(
-        rirsDesiredSources,
-        desiredSignalsRaw,
-        p
-    )
-    if p.nNoiseSources > 0:
-        # Get wet noise
-        _, wetNoises = get_vad(
-            rirsNoiseSources,
-            noiseSignalsRaw,
-            p,
-            bypassVADcomputation=True  # save computation time
-        )
-    else:
-        wetNoises = None
 
-    return room, vad, wetSpeeches, wetNoises
+    return room, rirsDesiredSources, rirsNoiseSources
 
 
 def add_sensors_and_sources_to_room(
@@ -359,24 +560,24 @@ def add_sensors_and_sources_to_room(
         Raw (unprocessed) noise source signals.
     """
     
-    def _get_source_signal(file):
-        """Helper function to load and process source signal."""
-        # Load
-        y, fsOriginal = librosa.load(file, sr=None)
-        # Resample
-        if fsOriginal != p.fs:
-            print(f'Resampling {file} from {fsOriginal} Hz to {p.fs} Hz...')
-            y = resampy.resample(y, fsOriginal, p.fs)
-        # Adjust length
-        if len(y) > desiredNumSamples:
-            y = y[:desiredNumSamples]
-        elif len(y) < desiredNumSamples:
-            while len(y) < desiredNumSamples:
-                y = np.concatenate((y, y))  # loop
-                y = y[:desiredNumSamples]
-        # Whiten
-        y = (y - np.mean(y)) / np.std(y)  # whiten
-        return y
+    # def _get_source_signal(file):
+    #     """Helper function to load and process source signal."""
+    #     # Load
+    #     y, fsOriginal = librosa.load(file, sr=None)
+    #     # Resample
+    #     if fsOriginal != p.fs:
+    #         print(f'Resampling {file} from {fsOriginal} Hz to {p.fs} Hz...')
+    #         y = resampy.resample(y, fsOriginal, p.fs)
+    #     # Adjust length
+    #     if len(y) > desiredNumSamples:
+    #         y = y[:desiredNumSamples]
+    #     elif len(y) < desiredNumSamples:
+    #         while len(y) < desiredNumSamples:
+    #             y = np.concatenate((y, y))  # loop
+    #             y = y[:desiredNumSamples]
+    #     # Whiten
+    #     y = (y - np.mean(y)) / np.std(y)  # whiten
+    #     return y
     
     # Add nodes
     room.add_microphone_array(sensorsCoords)
@@ -385,31 +586,121 @@ def add_sensors_and_sources_to_room(
     desiredNumSamples = int(p.sigDur * p.fs)
 
     # Add desired sources
-    desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
+    # desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
     for ii in range(p.nDesiredSources):
-        # Load sound file
-        y = _get_source_signal(p.desiredSignalFile[ii])
-        desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
+        # if p.signalType == 'from_file':
+        #     # Load sound file
+        #     y = _get_source_signal(p.desiredSignalFile[ii])
+        # elif p.signalType == 'random':
+        #     # Generate random signal
+        #     y = generate_rand_signal(
+        #         p.randSignalsParams,
+        #         desiredNumSamples,
+        #         p.fs
+        #     )
+        # desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
         ssrc = pra.soundsource.SoundSource(
             position=desiredSourceCoords[:, ii], # coordinates
-            signal=desiredSignalsRaw[:, ii]
+            signal=np.zeros(desiredNumSamples)  # placeholder
         )
         room.add_soundsource(ssrc)
 
     # Add noise sources
-    noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
+    # noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
     for ii in range(p.nNoiseSources):
-        # Load sound file
-        y = _get_source_signal(p.noiseSignalFile[ii])
-        y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
-        noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
+        # if p.signalType == 'from_file':
+        #     # Load sound file
+        #     y = _get_source_signal(p.noiseSignalFile[ii])
+        # elif p.signalType == 'random':
+        #     # Generate random signal
+        #     y = generate_rand_signal(
+        #         p.randSignalsParams,
+        #         desiredNumSamples,
+        #         p.fs,
+        #         noPauses=True  # no pauses for noise signals
+        #     )
+        # y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
+        # noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
         ssrc = pra.soundsource.SoundSource(
             position=noiseSourceCoords[:, ii], # coordinates
-            signal=noiseSignalsRaw[:, ii]
+            signal=np.zeros(desiredNumSamples)  # placeholder
         )
         room.add_soundsource(ssrc)
 
-    return room, desiredSignalsRaw, noiseSignalsRaw
+    return room#, desiredSignalsRaw, noiseSignalsRaw
+
+
+def generate_rand_signal(
+        prand: classes.RandomSignalsParameters,
+        n: int,
+        fs: float,
+        noPauses=False
+    ) -> np.ndarray:
+    """
+    Generate random signal.
+
+    Parameters
+    ----------
+    prand : RandomSignalsParameters object
+        Parameters.
+    n : int
+        Desired number of samples.
+    fs : float
+        Sampling frequency [Hz].
+    noPauses : bool
+        If True, do not add pauses.
+
+    Returns
+    -------
+    y : [N x 1] np.ndarray (float)
+        Random signal.
+    """
+    if prand.distribution == 'uniform':
+        gen_func = np.random.uniform
+    elif prand.distribution == 'normal':
+        gen_func = np.random.normal
+        
+    y = gen_func(
+        prand.minValue,
+        prand.maxValue,
+        (n,)
+    )
+
+    # Add pauses
+    if not noPauses:
+        if prand.pauseType == 'random':
+            # Compute the number of pauses based on the desired
+            # min/max pause length
+            nPauses = int(
+                n / ((prand.randPauseDuration_min +\
+                    prand.randPauseDuration_max) * fs) / 2
+            )
+            # Add random pauses
+            for ii in range(nPauses):
+                # Generate random pause length
+                leng = np.random.uniform(
+                    prand.randPauseDuration_min,
+                    prand.randPauseDuration_max
+                )
+                # Generate random pause position
+                pausePos = np.random.uniform(0, n - leng * fs)
+                # Add pause
+                y[int(pausePos):int(pausePos + leng * fs)] = 0
+
+        elif prand.pauseType == 'predefined':
+            # Add regular pauses based on the desired
+            # pause length and pause spacing
+            leng = prand.pauseDuration * fs
+            space = prand.pauseSpacing * fs
+            if prand.startWithPause:
+                startIdx = 0
+            else:
+                startIdx = space
+            pausePos = np.arange(startIdx, n, space + leng)
+            for ii in range(len(pausePos)):
+                y[int(pausePos[ii]):int(pausePos[ii] + leng)] = 0
+
+    return y
 
 
 def plot_asc_3d(
@@ -833,6 +1124,7 @@ def build_wasn(
         Room (acoustic scenario) object. Augmented with VAD and 
         wet speech signals at each node's reference sensor (output of
         `build_room()`).
+        NB: is `None` if `p.trueRoom` is `False`.
     vad : [N x Nnodes x Nspeechsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
     wetSpeeches : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
@@ -860,11 +1152,25 @@ def build_wasn(
         WASN object, including all necessary values.
     """
 
+    # Account for the `trueRoom == False` case
+    if not p.trueRoom:
+        sensorCoords = None
+    else:
+        sensorCoords = room.mic_array.R
+    
+    # Get sensor signals
+    sensorSignals = np.zeros(
+        (np.sum(p.nSensorPerNode), wetNoises[0].shape[-1])
+    )
+    for k in range(p.nNodes):
+        sensorSignals[p.sensorToNodeIndices == k, :] =\
+            wetNoises[k] + wetSpeeches[k]
+
     # Create network topological map (inter-node links)
     adjacencyMatrix, neighbors = get_topo(
         p.topologyParams,
         sensorToNodeIndices=p.sensorToNodeIndices,
-        sensorCoords=room.mic_array.R  # microphones positions
+        sensorCoords=sensorCoords  # microphones positions
     )
 
     myWASN = classes.WASN()
@@ -876,7 +1182,7 @@ def build_wasn(
         for m1 in range(totalNumSensors):
             for m2 in range(totalNumSensors):
                 interSensorDists[m1, m2] = np.sqrt(np.sum(
-                    (room.mic_array.R[:, m1] - room.mic_array.R[:, m2]) ** 2
+                    (sensorCoords[:, m1] - sensorCoords[:, m2]) ** 2
                 ))
         # Generate diffuse noise for each sensor
         cfg = ANFgenConfig(
@@ -897,7 +1203,7 @@ def build_wasn(
     for k in range(p.nNodes):
         # Apply asynchronicities
         sigs, t, fsSRO = apply_asynchronicity_at_node(
-            y=room.mic_array.signals[p.sensorToNodeIndices == k, :].T,
+            y=sensorSignals[p.sensorToNodeIndices == k, :].T,
             fs=p.fs,
             sro=p.SROperNode[k],
             sto=0.
@@ -943,8 +1249,12 @@ def build_wasn(
         noiseOnly += selfNoiseRefSensor[:, np.newaxis]
 
         # Get geometrical parameters
-        sensorPositions = room.mic_array.R[:, p.sensorToNodeIndices == k]
-        nodePosition = np.mean(sensorPositions, axis=1)
+        if p.trueRoom:
+            sensorPositions = sensorCoords[:, p.sensorToNodeIndices == k]
+            nodePosition = np.mean(sensorPositions, axis=1)
+        else:
+            sensorPositions = None
+            nodePosition = None
         
         # Create node
         node = classes.Node(
@@ -1110,9 +1420,11 @@ def get_topo(
         Sensor-to-node indices for each sensor in the WASN.
     sensorCoords : [3 x Nsensors] np.ndarray (float)
         3-D coordinates of all sensors [m].
+        NB: can be `None` if the scenario does not represent a true room.
     roomDim : [3 x 1] list or np.ndarray (float)
         Room dimensions [x, y, z] (for plotting if 
         `topoParams.plotTopo == True`).
+        NB: can be `None` if the scenario does not represent a true room.
 
     Returns
     -------
@@ -1126,12 +1438,13 @@ def get_topo(
     numNodes = np.amax(sensorToNodeIndices) + 1
 
     # Get geometrical central coordinates of each node
-    geomCentreCoords = np.zeros((3, numNodes))
-    for k in range(numNodes):
-        geomCentreCoords[:, k] = np.mean(
-            sensorCoords[:, sensorToNodeIndices == k],
-            axis=1
-        )
+    if sensorCoords is not None:
+        geomCentreCoords = np.zeros((3, numNodes))
+        for k in range(numNodes):
+            geomCentreCoords[:, k] = np.mean(
+                sensorCoords[:, sensorToNodeIndices == k],
+                axis=1
+            )
 
     # Potential TODO : oriented graph vvv
     # If `{topo}_{i,j} == 2`: `i` can send data to `j` but not vice-versa.
@@ -1143,14 +1456,23 @@ def get_topo(
     # ------- AD HOC -------
     elif topoParams.topologyType == 'ad-hoc':
         topo = np.zeros((numNodes, numNodes), dtype=int)
-        for k in range(numNodes):
-            currCoords = geomCentreCoords[:, k]
-            # Compute inter-node distances
-            distWrtOthers = np.linalg.norm(
-                geomCentreCoords - currCoords[:, np.newaxis],
-                axis=0
-            )
-            topo[k, :] = distWrtOthers < topoParams.commDistance
+        if sensorCoords is None:
+            # Create a random topology
+            topo = np.random.randint(0, 2, size=(numNodes, numNodes))
+            # Make it symmetrical
+            topo = np.triu(topo) + np.triu(topo, 1).T
+            # Make it boolean
+            topo = topo.astype(bool)  # TODO: TEST!
+        else:
+            # Define the topology based on the maximum communication distance
+            for k in range(numNodes):
+                currCoords = geomCentreCoords[:, k]
+                # Compute inter-node distances
+                distWrtOthers = np.linalg.norm(
+                    geomCentreCoords - currCoords[:, np.newaxis],
+                    axis=0
+                )
+                topo[k, :] = distWrtOthers < topoParams.commDistance
     # ------- USER DEFINED -------
     elif topoParams.topologyType == 'user-defined':
         # User-defined topology

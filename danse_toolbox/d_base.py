@@ -1919,9 +1919,13 @@ def prune_wasn_to_tree(
     )
     
     # Add edge weights based on inter-node distance # TODO: is that a correct approach? TODO:
-    for e in Gnx.edges():
-        weight = np.linalg.norm(nodesPos[e[0]] - nodesPos[e[1]])
-        Gnx[e[0]][e[1]]['weight'] = weight
+    if nodesPos[0] is not None:
+        for e in Gnx.edges():
+            weight = np.linalg.norm(nodesPos[e[0]] - nodesPos[e[1]])
+            Gnx[e[0]][e[1]]['weight'] = weight
+    else:
+        for e in Gnx.edges():
+            Gnx[e[0]][e[1]]['weight'] = 1  # not "true-room" scenario
     
     # Compute minimum spanning tree
     prunedWasnNX = nx.minimum_spanning_tree(
@@ -2243,3 +2247,132 @@ def init_covmats(
                 (dims[0], 1, 1)
             )
     return fullSlice
+
+
+def get_y_tilde_batch(
+        tidanseFlag=False,
+        yinSTFT=None,
+        nNodes=0,
+        wTildeExt=None,
+        nSensorPerNode=None,
+        neighbors=None,
+        i=0,
+        k=0,
+        yinSTFT_s=None,
+        yinSTFT_n=None,
+        computeSpeechAndNoiseOnly=False,
+        useThisFilter=None
+    ):
+    """
+    Compute complete yTilde for all nodes, all frames, using
+    current (external) DANSE filters. Works for both fully connected
+    DANSE and TI-DANSE.
+    """
+    if tidanseFlag:  # TI-DANSE case
+        # raise ValueError('TODO: `useThisFilter` parameter for TI-DANSE')
+        etaMkBatch = np.zeros((
+            yinSTFT[k].shape[0],
+            yinSTFT[k].shape[1]
+        ), dtype=complex)
+        if computeSpeechAndNoiseOnly:
+            etaMkBatch_s = copy.deepcopy(etaMkBatch)
+            etaMkBatch_n = copy.deepcopy(etaMkBatch)
+            # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
+            # as `yinSTFT`.
+        for idxNode in range(nNodes):
+            if idxNode != k:  # only sum over the other nodes
+                if useThisFilter is not None:
+                    # Bypass `wTildeExt`
+                    fusionFilter = useThisFilter[idxNode]
+                else:
+                    fusionFilter = wTildeExt[idxNode][:, i[idxNode], :]
+                # TI-DANSE fusion vector
+                # p = fusionFilter[:, :nSensorPerNode[idxNode]] /\
+                #     fusionFilter[:, -1:]
+                p = fusionFilter[:, :nSensorPerNode[idxNode]]
+                # Compute sum
+                etaMkBatch += np.einsum(   # <-- `+=` is important
+                    'ij,ikj->ik',
+                    p.conj(),
+                    yinSTFT[idxNode]
+                )
+                if computeSpeechAndNoiseOnly:
+                    etaMkBatch_s += np.einsum(   # <-- `+=` is important
+                        'ij,ikj->ik',
+                        p.conj(),
+                        yinSTFT_s[idxNode]
+                    )
+                    etaMkBatch_n += np.einsum(   # <-- `+=` is important
+                        'ij,ikj->ik',
+                        p.conj(),
+                        yinSTFT_n[idxNode]
+                    )
+        # Construct yTilde
+        yTildeBatch = np.concatenate(
+            (yinSTFT[k], etaMkBatch[:, :, np.newaxis]),
+            axis=-1
+        )
+        if computeSpeechAndNoiseOnly:
+            yTildeBatch_s = np.concatenate(
+                (yinSTFT_s[k], etaMkBatch_s[:, :, np.newaxis]),
+                axis=-1
+            )
+            yTildeBatch_n= np.concatenate(
+                (yinSTFT_n[k], etaMkBatch_n[:, :, np.newaxis]),
+                axis=-1
+            )
+    else:
+        # Compute batch fused signals using current (external) DANSE filters
+        zBatch = np.zeros((
+            yinSTFT[k].shape[0],
+            yinSTFT[k].shape[1],
+            len(neighbors[k])
+        ), dtype=complex)
+        if computeSpeechAndNoiseOnly:
+            zBatch_s = copy.deepcopy(zBatch)
+            zBatch_n = copy.deepcopy(zBatch)
+            # ^^^ ok because `yinSTFT_s` and `yinSTFT_n` have the same
+            # shape as `yinSTFT`.
+        for ii, idxNode in enumerate(neighbors[k]):
+            if useThisFilter is not None:
+                # Bypass `wTildeExt`
+                fusionFilter = useThisFilter[idxNode]
+            else:
+                fusionFilter = wTildeExt[idxNode][:, i[idxNode], :]
+            
+            zBatch[:, :, ii] = np.einsum(
+                'ij,ikj->ik',
+                fusionFilter.conj(),
+                yinSTFT[idxNode]
+            )
+            if computeSpeechAndNoiseOnly:
+                zBatch_s[:, :, ii] = np.einsum(
+                    'ij,ikj->ik',
+                    fusionFilter.conj(),
+                    yinSTFT_s[idxNode]
+                )
+                zBatch_n[:, :, ii] = np.einsum(
+                    'ij,ikj->ik',
+                    fusionFilter.conj(),
+                    yinSTFT_n[idxNode]
+                )
+        # Construct yTilde
+        yTildeBatch = np.concatenate(
+            (yinSTFT[k], zBatch),
+            axis=-1
+        )
+        if computeSpeechAndNoiseOnly:
+            yTildeBatch_s = np.concatenate(
+                (yinSTFT_s[k], zBatch_s),
+                axis=-1
+            )
+            yTildeBatch_n = np.concatenate(
+                (yinSTFT_n[k], zBatch_n),
+                axis=-1
+            )
+    
+    # Conditional exports
+    if computeSpeechAndNoiseOnly:
+        return yTildeBatch, yTildeBatch_s, yTildeBatch_n
+    else:
+        return yTildeBatch

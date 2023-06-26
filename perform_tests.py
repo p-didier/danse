@@ -6,18 +6,20 @@
 import sys
 import time
 import datetime
-from danse_toolbox.d_classes import TestParameters
 from pathlib import Path
+from danse_toolbox.d_classes import TestParameters
+#
+import tests.mc_runs
 import tests.sandbox
-import tests.danse_robustness_to_sros
-import tests.danse_robustness_to_sros_postproc
+import tests.benchmark_danse
+import tests.diffusenoise_effect
 import tests.write_yaml_template
 import tests.useless_microphones
-import tests.useless_microphones_postproc
-import tests.benchmark_danse
 import tests.benchmark_danse_postproc
-import tests.diffusenoise_effect
+import tests.danse_robustness_to_sros
 import tests.diffusenoise_effect_postproc
+import tests.useless_microphones_postproc
+import tests.danse_robustness_to_sros_postproc
 import out.format_adjustement_scripts.ylim_adjust_barplots as ylim_adjust_barplots
 
 CONFIG_FILES_FOLDER = f'{Path(__file__).parent}/config_files'
@@ -25,6 +27,10 @@ CONFIG_FILES_FOLDER = f'{Path(__file__).parent}/config_files'
 def main():
 
     t0 = time.time()
+
+    # tests.mc_runs.main(
+    #     mcCfgFileName=f'{CONFIG_FILES_FOLDER}/mc_config.yaml',
+    # )
 
     tests.sandbox.main(
         cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
@@ -51,11 +57,11 @@ def main():
     #
     # tests.danse_robustness_to_sros.main(
     #     cfgFilename=f'{CONFIG_FILES_FOLDER}/sros_effect.yaml',
-    #     outputFolder='20230621_tests/sros_effect/online_rSTIGEVDDANSE',  # relative to `danse/out`
+    #     outputFolder='20230623_tests/sros_effect/online_rSTIGEVDDANSE_select1stSensor',  # relative to `danse/out`
     # )
     # tests.danse_robustness_to_sros_postproc.main(
-    #     folder=f'{Path(__file__).parent}/out/20230613_tests/sros_effect/batch_rSGEVDDANSE',
-    #     forcedYlimsMetrics=[-8, 20],
+    #     folder=f'{Path(__file__).parent}/out/20230623_tests/sros_effect/online_rSTIGEVDDANSE_beta0p02s',
+    #     # forcedYlimsMetrics=[-8, 20],
     # )
 
     # ylim_adjust_barplots.main(

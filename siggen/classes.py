@@ -5,7 +5,6 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
-import danse_toolbox.dataclass_methods as met
 import networkx as nx
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import proj3d
@@ -14,7 +13,59 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 
 @dataclass
+class RandomIRParameters:
+    distribution: str = 'uniform'  # distribution of randomly generated IR
+        # ^^^ valid values:
+        #  - "uniform": uniform distribution;
+        #  - "normal": normal distribution.
+    minValue: float = -.5   # minimum value of randomly generated IR
+    maxValue: float = .5    # maximum value of randomly generated IR
+    duration: float = 0.2   # [s] duration of randomly generated IR
+    decay: str = 'none'   # decay of randomly generated IR
+        # ^^^ valid values:
+        #  - "none" (or `None`): no decay;
+        #  - "exponential": exponential decay with time constant `decayTimeConstant`.
+    decayTimeConstant: float = 0.1  # [s] time constant of exponential decay
+
+@dataclass
+class RandomSignalsParameters:
+    distribution: str = 'uniform'  # distribution of randomly generated signals
+        # ^^^ valid values:
+        #  - "uniform": uniform distribution;
+        #  - "normal": normal distribution.
+    minValue: float = -1.   # minimum value of randomly generated signals
+    maxValue: float = 1.    # maximum value of randomly generated signals
+    pauseType: str = 'none'   # distribution of pauses between randomly
+        # generated signals fragments. Only applied to the "target" signals
+        # to create "noise-only" periods. NB: the "interferer" signals are
+        # always played continuously.
+        # ^^^ valid values:
+        #  - "none" (or `None`): no pauses;
+        #  - "random": random distribution of pauses;
+        #  - "predefined": uniform distribution of pauses (i.e., all pauses have
+        #       the same duration `pauseDuration` and are separated
+        #       by the same duration `pauseSpacing`).
+    pauseDuration: float = 0.5   # [s] duration of pauses between
+        # randomly generated desired signals fragments.
+    pauseSpacing: float = 0.5    # [s] spacing between pauses between
+        # randomly generated desired signals fragments.
+    randPauseDuration_max: float = 0.5  # [s] maximum duration of pauses
+        # between randomly generated desired signals fragments.
+    randPauseDuration_min: float = 0.1  # [s] minimum duration of pauses
+        # between randomly generated desired signals fragments.
+    randPauseSpacing_max: float = 0.5   # [s] maximum spacing between pauses
+        # between randomly generated desired signals fragments.
+    randPauseSpacing_min: float = 0.1   # [s] minimum spacing between pauses
+        # between randomly generated desired signals fragments.
+    startWithPause: bool = False    # if True, starts the randomly generated
+        # desired signals with a pause.
+
+
+@dataclass
 class AcousticScenarioParameters:
+    trueRoom: bool = True  # if True, simulate an actual room. Otherwise,
+        # randomly generate impulse responses from each sensor to each source.
+    randIRsParams: RandomIRParameters = RandomIRParameters()
     rd: np.ndarray = np.array([5, 5, 5])  # room dimensions [m]
     fs: float = 16000.     # base sampling frequency [Hz]
     t60: float = 0.        # reverberation time [s]
@@ -62,6 +113,11 @@ class AcousticScenarioParameters:
     # vvv Localized sources vvv
     nDesiredSources: int = 1   # number of desired sources
     nNoiseSources: int = 1     # number of undesired (noise) sources
+    signalType: str = 'from_file'   # type of signals
+        # ^^^ valid values:
+        #  - "from_file": signals loaded from files
+        #               (see `desiredSignalFile` and `noiseSignalFile` below);
+        #  - "random": signals generated randomly.
     desiredSignalFile: list[str] = field(default_factory=list)
         # ^^^ list of paths to desired signal file(s)
     noiseSignalFile: list[str] = field(default_factory=list)
@@ -70,6 +126,7 @@ class AcousticScenarioParameters:
         # `noiseSignalFile == loadfrom <path>`, loads `nNoiseSources`
         # noise signals randomly selected from the audio files in the
         # folder at <path>.
+    randSignalsParams: RandomSignalsParameters = RandomSignalsParameters()
     noiseSignalFilesLoadedFromFolder: str = None
         # folder from which noise signals were loaded. `None` by default.
     baseSNR: int = 5                        # [dB] SNR between dry desired signals and dry noise
@@ -90,7 +147,8 @@ class AcousticScenarioParameters:
 
     def __post_init__(self):
         if self.interSensorDist >= np.amin(self.rd) / 3:
-            raise ValueError('`interSensorDist` must be smaller than the minimum room dimension divided by 3.')
+            raise ValueError('`interSensorDist` must be smaller than the minimum room dimension divided by 3.')        
+
 
 @dataclass
 class TopologyParameters:

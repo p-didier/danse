@@ -3,7 +3,10 @@ seed: 12350
 #
 exportParams:
   exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230621_tests/tigevddanse/5_online_asy_tauExt2 # folder to export outputs
-  onlySNRandESTOIinPlots: true
+  metricsInPlots:
+  - snr
+  - sisnr
+  - estoi
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
@@ -23,7 +26,7 @@ danseParams:
   filterInitType: selectFirstSensor_andFixedValue
   # filterInitType: selectFirstSensor
   # filterInitFixedValue: 0.01
-  filterInitFixedValue: 1
+  filterInitFixedValue: 0
   #
   # ------------ SRO stuff
   # compensateSROs: true
@@ -40,14 +43,14 @@ danseParams:
   # DFTsize: 4096
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 2
-  t_expAvg50pExternalFilters: 0.5
-  # t_expAvg50pExternalFilters: 0.02
+  # t_expAvg50pExternalFilters: 0.5
+  t_expAvg50pExternalFilters: 0.02
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   # forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
   timeBtwExternalFiltUpdates: 0.25
   # timeBtwExternalFiltUpdates: 0.25
-  # covMatInitType: fully_random
-  covMatInitType: batch_estimates
+  covMatInitType: fully_random
+  # covMatInitType: batch_estimates
   # covMatInitType: eye
   covMatEyeInitScaling: 1
   covMatSameInitForAllNodes: true

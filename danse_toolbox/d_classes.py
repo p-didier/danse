@@ -10,6 +10,7 @@ from siggen.classes import *
 from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
+import danse_toolbox.dataclass_methods as met
 
 @dataclass
 class ConditionNumbers:
@@ -158,9 +159,7 @@ class ExportParameters:
 class TestParameters:
     referenceSensor: int = 0    # Index of the reference sensor at each node
     #
-    wasnParams: WASNparameters = WASNparameters(
-        sigDur=5
-    )
+    wasnParams: WASNparameters = WASNparameters()
     danseParams: base.DANSEparameters = base.DANSEparameters()
     exportParams: ExportParameters = ExportParameters()
     #
@@ -230,6 +229,12 @@ class TestParameters:
         elif 'online' in self.danseParams.simType:
             self.exportParams.filters = True
             self.exportParams.filterNormsPlot = True
+        if not self.wasnParams.trueRoom:
+            self.exportParams.acousticScenarioPlot = False  # no room plot if no true room
+        if self.wasnParams.signalType != 'from_file':
+            self.exportParams.waveformsAndSpectrograms = False  # no waveforms if no true room
+            self.exportParams.metricsPlot = False  # no metrics plot if no true room
+            self.exportParams.wavFiles = False  # no WAV files if no true room
 
 
     def get_id(self):
@@ -649,37 +654,39 @@ class DANSEvariables(base.DANSEparameters):
         vadPerFrameCentr /= len(wasn)
         self.centrVADframes = vadPerFrameCentr.astype(bool)
 
+        # Useful for both batch mode and online mode (for the latter, useful
+        # in the computation of the MSE cost based on batch estimates)
+        self.yinSTFT = []
+        self.yinSTFT_s = []  # clean speech
+        self.yinSTFT_n = []  # clean noise
+        for k in range(nNodes):
+            kwargs = dict(
+                fs=wasn[k].fs,
+                win=self.winWOLAanalysis,
+                ovlp=1 - self.Ns / self.DFTsize,
+                boundary=None  # no padding to center frames at t=0s!
+            )
+            self.yinSTFT.append(base.get_stft(
+                x=self.yin[k], **kwargs
+            )[0] * np.sum(self.winWOLAanalysis))  
+            #        ^^^ compensate for window power scaling done
+            #            automatically in scipy's get_stft().
+            self.yinSTFT_s.append(base.get_stft(
+                x=self.cleanSpeechSignalsAtNodes[k], **kwargs
+            )[0] * np.sum(self.winWOLAanalysis))  
+            self.yinSTFT_n.append(base.get_stft(
+                x=self.cleanNoiseSignalsAtNodes[k], **kwargs
+            )[0] * np.sum(self.winWOLAanalysis))
+        # Compute centralized STFT
+        arraysSequenceCentr = tuple([x for x in self.yinSTFT])
+        arraysSequenceCentr_s = tuple([x for x in self.yinSTFT_s])
+        arraysSequenceCentr_n = tuple([x for x in self.yinSTFT_n])
+        self.yCentrBatch = np.concatenate(arraysSequenceCentr, axis=2)
+        self.yCentrBatch_s = np.concatenate(arraysSequenceCentr_s, axis=2)
+        self.yCentrBatch_n = np.concatenate(arraysSequenceCentr_n, axis=2)
+
         # Variables for batch mode or for initialization from batch estimates
         if 'batch' in self.simType or self.covMatInitType == 'batch_estimates':
-            # Compute STFTs of microphone signals
-            self.yinSTFT = []
-            self.yinSTFT_s = []  # clean speech
-            self.yinSTFT_n = []  # clean noise
-            for k in range(nNodes):
-                kwargs = dict(
-                    fs=wasn[k].fs,
-                    win=self.winWOLAanalysis,
-                    ovlp=1 - self.Ns / self.DFTsize,
-                    boundary=None  # no padding to center frames at t=0s!
-                )
-                self.yinSTFT.append(base.get_stft(
-                    x=self.yin[k], **kwargs
-                )[0] * np.sum(self.winWOLAanalysis))  
-                #        ^^^ compensate for window power scaling done
-                #            automatically in scipy's get_stft().
-                self.yinSTFT_s.append(base.get_stft(
-                    x=self.cleanSpeechSignalsAtNodes[k], **kwargs
-                )[0] * np.sum(self.winWOLAanalysis))  
-                self.yinSTFT_n.append(base.get_stft(
-                    x=self.cleanNoiseSignalsAtNodes[k], **kwargs
-                )[0] * np.sum(self.winWOLAanalysis))
-            # Compute centralized STFT
-            arraysSequenceCentr = tuple([x for x in self.yinSTFT])
-            arraysSequenceCentr_s = tuple([x for x in self.yinSTFT_s])
-            arraysSequenceCentr_n = tuple([x for x in self.yinSTFT_n])
-            self.yCentrBatch = np.concatenate(arraysSequenceCentr, axis=2)
-            self.yCentrBatch_s = np.concatenate(arraysSequenceCentr_s, axis=2)
-            self.yCentrBatch_n = np.concatenate(arraysSequenceCentr_n, axis=2)
             # Compute batch spatial covariance matrices for local and
             # centralized processing
             self.Ryylocal = [None for _ in range(nNodes)]
@@ -1754,10 +1761,25 @@ class DANSEvariables(base.DANSEparameters):
             useThisFilter=None
         ):
         """
-        Compute complete yTilde for all nodes, all frames, using
-        current (external) DANSE filters. Works for both fully connected
-        DANSE and TI-DANSE.
+        Wrapper for `base.get_y_tilde_batch()` for batch processing.
         """
+        out = base.get_y_tilde_batch(
+            tidanseFlag=self.tidanseFlag,
+            k=k,
+            yinSTFT=self.yinSTFT,
+            yinSTFT_s=self.yinSTFT_s,
+            yinSTFT_n=self.yinSTFT_n,
+            nNodes=self.nNodes,
+            neighbors=self.neighbors,
+            wTildeExt=self.wTildeExt,
+            i=self.i,
+            nSensorPerNode=self.nSensorPerNode,
+            computeSpeechAndNoiseOnly=computeSpeechAndNoiseOnly,
+            useThisFilter=useThisFilter
+        )
+        return out
+
+
         if self.tidanseFlag:  # TI-DANSE case
             # raise ValueError('TODO: `useThisFilter` parameter for TI-DANSE')
             etaMkBatch = np.zeros((

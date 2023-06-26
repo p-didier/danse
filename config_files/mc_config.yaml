@@ -1,0 +1,5 @@
+seed: 12345   # RNG seed
+nMCruns: 200  # number of Monte-Carlo runs
+# Base DANSE configuration file
+baseConfigFile: C:/Users/pdidier/Dropbox/PC/Documents/sounds-phd/danse/config_files/sandbox_config.yaml
+#
