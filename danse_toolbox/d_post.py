@@ -17,7 +17,7 @@ from dataclasses import dataclass, fields
 import danse_toolbox.dataclass_methods as met
 from siggen.classes import Node, WASNparameters, WASN
 from danse_toolbox.d_batch import BatchDANSEvariables
-from danse_toolbox.d_base import DANSEparameters, get_stft
+from danse_toolbox.d_base import DANSEparameters, get_stft, get_istft, get_y_tilde_batch
 from danse_toolbox.d_classes import DANSEvariables, ConditionNumbers, TestParameters
 from siggen.utils import plot_asc_3d
 
@@ -100,10 +100,20 @@ class DANSEoutputs(DANSEparameters):
         self.firstUpRefSensor = dv.firstDANSEupdateRefSensor
         # Filters
         self.filters = dv.wTilde
+        if self.simType == 'online':
+            self.yinSTFT = dv.yinSTFT
+            self.yCentrBatch = dv.yCentrBatch
+            self.neighbors = dv.neighbors
+            self.fs = dv.fs
+            self.cleanTargets = dv.cleanSpeechSignalsAtNodes
         if self.computeCentralised:
             self.filtersCentr = dv.wCentr
         else:
             self.filtersCentr = None
+        if self.computeLocal:
+            self.filtersLocal = dv.wLocal
+        else:
+            self.filtersLocal = None
         # Condition numbers
         if self.saveConditionNumber:
             self.condNumbers = dv.condNumbers
@@ -139,6 +149,139 @@ class DANSEoutputs(DANSEparameters):
     def export_sounds(self, wasn, exportFolder, fullyConnected=True):
         self.check_init()  # check if object is correctly initialised
         export_sounds(self, wasn, exportFolder, fullyConnected)
+
+    def plot_batch_cost_at_each_update(self):
+        """
+        Plots the evolution of the MMSE cost at each update in batch-mode,
+        i.e., computes the cost over the entire signal filtered with the 
+        filters at iteration `i`, for each iteration, and plots that cost.
+        """
+
+        # Compute batch cost for each update
+        mseCostRaw = np.zeros(self.nNodes)
+        mseCostOnline = np.zeros(
+            (self.yinSTFT[0].shape[1], self.nNodes)
+        )
+        mseCostOnline_c = np.zeros(
+            (self.yinSTFT[0].shape[1], self.nNodes)
+        )
+        mseCostOnline_l = np.zeros(
+            (self.yinSTFT[0].shape[1], self.nNodes)
+        )
+        for k in range(self.nNodes):  # for each node
+            for idxUp in range(self.filters[k].shape[1]):  # for each update
+                print(f'Computing batch cost for node {k+1}, update {idxUp+1}/{self.filters[k].shape[1]}...')
+                # Compute batch-filtered signals
+                dhatSTFT = np.einsum(
+                    'ik,ijk->ij',
+                    self.filters[k][:, idxUp, :].conj(), 
+                    get_y_tilde_batch(
+                        tidanseFlag=False,
+                        yinSTFT=self.yinSTFT,
+                        nNodes=self.nNodes,
+                        nSensorPerNode=self.nSensorPerNode,
+                        neighbors=self.neighbors,
+                        k=k,
+                        computeSpeechAndNoiseOnly=False,
+                        useThisFilter=[
+                            f[:, idxUp - 1, :self.nSensorPerNode[k]]\
+                                for f in self.filters
+                        ]
+                    )
+                )
+                if self.computeCentralised:
+                    dhatSTFT_c = np.einsum(
+                        'ik,ijk->ij',
+                        self.filtersCentr[k][:, idxUp, :].conj(), 
+                        self.yCentrBatch
+                    )
+                if self.computeLocal:
+                    dhatSTFT_l = np.einsum(
+                        'ik,ijk->ij',
+                        self.filtersLocal[k][:, idxUp, :].conj(), 
+                        self.yinSTFT[k]
+                    )
+                # Compute time-domain signal
+                kwargs = {
+                    'fs': self.fs[k],
+                    'win': self.winWOLAanalysis,
+                    'ovlp': 1 - self.Ns / self.DFTsize,
+                    'boundary': None  # no padding to center frames at t=0s!
+                }
+                dhat, _ = get_istft(x=dhatSTFT, **kwargs) /\
+                    np.sum(self.winWOLAanalysis)
+                if self.computeCentralised:
+                    dhat_c, _ = get_istft(x=dhatSTFT_c, **kwargs) /\
+                        np.sum(self.winWOLAanalysis)
+                if self.computeLocal:
+                    dhat_l, _ = get_istft(x=dhatSTFT_l, **kwargs) /\
+                        np.sum(self.winWOLAanalysis)
+                
+                # Compute cost
+                mseCostOnline[idxUp, k] = np.mean(np.abs(
+                    self.cleanTargets[k][:, self.referenceSensor] -\
+                        dhat[:self.cleanTargets[k].shape[0]]
+                )**2)
+                if self.computeCentralised:
+                    mseCostOnline_c[idxUp, k] = np.mean(np.abs(
+                        self.cleanTargets[k][:, self.referenceSensor] -\
+                            dhat_c[:self.cleanTargets[k].shape[0]]
+                    )**2)
+                if self.computeLocal:
+                    mseCostOnline_l[idxUp, k] = np.mean(np.abs(
+                        self.cleanTargets[k][:, self.referenceSensor] -\
+                            dhat_l[:self.cleanTargets[k].shape[0]]
+                    )**2)
+            # Get unprocessed signals cost
+            mseCostRaw[k] = np.mean(np.abs(
+                    self.cleanTargets[k][:, self.referenceSensor] -\
+                        self.micSignals[k][:, self.referenceSensor]
+            )**2)
+        
+        # Plot batch cost for each update, one subplot by node
+        nRows = int(np.floor(np.sqrt(self.nNodes))) + 1
+        nCols = int(np.ceil(self.nNodes / nRows))
+        fig, axes = plt.subplots(nRows, nCols, sharex=True, sharey=True)
+        fig.set_size_inches(8.5, 6.5)
+        for k in range(self.nNodes):
+            if nRows == 1:
+                currAx = axes[k]
+            else:
+                currAx = axes[k // nCols, k % nCols]
+            currAx.plot(
+                mseCostOnline[:, k],
+                'C3-',
+                label='DANSE'
+            )
+            # Plot local and centralized costs
+            if self.computeLocal:
+                currAx.plot(
+                    mseCostOnline_l[:, k],
+                    'C1-',
+                    label='Local'
+                )
+            if self.computeCentralised:
+                currAx.plot(
+                    mseCostOnline_c[:, k],
+                    'C2-',
+                    label='Centralized'
+                )
+            currAx.plot(
+                mseCostRaw[k] * np.ones_like(mseCostOnline[:, k]),
+                'C0--',
+                label='Raw'
+            )
+            # Plot legend and labels
+            currAx.grid()
+            currAx.set_xlabel('DANSE iteration $i$')
+            currAx.set_ylabel('MSE cost $E\{ | d - \hat{d} |^2 \}$')
+            currAx.set_title(f'Node {k+1}')
+            if k == 0:
+                currAx.legend(loc='upper right')
+            currAx.set_yscale('log')  # logarithmic scale for better visualization
+        fig.tight_layout()
+        return fig
+
 
     def plot_mmse_cost(self):
         """Plots the evolution of the MMSE cost."""
@@ -181,7 +324,7 @@ class DANSEoutputs(DANSEparameters):
         fig.tight_layout()
         return fig
     
-    def plot_mse_online_cost(self, wasn: list[Node]):
+    def plot_framewise_mse_online_cost(self, wasn: list[Node]):
         """Plots the evolution of the MSE cost in online-mode."""
         mseCost = np.zeros((0, self.nNodes))
         mseCost_c = np.zeros((0, self.nNodes))
@@ -2022,9 +2165,10 @@ def export_danse_outputs(
             fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.pdf')
             plt.close(fig)
         elif p.danseParams.simType == 'online':
-            fig = out.plot_mse_online_cost(wasn=wasnObj.wasn)
+            fig = out.plot_framewise_mse_online_cost(wasn=wasnObj.wasn)
             fig.savefig(f'{p.exportParams.exportFolder}/mse_cost.png', dpi=300)
             fig.savefig(f'{p.exportParams.exportFolder}/mse_cost.pdf')
+            fig = out.plot_batch_cost_at_each_update()
 
         # Export filter coefficients
         if p.exportParams.filters:
