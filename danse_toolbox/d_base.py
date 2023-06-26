@@ -183,8 +183,10 @@ class DANSEparameters(Hyperparameters):
         # broadcast L ≪ Ns samples at a time.
     winWOLAanalysisType: str = 'sqrthann'    # type of analysis window
         # - 'sqrthann': sqrt(hann)
+        # - 'rect': rectangular window
     winWOLAsynthesisType: str = 'sqrthann'    # type of synthesis window
         # - 'sqrthann': sqrt(hann)
+        # - 'rect': rectangular window
     upTDfilterEvery: float = 1. # [s] duration of pause between two 
                                     # consecutive time-domain filter updates.
     # ---- SROs
@@ -301,10 +303,14 @@ class DANSEparameters(Hyperparameters):
         # Create windows
         if self.winWOLAanalysisType == 'sqrthann':
             self.winWOLAanalysis = np.sqrt(np.hanning(self.DFTsize))      # window
+        elif self.winWOLAanalysisType == 'rect':
+            self.winWOLAanalysis = np.ones(self.DFTsize)
         else:
             raise ValueError(f'Unknown analysis window type: {self.winWOLAanalysisType}')
         if self.winWOLAsynthesisType == 'sqrthann':
             self.winWOLAsynthesis = np.sqrt(np.hanning(self.DFTsize))
+        elif self.winWOLAsynthesisType == 'rect':
+            self.winWOLAsynthesis = np.ones(self.DFTsize)
         else:
             raise ValueError(f'Unknown synthesis window type: {self.winWOLAsynthesisType}')
         #
@@ -1622,7 +1628,9 @@ def danse_compression_whole_chunk(
         yqHat = yqHat[:int(DFTsize // 2 + 1)]
         # Apply linear combination to form compressed signal.
         # -- single sensor = simple element-wise multiplication.
-        zqHat = wHat.conj() * yqHat
+        # 2023.06.26 TRIAL: no compression for single-sensor nodes
+        # zqHat = wHat.conj() * yqHat
+        zqHat = copy.deepcopy(yqHat)
     else:
         yqHat = np.fft.fft(
             np.squeeze(yq) * h[:, np.newaxis], DFTsize, axis=0
@@ -1651,6 +1659,8 @@ def danse_compression_whole_chunk(
     else:
         print('Cannot compute time-domain overlap-added chunk of local compressed signal.')
         zq = None
+
+    stop = 1
     
     return zqHat, zq
 

@@ -2,7 +2,7 @@ seed: 12351
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230626_tests/_mseplottest/1_test # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230626_tests/ssNodes_network/2_online # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -10,12 +10,13 @@ exportParams:
   sroEstimPerfPlot: false
   filters: false
   conditionNumberPlot: false
+  mseBatchPerfPlot: false
 danseParams:
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
   performGEVD: false
   # performGEVD: true
-  simType: batch
+  # simType: batch
   simType: online
   # nodeUpdating: asy
   nodeUpdating: seq
@@ -23,8 +24,8 @@ danseParams:
   noExternalFilterRelaxation: false
   computeLocal: true
   computeCentralised: true
-  filterInitType: selectFirstSensor_andFixedValue
-  # filterInitType: selectFirstSensor
+  # filterInitType: selectFirstSensor_andFixedValue
+  filterInitType: selectFirstSensor
   # filterInitFixedValue: 0.01
   filterInitFixedValue: 1
   #
@@ -64,9 +65,9 @@ wasnParams:
   trueRoom: false
   randIRsParams:
     distribution: uniform
-    duration: 0.05  # [s] random IR duration
+    duration: 0.1  # [s] random IR duration
     decay: exponential
-    decayTimeConstant: 0.01
+    decayTimeConstant: 0.04
   # Diffuse noise params
   # diffuseNoise: true
   diffuseNoise: false
@@ -82,7 +83,7 @@ wasnParams:
   vadMinProportionActive: 0.25 
   # enableVADloadFromFile: false
   rd: '[10, 10, 10]'
-  sigDur: 5  # [s]
+  sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
@@ -102,7 +103,8 @@ wasnParams:
   SROperNode: '[0]'  # [PPM]
   # nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[3, 3]'
-  nSensorPerNode: '[3, 3, 3]'
+  nSensorPerNode: '[1, 1, 1]'
+  # nSensorPerNode: '[3, 3, 3]'
   # nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[2, 2]'
   # nSensorPerNode: '[2, 2, 2]'
@@ -112,8 +114,8 @@ wasnParams:
   baseSNR: 5
   # baseSNR: 20
   # baseSNR: 9999
-  signalType: random
-  # signalType: from_file
+  # signalType: random
+  signalType: from_file
   randSignalsParams:
     distribution: uniform
     # pauseType: random  # type of added pauses

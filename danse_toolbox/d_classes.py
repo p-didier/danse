@@ -140,6 +140,7 @@ class ExportParameters:
     metricsPlot: bool = True  # if True, metrics plot is exported
     waveformsAndSpectrograms: bool = True  # if True, waveforms and spectrograms are exported
     mmsePerfPlot: bool = True  # if True, MMSE performance plot is exported (only used in batch mode)
+    mseBatchPerfPlot: bool = True  # if True, MSE performance plot is exported (only used in online mode)
     # vvv Files (not plots)
     danseOutputsFile: bool = True  # if True, DANSE outputs are exported as a pickle file
     parametersFile: bool = True  # if True, parameters are exported as a pickle file or a YAML file
@@ -235,6 +236,8 @@ class TestParameters:
             self.exportParams.waveformsAndSpectrograms = False  # no waveforms if no true room
             self.exportParams.metricsPlot = False  # no metrics plot if no true room
             self.exportParams.wavFiles = False  # no WAV files if no true room
+        # Transfer useful export parameters to DANSE parameters
+        self.danseParams.exportMSEBatchPerfPlot = self.exportParams.mseBatchPerfPlot
 
 
     def get_id(self):
@@ -712,6 +715,12 @@ class DANSEvariables(base.DANSEparameters):
                 print('Initializing covariance matrices from batch estimates...')
                 self.init_covmats_from_batch()  # <-- directly modifies the `self` covariance matrices fields
                 print('...done.')
+            self.mseCostOnline = np.full(
+                (self.yinSTFT[0].shape[1], self.nNodes),
+                fill_value=None
+            )
+            self.mseCostOnline_c = copy.deepcopy(self.mseCostOnline)
+            self.mseCostOnline_l = copy.deepcopy(self.mseCostOnline)
 
         # For debugging purposes
         initCNlist = [np.empty((self.nPosFreqs, 0)) for _ in range(nNodes)]
@@ -1059,6 +1068,9 @@ class DANSEvariables(base.DANSEparameters):
         if self.bypassUpdates:
             print('!! User-forced bypass of filter coefficients updates !!')
 
+        if self.exportMSEBatchPerfPlot:
+            self.compute_batch_mse_cost(k)
+
         # Update external filters (for broadcasting)
         self.update_external_filters(k, tCurr)
         # Update SRO estimates
@@ -1071,6 +1083,63 @@ class DANSEvariables(base.DANSEparameters):
         # Update iteration index
         self.i[k] += 1
 
+    def compute_batch_mse_cost(self, k):
+        """
+        Compute the batch MSE cost based on the current filter estimate.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        """
+        # Compute batch-filtered signals
+        dhatSTFT = np.einsum(
+            'ik,ijk->ij',
+            self.wTilde[k][:, self.i[k] + 1, :].conj(), 
+            self.get_y_tilde_batch(k, False)
+        )
+        # Compute time-domain signal
+        kwargs = {
+            'fs': self.fs[k],
+            'win': self.winWOLAanalysis,
+            'ovlp': 1 - self.Ns / self.DFTsize,
+            'boundary': None  # no padding to center frames at t=0s!
+        }
+        dhat, _ = base.get_istft(x=dhatSTFT, **kwargs) /\
+            np.sum(self.winWOLAanalysis)
+        # Compute MSE cost
+        self.mseCostOnline[self.i[k], k] = np.mean(np.abs(
+            self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                dhat[:self.cleanSpeechSignalsAtNodes[k].shape[0]]
+        )**2)
+
+        # Repeat for centralized and local estimates
+        if self.computeCentralised:
+            dhatSTFT_c = np.einsum(
+                'ik,ijk->ij',
+                self.wCentr[k][:, self.i[k] + 1, :].conj(), 
+                self.yCentrBatch
+            )
+            dhat_c, _ = base.get_istft(x=dhatSTFT_c, **kwargs) /\
+                np.sum(self.winWOLAanalysis)
+            self.mseCostOnline_c[self.i[k], k] = np.mean(np.abs(
+                self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                    dhat_c[:self.cleanSpeechSignalsAtNodes[k].shape[0]]
+            )**2)
+        
+        if self.computeLocal:
+            dhatSTFT_l = np.einsum(
+                'ik,ijk->ij',
+                self.wLocal[k][:, self.i[k] + 1, :].conj(), 
+                self.yinSTFT[k]
+            )
+            dhat_l, _ = base.get_istft(x=dhatSTFT_l, **kwargs) /\
+                np.sum(self.winWOLAanalysis)
+            self.mseCostOnline_l[self.i[k], k] = np.mean(np.abs(
+                self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                    dhat_l[:self.cleanSpeechSignalsAtNodes[k].shape[0]]
+            )**2)
+    
     def check_covariance_matrices(self, k, tCurr):
         """
         Checks that the number of rank-1 covariance matrix estimate updates
@@ -1753,6 +1822,8 @@ class DANSEvariables(base.DANSEparameters):
                     type='centralised'
                 )
                 self.lastCondNumberSaveRyyCentr[k] = self.i[k]
+
+        stop = 1
 
     def get_y_tilde_batch(
             self,

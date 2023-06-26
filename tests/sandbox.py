@@ -46,11 +46,11 @@ def main(
             p.danseParams.get_wasn_info(p.wasnParams)
 
     # Build room
-    print('Building room...')
+    print('Building scenario...')
     room, vad, wetSpeeches, wetNoises = sig_ut.build_scenario(p.wasnParams)
     # Complete parameters (useful in case of YAML-loaded layout)
     p.danseParams.get_wasn_info(p.wasnParams)
-    print('Room built.')
+    print('Scenario built.')
 
     # Build WASN (asynchronicities, topology)
     print('Building WASN...')
