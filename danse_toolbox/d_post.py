@@ -319,8 +319,8 @@ class DANSEoutputs(DANSEparameters):
         """
         self.check_init()  # check if object is correctly initialised
         for ii in range(len(plots)):
-            if plots[ii] not in ['norm', 'real-imag', 'amp-phase']:
-                raise ValueError(f'Unknown plot type {plots[ii]}')
+            if plots[ii] not in ['norm']:#, 'real-imag', 'amp-phase']:
+                raise NotImplementedError(f'Unknown/unimplemented plot type {plots[ii]}')
             
             if plots[ii] == 'norm':
                 # Plot figures
@@ -1931,16 +1931,11 @@ def plot_filter_norms(
 
     # Get number of nodes in WASN
     nNodes = len(filters)
+    # Initialize main lists
+    figs = []
+    dataFigs = []
     
-    # Compute y-axis limits
-    np.seterr(divide = 'ignore')    # avoid annoying warnings
-    l = [np.log10(np.mean(np.abs(filt), axis=0))\
-        for filt in filters + filtersCentre]  # concatenate `filters` and `filtersCentre`
-    np.seterr(divide = 'warn')      # reset warnings
-    maxNorm = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-    minNorm = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-
-    def _format_axes(myAx, ti, maxNorm, minNorm):
+    def _format_axes(myAx, ti, maxNorm=None, minNorm=None):
         """
         Format axes.
         
@@ -1966,9 +1961,10 @@ def plot_filter_norms(
                 stop=filters[0].shape[1] - 1,
                 num=len(myAx.get_xticks()),
                 dtype=int
-            ), 2),
-            ylim=[minNorm, maxNorm]
+            ), 2)
         )
+        if maxNorm is not None and minNorm is not None:
+            myAx.set_ylim([minNorm, maxNorm])
         myAx.legend(loc='upper right')
         myAx.grid(True)
 
@@ -1980,10 +1976,67 @@ def plot_filter_norms(
     sensorToNodeIndices = [
         item for sublist in sensorToNodeIndices for item in sublist
     ]
+        
+    # Compute $\mathbf{w}_k^i$ (network-wide DANSE filters, for all `k`)
+    netwideDANSEfilts_allNodes = []
+    legendNetwide_allNodes = []
+    for k in range(nNodes):
+        neighborCount = 0
+        legendNetwide = []
+        netwideDANSEfilts = np.zeros((filters[k].shape[1], 0))
+        for q in range(nNodes):
+            if q == k:
+                currVal = np.mean(np.abs(
+                    filters[k][:, :, :nSensorsPerNode[k]]
+                ), axis=0)
+                for m in range(nSensorsPerNode[k]):
+                    legendNetwide.append(f'$w_{{kk,{m + 1}}}$ (local)')
+            else:
+                idxGkq = nSensorsPerNode[k] + neighborCount
+                currVal = np.mean(np.abs(
+                    filters[q][:, :, :nSensorsPerNode[q]] *\
+                        filters[k][:, :, [idxGkq]]
+                ), axis=0)
+                for m in range(nSensorsPerNode[q]):
+                    legendNetwide.append(f'$w_{{qq,{m + 1}}}\\cdot g_{{kq}}$ ($q={q + 1}$)')
+                neighborCount += 1
+            netwideDANSEfilts = np.concatenate(
+                (netwideDANSEfilts, currVal),
+                axis=1
+            )
+        netwideDANSEfilts_allNodes.append(netwideDANSEfilts)
+        legendNetwide_allNodes.append(legendNetwide)
+    
+    # Get ylims
+    np.seterr(divide = 'ignore')    # avoid annoying warnings
+    l = [np.log10(filt)\
+        for filt in netwideDANSEfilts_allNodes]
+    maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    l = [np.log10(np.mean(np.abs(filt), axis=0))\
+        for filt in filters + filtersCentre]  # concatenate `filters` and `filtersCentre`
+    np.seterr(divide = 'warn')      # reset warnings
+    maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    minNorm2 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    maxNorm = np.amax([maxNorm1, maxNorm2])
+    minNorm = np.amin([minNorm1, minNorm2])
+
+    # Plot network-wide DANSE filters
+    for k in range(nNodes):
+        fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+        for m in range(netwideDANSEfilts_allNodes[k].shape[1]):
+            ax.plot(
+                np.log10(netwideDANSEfilts_allNodes[k][:, m]),
+                label=legendNetwide_allNodes[k][m]
+            )
+        ti = f'Network-wide DANSE filters at node $k={k + 1}$'
+        if nSensorsPerNode is not None:
+            ti += f' ({nSensorsPerNode[k]} sensors)'
+        _format_axes(ax, ti, maxNorm, minNorm)
+        fig.tight_layout()
+        figs.append((f'filtnorms_n{k + 1}_net', fig))
 
     # Plot filter norms for regular DANSE filters
-    figs = []
-    dataFigs = []
     for k in range(nNodes):
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
         neighborIndices = [ii for ii in np.arange(nNodes) if ii != k]
@@ -2020,6 +2073,7 @@ def plot_filter_norms(
 
     if filtersCentre is not None:
         # Plot filter norms for ``centralized'' (== no-fusion DANSE) filters
+        labelsCentr = [[] for _ in range(nNodes)]
         for k in range(nNodes):
             fig, ax = plt.subplots(1, 1, figsize=(7, 5))
             nodeCount = 0
@@ -2042,6 +2096,7 @@ def plot_filter_norms(
                     alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
                     label=lab,
                 )
+                labelsCentr[k].append(lab)
                 # Increment node count
                 if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
                     nodeCount += 1
@@ -2055,6 +2110,29 @@ def plot_filter_norms(
             fig.tight_layout()
             figs.append((f'filtnorms_c{k + 1}', fig))
             dataFigs.append(dataFig)  # Save data for later use
+
+        # Plot difference between centralized filters
+        # and network-wide DANSE filters
+        for k in range(nNodes):
+            fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+            for m in range(filtersCentre[k].shape[2]):   
+                mse1 = np.abs(
+                    np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0) -\
+                    netwideDANSEfilts_allNodes[k][:, m].T
+                ) ** 2
+                # Plot
+                ax.plot(
+                    mse1.T,
+                    label=labelsCentr[k][m]
+                )
+                # Set title
+                ti = f'$\\mathrm{{MSE}}_1$ at node $k={k + 1}$'
+                # Format axes
+                _format_axes(ax, ti)
+                ax.set_ylabel('$\\log_{{10}}||\\hat{{\\mathbf{{w}}}}_k - \\mathbf{{w}}_k||^2$ (avg. over $\\nu$)')
+                fig.tight_layout()
+                figs.append((f'filtnorms_c{k + 1}_net_mse1', fig))
+    
 
     # Transform to dict
     figs = dict(figs)

@@ -2173,7 +2173,8 @@ class DANSEvariables(base.DANSEparameters):
         kwargs = {
             'desSigProcessingType': self.desSigProcessingType,
             'win': self.winWOLAsynthesis,
-            'normFactWOLA': self.normFactWOLA,
+            # 'normFactWOLA': self.normFactWOLA,
+            'normFactWOLA': 1,
             'Ns': self.Ns,
         }
 

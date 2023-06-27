@@ -184,9 +184,9 @@ class DANSEparameters(Hyperparameters):
     winWOLAanalysisType: str = 'sqrthann'    # type of analysis window
         # - 'sqrthann': sqrt(hann)
         # - 'rect': rectangular window
+        # - 'rect_normNs': rectangular window, normalized by WOLA overlap
     winWOLAsynthesisType: str = 'sqrthann'    # type of synthesis window
-        # - 'sqrthann': sqrt(hann)
-        # - 'rect': rectangular window
+        # The valid values are the same as for `winWOLAanalysisType`.
     upTDfilterEvery: float = 1. # [s] duration of pause between two 
                                     # consecutive time-domain filter updates.
     # ---- SROs
@@ -305,12 +305,16 @@ class DANSEparameters(Hyperparameters):
             self.winWOLAanalysis = np.sqrt(np.hanning(self.DFTsize))      # window
         elif self.winWOLAanalysisType == 'rect':
             self.winWOLAanalysis = np.ones(self.DFTsize)
+        elif self.winWOLAanalysisType == 'rect_normNs':
+            self.winWOLAanalysis = np.ones(self.DFTsize) * np.sqrt(self.WOLAovlp)
         else:
             raise ValueError(f'Unknown analysis window type: {self.winWOLAanalysisType}')
         if self.winWOLAsynthesisType == 'sqrthann':
             self.winWOLAsynthesis = np.sqrt(np.hanning(self.DFTsize))
         elif self.winWOLAsynthesisType == 'rect':
             self.winWOLAsynthesis = np.ones(self.DFTsize)
+        elif self.winWOLAsynthesisType == 'rect_normNs':
+            self.winWOLAsynthesis = np.ones(self.DFTsize) * np.sqrt(self.WOLAovlp)
         else:
             raise ValueError(f'Unknown synthesis window type: {self.winWOLAsynthesisType}')
         #
@@ -1629,8 +1633,8 @@ def danse_compression_whole_chunk(
         # Apply linear combination to form compressed signal.
         # -- single sensor = simple element-wise multiplication.
         # 2023.06.26 TRIAL: no compression for single-sensor nodes
-        # zqHat = wHat.conj() * yqHat
-        zqHat = copy.deepcopy(yqHat)
+        zqHat = wHat.conj() * yqHat
+        # zqHat = copy.deepcopy(yqHat)
     else:
         yqHat = np.fft.fft(
             np.squeeze(yq) * h[:, np.newaxis], DFTsize, axis=0

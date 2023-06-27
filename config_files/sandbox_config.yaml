@@ -2,7 +2,7 @@ seed: 12351
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230626_tests/ssNodes_network/2_online # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230627_tests/msNodes_network/2_as1_betas1s # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -12,14 +12,16 @@ exportParams:
   conditionNumberPlot: false
   mseBatchPerfPlot: false
 danseParams:
+  winWOLAanalysisType: rect_normNs
+  winWOLAsynthesisType: rect_normNs
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
   performGEVD: false
   # performGEVD: true
   # simType: batch
   simType: online
-  # nodeUpdating: asy
-  nodeUpdating: seq
+  nodeUpdating: asy
+  # nodeUpdating: seq
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
@@ -44,7 +46,7 @@ danseParams:
   # DFTsize: 4096
   startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 1
-  t_expAvg50pExternalFilters: 2
+  t_expAvg50pExternalFilters: 1
   # t_expAvg50pExternalFilters: 0.02
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   # forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
@@ -83,7 +85,7 @@ wasnParams:
   vadMinProportionActive: 0.25 
   # enableVADloadFromFile: false
   rd: '[10, 10, 10]'
-  sigDur: 15  # [s]
+  sigDur: 30  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
@@ -103,11 +105,11 @@ wasnParams:
   SROperNode: '[0]'  # [PPM]
   # nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[3, 3]'
-  nSensorPerNode: '[1, 1, 1]'
-  # nSensorPerNode: '[3, 3, 3]'
+  # nSensorPerNode: '[1, 1, 1]'
+  # nSensorPerNode: '[2, 2, 2]'
+  nSensorPerNode: '[3, 3, 3]'
   # nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[2, 2]'
-  # nSensorPerNode: '[2, 2, 2]'
   interSensorDist: 0.2
   #
   # baseSNR: 0
@@ -126,7 +128,7 @@ wasnParams:
   nNodes: 3
   nNoiseSources: 3
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
-  referenceSensor: 0
+  referenceSensor: 1
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
     # topologyType: user-defined
