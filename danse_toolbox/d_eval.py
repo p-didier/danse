@@ -214,7 +214,7 @@ def get_metrics(
         fwSNRseg.diff = fwSNRseg.after - fwSNRseg.before
         if bestPerfData is not None:
             fwSNRseg_allFrames = get_fwsnrseg(
-                clean_c,
+                bestPerfData['cleanSpeech'][startIdx:endIdx, k],
                 bestPerfData['dCentr'][startIdx:endIdx, k],
                 bestPerfData['fs'],
                 fLen,
@@ -229,7 +229,7 @@ def get_metrics(
         myStoi.diff = myStoi.after - myStoi.before
         if bestPerfData is not None:
             myStoi.best = stoi_fcn(
-                clean_c,
+                bestPerfData['cleanSpeech'][startIdx:endIdx, k],
                 bestPerfData['dCentr'][startIdx:endIdx, k],
                 bestPerfData['fs'],
                 extended=True

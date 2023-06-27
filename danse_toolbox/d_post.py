@@ -145,7 +145,17 @@ class DANSEoutputs(DANSEparameters):
             'dHatCentr_n': outBP.dHatCentr_n,
             'mseCostCentr': outBP.mmseCostCentr,
             'wCentr': outBP.wCentr,
-            'fs': outBP.baseFs
+            'fs': outBP.baseFs,
+            'cleanSpeech': np.array([
+                outBP.cleanSpeechSignalsAtNodes[k][
+                    :, outBP.referenceSensor
+                ] for k in range(outBP.nNodes)
+            ]).T,
+            'cleanNoise': np.array([
+                outBP.cleanNoiseSignalsAtNodes[k][
+                    :, outBP.referenceSensor
+                ] for k in range(outBP.nNodes)
+            ]).T,
         }
 
     def check_init(self):
@@ -2267,10 +2277,12 @@ def export_danse_outputs(
             
         # Export filter coefficients norm plot
         if p.exportParams.filterNormsPlot:
+            print('Exporting filter norms plot...')
             out.plot_filter_evol(
                 p.exportParams.exportFolder,
                 exportNormsAsPickle=p.exportParams.filterNorms  # boolean to export filter norms as pickle  
             )
+            print('Done.')
 
         # Export condition number plot
         if p.exportParams.conditionNumberPlot\

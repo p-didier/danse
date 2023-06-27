@@ -2,7 +2,7 @@ seed: 12351
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230627_tests/bestperf_test/1_test1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230627_tests/bestperf_test/15s/2_SROs # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -85,7 +85,7 @@ wasnParams:
   vadMinProportionActive: 0.25 
   # enableVADloadFromFile: false
   rd: '[10, 10, 10]'
-  sigDur: 10  # [s]
+  sigDur: 15  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
@@ -128,7 +128,7 @@ wasnParams:
   nNodes: 3
   nNoiseSources: 3
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
-  referenceSensor: 1
+  referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
   topologyParams:
     # topologyType: user-defined
