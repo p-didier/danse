@@ -20,6 +20,7 @@ class EnhancementMeasures:
 @dataclass
 class Metric:
     """Class for storing objective speech enhancement metrics"""
+    best: float = None            # best achievable metric value (centralized, no SROs, batch)
     before: float = 0.          # metric value before enhancement
     after: float = 0.           # metric value after enhancement
     diff: float = 0.            # difference between before and after enhancement
@@ -85,6 +86,8 @@ def get_metrics(
         gamma=0.2,
         fLen=0.03,
         metricsToPlot: list[str]=['snr', 'stoi'],
+        bestPerfData=None,
+        k=None
     ):
     """
     Compute evaluation metrics for signal enhancement
@@ -178,12 +181,25 @@ def get_metrics(
         snr.before = get_snr(clean, noiseOnly, vad)
         snr.after = get_snr(filtSpeech, filtNoise, vad)
         snr.diff = snr.after - snr.before
+        if bestPerfData is not None:
+            snr.best = get_snr(
+                bestPerfData['dCentr_s'][startIdx:endIdx, k],
+                bestPerfData['dCentr_n'][startIdx:endIdx, k],
+                vad
+            )
     if 'sisnr' in metricsToPlot:
         # SI-SNR
         sisnr = Metric()
         sisnr.before = get_sisnr(clean, noiseOnly, vad, fs)
         sisnr.after = get_sisnr(filtSpeech, filtNoise, vad, fs)
-        sisnr.diff = sisnr.after - snr.before
+        sisnr.diff = sisnr.after - sisnr.before
+        if bestPerfData is not None:
+            sisnr.best = get_sisnr(
+                bestPerfData['dCentr_s'][startIdx:endIdx, k],
+                bestPerfData['dCentr_n'][startIdx:endIdx, k],
+                vad,
+                bestPerfData['fs']
+            )
     if 'fwSNRseg' in metricsToPlot:
         # Frequency-weight segmental SNR
         fwSNRseg = Metric()
@@ -196,12 +212,28 @@ def get_metrics(
         )
         fwSNRseg.after = np.mean(fwSNRseg_allFrames)
         fwSNRseg.diff = fwSNRseg.after - fwSNRseg.before
+        if bestPerfData is not None:
+            fwSNRseg_allFrames = get_fwsnrseg(
+                clean_c,
+                bestPerfData['dCentr'][startIdx:endIdx, k],
+                bestPerfData['fs'],
+                fLen,
+                gamma
+            )
+            fwSNRseg.best = np.mean(fwSNRseg_allFrames)
     if 'stoi' in metricsToPlot or 'estoi' in metricsToPlot:
         # Short-Time Objective Intelligibility (STOI)
         myStoi = Metric()
         myStoi.before = stoi_fcn(clean, noisy, fs, extended=True)
         myStoi.after = stoi_fcn(clean, enhan, fs, extended=True)
         myStoi.diff = myStoi.after - myStoi.before
+        if bestPerfData is not None:
+            myStoi.best = stoi_fcn(
+                clean_c,
+                bestPerfData['dCentr'][startIdx:endIdx, k],
+                bestPerfData['fs'],
+                extended=True
+            )
     if 'pesq' in metricsToPlot:
         # Perceptual Evaluation of Speech Quality (PESQ)
         myPesq = Metric()
@@ -218,6 +250,13 @@ def get_metrics(
                 myPesq.afterCentr = pesq(fs, clean_c, enhan_c, mode)
             if enhan_l is not None:
                 myPesq.afterLocal = pesq(fs, clean_l, enhan_l, mode)
+            if bestPerfData is not None:
+                myPesq.best = pesq(
+                    bestPerfData['fs'],
+                    clean_c,
+                    bestPerfData['dCentr'][startIdx:endIdx, k],
+                    mode
+                )
         else:
             print(f'Cannot calculate PESQ for fs different from 16 or 8 kHz (current value: {fs/1e3} kHz). Keeping `myPesq` attributes at 0.')
 

@@ -98,8 +98,8 @@ def danse_it_up(
     """
     Container function for launching the- correct version of the DANSE algorithm.
     """
-    # Select appropriate function
     args = (wasnObj, p.danseParams)
+    # Select appropriate function
     if p.is_fully_connected_wasn():  # Fully connected WASN case
         print(f'Running {p.danseParams.simType} DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         if p.danseParams.simType == 'batch':  # true batch mode
@@ -117,6 +117,13 @@ def danse_it_up(
     out, wasnUpdated = danse_function(*args)
     print('DANSE run complete.')
 
+    # If asked, compute best possible performance (centralized, no SROs, batch)
+    if p.exportParams.bestPerfReference:
+        print('Computing best possible performance...')
+        outBP = core.get_best_perf(*args)
+        out.include_best_perf_data(outBP)
+        print('Best possible performance computed.')
+
     return out, wasnUpdated
 
 
@@ -124,7 +131,7 @@ def postprocess(
         out: pp.DANSEoutputs,
         wasnObj: WASN,
         room: pra.room.ShoeBox,
-        p: TestParameters
+        p: TestParameters,
     ) -> pp.DANSEoutputs:
     """
     Defines the post-processing steps to be undertaken after a DANSE run.

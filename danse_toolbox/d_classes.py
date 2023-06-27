@@ -141,6 +141,7 @@ class ExportParameters:
     waveformsAndSpectrograms: bool = True  # if True, waveforms and spectrograms are exported
     mmsePerfPlot: bool = True  # if True, MMSE performance plot is exported (only used in batch mode)
     mseBatchPerfPlot: bool = True  # if True, MSE performance plot is exported (only used in online mode)
+    bestPerfReference: bool = True  # if True, best performance reference (centralized, no SROs, batch) is added to all relevant plots
     # vvv Files (not plots)
     danseOutputsFile: bool = True  # if True, DANSE outputs are exported as a pickle file
     parametersFile: bool = True  # if True, parameters are exported as a pickle file or a YAML file
@@ -294,6 +295,134 @@ class DANSEvariables(base.DANSEparameters):
     """
     def import_params(self, p: base.DANSEparameters):
         self.__dict__.update(p.__dict__)
+
+    def init_from_wasn_for_best_perf(self, wasn: list[Node]):
+        """
+        Initialize `DANSEvariables` object based on `wasn`
+        list of `Node` objects for the special case of computing the
+        "best possible performance".
+        """
+        nNodes = len(wasn)  # number of nodes in WASN
+        # Sampling frequencies of all nodes
+        self.fs = np.array([node.fs for node in wasn])
+        self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
+        # Expected number of DANSE iterations (==  # of signal frames)
+        self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
+        # ^ FIXME: we don't need this -- need to change how wCentr and wLocal are used to compute the batch estimate (they should not have a self.nIter dimension!)
+
+        wCentr = []
+        wLocal = []
+        nSensorsTotal = sum([node.nSensors for node in wasn])
+        for k in range(nNodes):
+            wCentr.append(base.init_complex_filter(
+                (self.nPosFreqs, self.nIter + 1, nSensorsTotal),
+                refIdx=int(np.sum([node.nSensors for node in wasn[:k]]) + self.referenceSensor), # FIXME: see above
+                # ^^^ for the centralized filters, the "reference sensor"
+                # index is always relative to the entire $\mathbf{y}$ network-
+                # wide signal vector.
+                initType=self.filterInitType,
+                fixedValue=self.filterInitFixedValue
+            ))
+            wLocal.append(base.init_complex_filter(
+                (self.nPosFreqs, self.nIter + 1, wasn[k].nSensors), # FIXME: see above
+                self.referenceSensor,
+                initType=self.filterInitType,
+                fixedValue=self.filterInitFixedValue
+            ))
+        self.wCentr = wCentr
+        self.wLocal = wLocal
+        self.i = np.zeros(nNodes, dtype=int)  # FIXME: see above
+
+        # Initialize variables that are used for both online and batch modes
+        # NB: for the "best possible performance", we discard SROs!
+        self.cleanSpeechSignalsAtNodes = [node.cleanspeech_noSRO for node in wasn]
+        self.cleanNoiseSignalsAtNodes = [node.cleannoise_noSRO for node in wasn]
+        self.oVADframes = [node.vadPerFrame for node in wasn]
+        self.neighbors = [node.neighborsIdx for node in wasn]
+        self.yin = [node.data_noSRO for node in wasn]
+        
+        # Compute the centralized VAD per frame - average of all nodes
+        # (active if at least 1 node is active)
+        vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
+        for k in range(len(wasn)):
+            vadPerFrameCentr += wasn[k].vadPerFrame
+        vadPerFrameCentr /= len(wasn)
+        self.centrVADframes = vadPerFrameCentr.astype(bool)
+
+        # Useful for both batch mode and online mode (for the latter, useful
+        # in the computation of the MSE cost based on batch estimates)
+        self.yinSTFT = []
+        self.yinSTFT_s = []  # clean speech
+        self.yinSTFT_n = []  # clean noise
+        for k in range(nNodes):
+            kwargs = dict(
+                fs=wasn[k].fs,
+                win=self.winWOLAanalysis,
+                ovlp=1 - self.Ns / self.DFTsize,
+                boundary=None  # no padding to center frames at t=0s!
+            )
+            self.yinSTFT.append(base.get_stft(
+                x=self.yin[k], **kwargs
+            )[0] * np.sum(self.winWOLAanalysis))  
+            #        ^^^ compensate for window power scaling done
+            #            automatically in scipy's get_stft().
+            self.yinSTFT_s.append(base.get_stft(
+                x=self.cleanSpeechSignalsAtNodes[k], **kwargs
+            )[0] * np.sum(self.winWOLAanalysis))  
+            self.yinSTFT_n.append(base.get_stft(
+                x=self.cleanNoiseSignalsAtNodes[k], **kwargs
+            )[0] * np.sum(self.winWOLAanalysis))
+        # Compute centralized STFT
+        arraysSequenceCentr = tuple([x for x in self.yinSTFT])
+        arraysSequenceCentr_s = tuple([x for x in self.yinSTFT_s])
+        arraysSequenceCentr_n = tuple([x for x in self.yinSTFT_n])
+        self.yCentrBatch = np.concatenate(arraysSequenceCentr, axis=2)
+        self.yCentrBatch_s = np.concatenate(arraysSequenceCentr_s, axis=2)
+        self.yCentrBatch_n = np.concatenate(arraysSequenceCentr_n, axis=2)
+        # Compute batch spatial covariance matrices for local and
+        # centralized processing
+        self.Ryylocal = [None for _ in range(nNodes)]
+        self.Rnnlocal = [None for _ in range(nNodes)]
+        self.Ryycentr = [None for _ in range(nNodes)]
+        self.Rnncentr = [None for _ in range(nNodes)]
+        for k in range(self.nNodes):
+            self.Ryylocal[k], self.Rnnlocal[k] = update_covmats_batch(
+                self.yinSTFT[k],  # use local pre-computed STFTs
+                self.oVADframes[k]
+            )
+            self.Ryycentr[k], self.Rnncentr[k] = update_covmats_batch(
+                self.yCentrBatch,
+                self.centrVADframes
+            )
+        # Covariance matrices initialization from batch estimates
+        self.Ryytilde = [None for _ in range(self.nNodes)]
+        self.Rnntilde = [None for _ in range(self.nNodes)]
+
+        
+        self.d = np.zeros(
+            (wasn[self.referenceSensor].data.shape[0], nNodes)
+        )
+        self.d_s = np.zeros_like(self.d)
+        self.d_n = np.zeros_like(self.d)
+        self.dCentr = np.zeros_like(self.d)
+        self.dCentr_s = np.zeros_like(self.d)
+        self.dCentr_n = np.zeros_like(self.d)
+        self.dLocal = np.zeros_like(self.d)
+        self.dLocal_s = np.zeros_like(self.d)
+        self.dLocal_n = np.zeros_like(self.d)
+        self.dhat = np.zeros(
+            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
+        )
+        self.dhat_s = np.zeros_like(self.dhat)
+        self.dhat_n = np.zeros_like(self.dhat)
+        self.dHatCentr = np.zeros_like(self.dhat)
+        self.dHatCentr_s = np.zeros_like(self.dhat)
+        self.dHatCentr_n = np.zeros_like(self.dhat)
+        self.dHatLocal = np.zeros_like(self.dhat)
+        self.dHatLocal_s = np.zeros_like(self.dhat)
+        self.dHatLocal_n = np.zeros_like(self.dhat)
+        
+        return self
 
     def init_from_wasn(self, wasn: list[Node], tiDANSEflag=False):
         """

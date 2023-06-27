@@ -547,3 +547,19 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
 
     return p, wasnObj
 
+
+def get_best_perf(wasnObj: WASN, p: base.DANSEparameters):
+    """
+    Computes the best achievable performance for the given scenario, i.e.,
+    if all nodes could communicate in a centralized way, with no SROs, and
+    using batch estimates.
+    """
+    # Initialize variables
+    bdv = BatchDANSEvariables()  # batch
+    bdv.import_params(p)
+    bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
+    bdv.init()  # batch-mode-specific initialization
+    # Get centralized and local estimates
+    bdv.get_centralized_estimates()
+
+    return bdv

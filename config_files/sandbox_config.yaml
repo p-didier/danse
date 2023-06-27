@@ -2,7 +2,7 @@ seed: 12351
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230627_tests/msNodes_network/2_as1_betas1s # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230627_tests/bestperf_test/1_test1 # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -85,7 +85,7 @@ wasnParams:
   vadMinProportionActive: 0.25 
   # enableVADloadFromFile: false
   rd: '[10, 10, 10]'
-  sigDur: 30  # [s]
+  sigDur: 10  # [s]
   selfnoiseSNR: 30  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
@@ -99,10 +99,10 @@ wasnParams:
   spinTop_minSourceSpacing: 0.5  # [m]
   t60: 0.5  # [s]
   # t60: 0.0  # [s]
-  # SROperNode: '[0, 100, 200]'  # [PPM]
+  SROperNode: '[0, 100, 200]'  # [PPM]
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
-  SROperNode: '[0]'  # [PPM]
+  # SROperNode: '[0]'  # [PPM]
   # nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[3, 3]'
   # nSensorPerNode: '[1, 1, 1]'

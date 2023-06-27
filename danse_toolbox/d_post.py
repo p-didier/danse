@@ -130,6 +130,23 @@ class DANSEoutputs(DANSEparameters):
         self.initialised = True
 
         return self
+    
+    def include_best_perf_data(self, outBP: BatchDANSEvariables):
+        """
+        Includes the "best performance" data (computed in centralized,
+        no SROs, batch mode).
+        """
+        self.bestPerfData = {
+            'dCentr': outBP.dCentr,
+            'dHatCentr': outBP.dHatCentr,
+            'dCentr_s': outBP.dCentr_s,
+            'dHatCentr_s': outBP.dHatCentr_s,
+            'dCentr_n': outBP.dCentr_n,
+            'dHatCentr_n': outBP.dHatCentr_n,
+            'mseCostCentr': outBP.mmseCostCentr,
+            'wCentr': outBP.wCentr,
+            'fs': outBP.baseFs
+        }
 
     def check_init(self):
         """Check if object is correctly initialised."""
@@ -328,7 +345,8 @@ class DANSEoutputs(DANSEparameters):
                     self.filters,
                     self.filtersCentr,
                     self.nSensorPerNode,
-                    refSensorIdx=self.referenceSensor
+                    refSensorIdx=self.referenceSensor,
+                    bestPerfData=self.bestPerfData
                 )
                 # Export figures
                 if exportFolder is not None:
@@ -749,7 +767,9 @@ def compute_metrics(
             dynamic=out.dynMetrics,
             gamma=out.gammafwSNRseg,
             fLen=out.frameLenfwSNRseg,
-            metricsToPlot=metricsToPlot
+            metricsToPlot=metricsToPlot,
+            bestPerfData=out.bestPerfData,
+            k=k
         )
 
         for key in metricsDict.keys():
@@ -989,6 +1009,16 @@ def metrics_subplot(ax, barWidth=1, data=None):
                 edgecolor='k',
                 label='DANSE est.'
             )
+            if data['Node1'].best is not None:
+                # Plot best-possible-performance as horizontal bar
+                ax.hlines(
+                    y=data[f'Node{idxNode + 1}'].best,
+                    xmin=idxNode - barWidth/2,
+                    xmax=idxNode + barWidth/2,
+                    colors='k',
+                    linestyles='dashed',
+                    label='Best possible'
+                )
         else:
             ax.bar(
                 idxNode + colShifts[idxColShift] * delta,
@@ -1023,6 +1053,15 @@ def metrics_subplot(ax, barWidth=1, data=None):
                 color='C3',
                 edgecolor='k'
             )
+            if data['Node1'].best is not None:
+                # Plot best-possible-performance as horizontal bar
+                ax.hlines(
+                    y=data[f'Node{idxNode + 1}'].best,
+                    xmin=idxNode - barWidth/2,
+                    xmax=idxNode + barWidth/2,
+                    colors='k',
+                    linestyles='dashed',
+                )
 
             # Consider case where the metrics was not computed (e.g., PESQ with
             # SRO-affected sampling frequency).
@@ -1901,7 +1940,8 @@ def plot_filter_norms(
         filters,
         filtersCentre=None,
         nSensorsPerNode=None,
-        refSensorIdx=0
+        refSensorIdx=0,
+        bestPerfData=None
     ) -> dict:
     """
     Plot filter norms.
@@ -1965,7 +2005,7 @@ def plot_filter_norms(
         )
         if maxNorm is not None and minNorm is not None:
             myAx.set_ylim([minNorm, maxNorm])
-        myAx.legend(loc='upper right')
+        myAx.legend(loc='lower left')
         myAx.grid(True)
 
     # Useful sensor to node index reference
@@ -2023,12 +2063,34 @@ def plot_filter_norms(
 
     # Plot network-wide DANSE filters
     for k in range(nNodes):
+        nodeCount = 0
+        idxCurrNodeSensor = 0
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
         for m in range(netwideDANSEfilts_allNodes[k].shape[1]):
             ax.plot(
                 np.log10(netwideDANSEfilts_allNodes[k][:, m]),
-                label=legendNetwide_allNodes[k][m]
+                f'C{nodeCount}-',
+                label=legendNetwide_allNodes[k][m],
+                alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
             )
+            if bestPerfData is not None:
+                # Add horizontal bar to show best perf coefficients
+                ax.hlines(
+                    y=np.log10(np.mean(np.abs(
+                        bestPerfData['wCentr'][k][:, 1, m]
+                    ), axis=0)),
+                    xmin=0,
+                    xmax=netwideDANSEfilts_allNodes[k].shape[0] - 1,
+                    colors=f'C{nodeCount}',
+                    linestyles='dashed',
+                    alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
+                )
+            # Increment node count
+            if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
+                nodeCount += 1
+                idxCurrNodeSensor = 0  # Reset sensor count
+            else:
+                idxCurrNodeSensor += 1  # Increment sensor count
         ti = f'Network-wide DANSE filters at node $k={k + 1}$'
         if nSensorsPerNode is not None:
             ti += f' ({nSensorsPerNode[k]} sensors)'
@@ -2097,6 +2159,18 @@ def plot_filter_norms(
                     label=lab,
                 )
                 labelsCentr[k].append(lab)
+                if bestPerfData is not None:
+                    # Add horizontal bar to show best perf coefficients
+                    ax.hlines(
+                        y=np.log10(np.mean(np.abs(
+                            bestPerfData['wCentr'][k][:, 1, m]
+                        ), axis=0)),
+                        xmin=0,
+                        xmax=netwideDANSEfilts_allNodes[k].shape[0] - 1,
+                        colors=f'C{nodeCount}',
+                        linestyles='dashed',
+                        alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
+                    )
                 # Increment node count
                 if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
                     nodeCount += 1

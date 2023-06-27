@@ -1208,6 +1208,7 @@ def build_wasn(
             sro=p.SROperNode[k],
             sto=0.
         )
+        sigs_noSROs = sensorSignals[p.sensorToNodeIndices == k, :].T
         # If asked, add diffuse noise
         if p.diffuseNoise:
             sigs += diffuseNoise[:, p.sensorToNodeIndices == k]
@@ -1227,8 +1228,7 @@ def build_wasn(
             sro=p.SROperNode[k],
             sto=0.
         )
-        # # Add same microphone self-noise
-        # speechOnly += selfNoiseRefSensor[:, np.newaxis]
+        speechOnly_noSROs = wetSpeeches[k].T
 
         # vvvvvv Noise-only signals vvvvvv
         if p.nNoiseSources > 0:
@@ -1245,6 +1245,7 @@ def build_wasn(
             sro=p.SROperNode[k],
             sto=0.
         )
+        noiseOnly_noSROs = noiseOnlyWithoutAsync + selfNoiseRefSensor[:, np.newaxis]
         # Add same microphone self-noise
         noiseOnly += selfNoiseRefSensor[:, np.newaxis]
 
@@ -1264,8 +1265,11 @@ def build_wasn(
             sro=p.SROperNode[k],
             fs=fsSRO,
             data=sigs,
+            data_noSRO=sigs_noSROs,
             cleanspeech=speechOnly,
+            cleanspeech_noSRO=speechOnly_noSROs,
             cleannoise=noiseOnly,
+            cleannoise_noSRO=noiseOnly_noSROs,
             timeStamps=t,
             neighborsIdx=neighbors[k],
             vad=vad[:, k, :],

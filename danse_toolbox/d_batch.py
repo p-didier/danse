@@ -111,6 +111,58 @@ class BatchDANSEvariables(DANSEvariables):
                 self.dCentr[:, k])**2
         ) for k in range(self.nNodes)]
 
+    def get_centralized_estimates(self):
+        """
+        Get the centralized estimates of the desired signal.
+        """
+
+        # Select appropriate update function
+        if self.performGEVD:
+            filter_update_fcn = update_w_gevd
+            rank = self.GEVDrank
+        else:
+            filter_update_fcn = update_w
+            rank = 1  # <-- arbitrary, not used in this case
+
+        for k in range(self.nNodes):
+            self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
+                self.Ryycentr[k],
+                self.Rnncentr[k],
+                refSensorIdx=int(
+                    np.sum(self.nSensorPerNode[:k]) + self.referenceSensor
+                ),
+                rank=rank
+            )
+            # Estimate the centralised desired signal via linear combination
+            self.dHatCentr[:, :, k] = np.einsum(
+                'ik,ijk->ij',
+                self.wCentr[k][:, self.i[k] + 1, :].conj(), 
+                self.yCentrBatch[:, :-1, :]  # <-- exclude last frame FIXME: why?
+            )                
+            self.dHatCentr_s[:, :, k] = np.einsum(
+                'ik,ijk->ij',
+                self.wCentr[k][:, self.i[k] + 1, :].conj(), 
+                self.yCentrBatch_s[:, :-1, :]  # <-- exclude last frame FIXME: why?
+            )
+            self.dHatCentr_n[:, :, k] = np.einsum(
+                'ik,ijk->ij',
+                self.wCentr[k][:, self.i[k] + 1, :].conj(), 
+                self.yCentrBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
+            )
+            # Convert back to time domain
+            self.dCentr[:, k] = self.get_istft(self.dHatCentr[:, :, k], k)\
+                / np.sum(self.winWOLAanalysis)
+            self.dCentr_s[:, k] = self.get_istft(self.dHatCentr_s[:, :, k], k)\
+                / np.sum(self.winWOLAanalysis)
+            self.dCentr_n[:, k] = self.get_istft(self.dHatCentr_n[:, :, k], k)\
+                / np.sum(self.winWOLAanalysis)
+
+        # Get MMSE costs for centralised estimate
+        self.mmseCostCentr = [np.mean(
+            np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
+                self.dCentr[:, k])**2
+        ) for k in range(self.nNodes)]
+    
     def batch_update_danse_covmats(self, k):
         """
         Update the DANSE spatial covariance matrices in batch mode,
