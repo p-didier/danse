@@ -66,7 +66,10 @@ def danse(
     for idxInstant in range(len(eventInstants)):
 
         # Process events at current instant
-        events = eventInstants[idxInstant] 
+        events = eventInstants[idxInstant]
+
+        if idxInstant == 930:
+            stop = 1
 
         # Parse event matrix and inform user (if asked)
         base.events_parser(events, dv.startUpdates, p)

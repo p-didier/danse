@@ -134,20 +134,24 @@ class BatchDANSEvariables(DANSEvariables):
                 rank=rank
             )
             # Estimate the centralised desired signal via linear combination
+            if self.yCentrBatch.shape[1] == self.dHatCentr.shape[1]:
+                indicesFrame = np.arange(self.yCentrBatch.shape[1])
+            elif self.yCentrBatch.shape[1] == self.dHatCentr.shape[1] + 1:
+                indicesFrame = np.arange(self.yCentrBatch.shape[1] - 1)    # <-- exclude last frame FIXME: why is that sometimes happening?
             self.dHatCentr[:, :, k] = np.einsum(
                 'ik,ijk->ij',
                 self.wCentr[k][:, self.i[k] + 1, :].conj(), 
-                self.yCentrBatch[:, :-1, :]  # <-- exclude last frame FIXME: why?
+                self.yCentrBatch[:, indicesFrame, :]
             )                
             self.dHatCentr_s[:, :, k] = np.einsum(
                 'ik,ijk->ij',
                 self.wCentr[k][:, self.i[k] + 1, :].conj(), 
-                self.yCentrBatch_s[:, :-1, :]  # <-- exclude last frame FIXME: why?
+                self.yCentrBatch_s[:, indicesFrame, :]
             )
             self.dHatCentr_n[:, :, k] = np.einsum(
                 'ik,ijk->ij',
                 self.wCentr[k][:, self.i[k] + 1, :].conj(), 
-                self.yCentrBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
+                self.yCentrBatch_n[:, indicesFrame, :]
             )
             # Convert back to time domain
             self.dCentr[:, k] = self.get_istft(self.dHatCentr[:, :, k], k)\

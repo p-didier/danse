@@ -324,6 +324,12 @@ class WASNparameters(AcousticScenarioParameters):
             # defined topology is ones.
             self.topologyParams.userDefinedTopo =\
                 np.ones((self.nNodes, self.nNodes))
+            
+        # Adapt fields for random IRs scenarios
+        if not self.trueRoom:
+            if self.diffuseNoise:
+                print('WARNING: `diffuseNoise` is set to True, but `trueRoom` is set to False. Setting `diffuseNoise` to False.')
+                self.diffuseNoise = False
 
     def align_with_loaded_yaml_layout(self, layoutDict):
         """Ensures the WASN parameters are consistent with the layout loaded

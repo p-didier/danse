@@ -225,25 +225,31 @@ def generate_random_rir(
     ) -> np.ndarray:
 
     # Generate random RIRs
-    if prir.distribution == 'uniform':
-        gen_func = np.random.uniform
-    elif prir.distribution == 'normal':
-        gen_func = np.random.normal
 
     # Generate random RIRs
     rirs = []
     for _ in range(n):
         # Generate random RIR
-        rir = gen_func(
-            prir.minValue,
-            prir.maxValue,
-            (int(prir.duration * fs),)
-        )
+        if prir.distribution == 'uniform':
+            rir = np.random.uniform(
+                prir.minValue,
+                prir.maxValue,
+                (int(prir.duration * fs),)
+            )
+        elif prir.distribution == 'normal':
+            rir = np.random.normal(
+                0,
+                np.amax([np.abs(prir.maxValue), np.abs(prir.minValue)]),
+                (int(prir.duration * fs),)
+            )
         # Add exponential decay if asked
         if prir.decay == 'exponential':
             rir *= np.exp(-np.arange(len(rir)) /\
                 (prir.decayTimeConstant * fs))
-        # Normalize
+        # Cut part before direct path
+        # idxDirectSound = np.argmax(rir)
+        # rir[:idxDirectSound] = 0
+        #
         rirs.append(rir)
     return rirs
 
@@ -656,15 +662,17 @@ def generate_rand_signal(
         Random signal.
     """
     if prand.distribution == 'uniform':
-        gen_func = np.random.uniform
+        y = np.random.uniform(
+            prand.minValue,
+            prand.maxValue,
+            (n,)
+        )
     elif prand.distribution == 'normal':
-        gen_func = np.random.normal
-        
-    y = gen_func(
-        prand.minValue,
-        prand.maxValue,
-        (n,)
-    )
+        y = np.random.normal(
+            0,
+            np.amax([np.abs(prand.maxValue), np.abs(prand.minValue)]),
+            (n,)
+        )        
 
     # Add pauses
     if not noPauses:

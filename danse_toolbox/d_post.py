@@ -101,6 +101,7 @@ class DANSEoutputs(DANSEparameters):
         # Filters
         self.filters = dv.wTilde
         if self.simType == 'online':
+            self.filtersEXT = dv.wTildeExt
             self.yinSTFT = dv.yinSTFT
             self.yCentrBatch = dv.yCentrBatch
             self.neighbors = dv.neighbors
@@ -326,7 +327,7 @@ class DANSEoutputs(DANSEparameters):
             self,
             exportFolder=None,
             exportNormsAsPickle=False,
-            plots=['norm']
+            plots=['norm', 'real-imag']
         ):
         """
         Plots a visualization of the evolution of filters in DANSE.
@@ -340,41 +341,70 @@ class DANSEoutputs(DANSEparameters):
         plots : list of str, optional
             List of plots to export. Possible values are:
             - 'norm' : plot of the norm of each filter
-            vvv TODO vvv
             - 'real-imag' : plot of the real and imaginary parts of each filter
-            - 'amp-phase' : plot of the amplitude and phase of each filter
         """
         self.check_init()  # check if object is correctly initialised
-        for ii in range(len(plots)):
-            if plots[ii] not in ['norm']:#, 'real-imag', 'amp-phase']:
-                raise NotImplementedError(f'Unknown/unimplemented plot type {plots[ii]}')
-            
-            if plots[ii] == 'norm':
-                # Plot figures
-                figs, dataFigs = plot_filter_norms(
-                    self.filters,
-                    self.filtersCentr,
-                    self.nSensorPerNode,
-                    refSensorIdx=self.referenceSensor,
-                    bestPerfData=self.bestPerfData
-                )
-                # Export figures
-                if exportFolder is not None:
-                    for title, fig in figs.items():
-                        fullExportFolder = f'{exportFolder}/filtNorms'
-                        if not os.path.exists(fullExportFolder):
-                            os.makedirs(fullExportFolder)
-                        fig.savefig(f'{fullExportFolder}/{title}.png', dpi=300)
-                        fig.savefig(f'{fullExportFolder}/{title}.pdf')
-                else:
-                    plt.close(fig)
-                # Export data
-                if exportNormsAsPickle:
-                    fullExportFolder = f'{exportFolder}/filtNorms'
+
+        def _export(figs, dataFigs, subfolder='filtNorms'): 
+            # Export figures
+            if exportFolder is not None:
+                for title, fig in figs.items():
+                    fullExportFolder = f'{exportFolder}/{subfolder}'
                     if not os.path.exists(fullExportFolder):
                         os.makedirs(fullExportFolder)
-                    with open(f'{fullExportFolder}/filtNorms.pkl', 'wb') as f:
-                        pickle.dump(dataFigs, f)
+                    fig.savefig(f'{fullExportFolder}/{title}.png', dpi=300)
+                    fig.savefig(f'{fullExportFolder}/{title}.pdf')
+            else:
+                plt.close(fig)
+            # Export data
+            if exportNormsAsPickle:
+                fullExportFolder = f'{exportFolder}/{subfolder}'
+                if not os.path.exists(fullExportFolder):
+                    os.makedirs(fullExportFolder)
+                with open(f'{fullExportFolder}/{subfolder}.pkl', 'wb') as f:
+                    pickle.dump(dataFigs, f)
+
+        for ii in range(len(plots)):
+            if plots[ii] not in ['norm', 'real-imag']:
+                raise NotImplementedError(f'Unknown/unimplemented plot type {plots[ii]}')
+            
+            kwargs = {
+                'nSensorsPerNode': self.nSensorPerNode,
+                'refSensorIdx': self.referenceSensor,
+                'bestPerfData': self.bestPerfData,
+            }
+            if plots[ii] == 'norm':
+                # Plot figures
+                figs, dataFigs = plot_filters(
+                    [np.abs(filt) for filt in self.filters],
+                    [np.abs(filt) for filt in self.filtersEXT],
+                    [np.abs(filt) for filt in self.filtersCentr],
+                    fignamePrefix='filtnorm',
+                    **kwargs
+                )
+                # Export figures
+                _export(figs, dataFigs, subfolder='filtNorms')
+            if plots[ii] == 'real-imag':
+                # Plot real part figures
+                figs, dataFigs = plot_filters(
+                    [np.real(filt) for filt in self.filters],
+                    [np.real(filt) for filt in self.filtersEXT],
+                    [np.real(filt) for filt in self.filtersCentr],
+                    fignamePrefix='filtreal',
+                    **kwargs
+                )
+                # Export figures
+                _export(figs, dataFigs, subfolder='filtReal')
+                # Plot iamginary part figures
+                figs, dataFigs = plot_filters(
+                    [np.imag(filt) for filt in self.filters],
+                    [np.imag(filt) for filt in self.filtersEXT],
+                    [np.imag(filt) for filt in self.filtersCentr],
+                    fignamePrefix='filtimag',
+                    **kwargs
+                )
+                # Export figures
+                _export(figs, dataFigs, subfolder='filtImag')
 
     def plot_cond(self, exportFolder=None):
         """Plots a visualization of the condition numbers in DANSE."""
@@ -1946,30 +1976,43 @@ def plot_cond_numbers(condNumbers: ConditionNumbers, nSensorPerNode: int=None):
     return fig
 
 
-def plot_filter_norms(
+def plot_filters(
         filters,
+        filtersEXT,
         filtersCentre=None,
         nSensorsPerNode=None,
         refSensorIdx=0,
+        fignamePrefix='filters',
         bestPerfData=None
     ) -> dict:
     """
-    Plot filter norms.
+    Plot filters.
 
     Parameters
     ----------
-    filters : [K x 1] list of [Nf x Nt x J] np.ndarray[complex]
+    filters : [K x 1] list of [Nf x Nt x J] np.ndarray[real]
         DANSE filters per node.
+        Can be the norm, real part, or imaginary part.
+        Can also be the phase or magnitude of the filters.
         `K` : Number of nodes.
         `Nf` : Number of frequency bins.
         `Nt` : Number of time frames.
         `J` : Filter dimensions.
-    filtersCentre : [K x 1] list of [Nf x Nt x J] np.ndarray[complex]
+    filtersEXT : [K x 1] list of [Nf x Nt x J] np.ndarray[real]
+        External DANSE filters per node, applied for fusion of
+        local signals in the broadcasting stage.
+        Can be the norm, real part, or imaginary part.
+        Can also be the phase or magnitude of the filters.
+    filtersCentre : [K x 1] list of [Nf x Nt x J] np.ndarray[real]
         Centralized DANSE filters per node.
+        Can be the norm, real part, or imaginary part.
+        Can also be the phase or magnitude of the filters.
     nSensorPerNode : [K x 1] list[int]
         Number of sensors per node.
     refSensorIdx : int
         Index of reference sensor (same for all nodes).
+    fignamePrefix : str
+        Prefix for figure name.
 
     Returns
     ----------
@@ -2005,13 +2048,6 @@ def plot_filter_norms(
             xlabel='STFT time frame index $i$',
             ylabel='$\\log_{{10}}(E_{{\\nu}}\\{|w_{{k,m}}[\\nu, i]|\\})$',
             title=ti,
-            xticks=myAx.get_xticks(),
-            xticklabels=np.round(np.linspace(
-                start=0,
-                stop=filters[0].shape[1] - 1,
-                num=len(myAx.get_xticks()),
-                dtype=int
-            ), 2)
         )
         if maxNorm is not None and minNorm is not None:
             myAx.set_ylim([minNorm, maxNorm])
@@ -2036,17 +2072,24 @@ def plot_filter_norms(
         netwideDANSEfilts = np.zeros((filters[k].shape[1], 0))
         for q in range(nNodes):
             if q == k:
-                currVal = np.mean(np.abs(
-                    filters[k][:, :, :nSensorsPerNode[k]]
-                ), axis=0)
+                currVal = np.mean(
+                    filters[k][:, :, :nSensorsPerNode[k]],
+                    axis=0
+                )
                 for m in range(nSensorsPerNode[k]):
                     legendNetwide.append(f'$w_{{kk,{m + 1}}}$ (local)')
             else:
                 idxGkq = nSensorsPerNode[k] + neighborCount
-                currVal = np.mean(np.abs(
-                    filters[q][:, :, :nSensorsPerNode[q]] *\
-                        filters[k][:, :, [idxGkq]]
-                ), axis=0)
+                currVal = np.mean(
+                    filtersEXT[q][:, 1:, :] *\
+                        filters[k][:, :-1, [idxGkq]],
+                    axis=0
+                )
+                # ^^^ NB: we must multiply g_kq^i by wqq^{i-1}
+                currVal = np.concatenate(
+                    (np.zeros((1, currVal.shape[1])), currVal),
+                    axis=0
+                )
                 for m in range(nSensorsPerNode[q]):
                     legendNetwide.append(f'$w_{{qq,{m + 1}}}\\cdot g_{{kq}}$ ($q={q + 1}$)')
                 neighborCount += 1
@@ -2063,7 +2106,7 @@ def plot_filter_norms(
         for filt in netwideDANSEfilts_allNodes]
     maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-    l = [np.log10(np.mean(np.abs(filt), axis=0))\
+    l = [np.log10(np.mean(filt, axis=0))\
         for filt in filters + filtersCentre]  # concatenate `filters` and `filtersCentre`
     np.seterr(divide = 'warn')      # reset warnings
     maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
@@ -2085,10 +2128,14 @@ def plot_filter_norms(
             )
             if bestPerfData is not None:
                 # Add horizontal bar to show best perf coefficients
+                if 'real' in fignamePrefix:
+                    data = np.real(bestPerfData['wCentr'][k][:, 1, m])
+                elif 'imag' in fignamePrefix:
+                    data = np.imag(bestPerfData['wCentr'][k][:, 1, m])
+                elif 'norm' in fignamePrefix:
+                    data = np.abs(bestPerfData['wCentr'][k][:, 1, m])
                 ax.hlines(
-                    y=np.log10(np.mean(np.abs(
-                        bestPerfData['wCentr'][k][:, 1, m]
-                    ), axis=0)),
+                    y=np.log10(np.mean(data, axis=0)),
                     xmin=0,
                     xmax=netwideDANSEfilts_allNodes[k].shape[0] - 1,
                     colors=f'C{nodeCount}',
@@ -2106,7 +2153,8 @@ def plot_filter_norms(
             ti += f' ({nSensorsPerNode[k]} sensors)'
         _format_axes(ax, ti, maxNorm, minNorm)
         fig.tight_layout()
-        figs.append((f'filtnorms_n{k + 1}_net', fig))
+        figs.append((f'{fignamePrefix}_n{k + 1}_net', fig))
+        plt.close(fig=fig)
 
     # Plot filter norms for regular DANSE filters
     for k in range(nNodes):
@@ -2125,7 +2173,7 @@ def plot_filter_norms(
             # Mean over frequency bins
             np.seterr(divide = 'ignore')   # avoid annoying warnings
             dataPlot[:, m] = np.log10(
-                np.mean(np.abs(filters[k][:, :, m]), axis=0)
+                np.mean(filters[k][:, :, m], axis=0)
             )
             np.seterr(divide = 'warn')     # reset warnings
             ax.plot(
@@ -2140,7 +2188,8 @@ def plot_filter_norms(
         # Format axes
         _format_axes(ax, ti, maxNorm, minNorm)
         fig.tight_layout()
-        figs.append((f'filtnorms_n{k + 1}', fig))
+        figs.append((f'{fignamePrefix}_n{k + 1}', fig))
+        plt.close(fig=fig)
         dataFigs.append(dataPlot)  # Save data for later use
 
     if filtersCentre is not None:
@@ -2159,7 +2208,7 @@ def plot_filter_norms(
                 # Mean over frequency bins
                 np.seterr(divide = 'ignore')   # avoid annoying warnings
                 dataFig[:, m] = np.log10(
-                    np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0)
+                    np.mean(filtersCentre[k][:, :, m], axis=0)
                 )
                 np.seterr(divide = 'warn')     # reset warnings
                 ax.plot(
@@ -2171,10 +2220,14 @@ def plot_filter_norms(
                 labelsCentr[k].append(lab)
                 if bestPerfData is not None:
                     # Add horizontal bar to show best perf coefficients
+                    if 'real' in fignamePrefix:
+                        data = np.real(bestPerfData['wCentr'][k][:, 1, m])
+                    elif 'imag' in fignamePrefix:
+                        data = np.imag(bestPerfData['wCentr'][k][:, 1, m])
+                    elif 'norm' in fignamePrefix:
+                        data = np.abs(bestPerfData['wCentr'][k][:, 1, m])
                     ax.hlines(
-                        y=np.log10(np.mean(np.abs(
-                            bestPerfData['wCentr'][k][:, 1, m]
-                        ), axis=0)),
+                        y=np.log10(np.mean(data, axis=0)),
                         xmin=0,
                         xmax=netwideDANSEfilts_allNodes[k].shape[0] - 1,
                         colors=f'C{nodeCount}',
@@ -2192,7 +2245,8 @@ def plot_filter_norms(
             # Format axes
             _format_axes(ax, ti, maxNorm, minNorm)
             fig.tight_layout()
-            figs.append((f'filtnorms_c{k + 1}', fig))
+            figs.append((f'{fignamePrefix}_c{k + 1}', fig))
+            plt.close(fig=fig)
             dataFigs.append(dataFig)  # Save data for later use
 
         # Plot difference between centralized filters
@@ -2201,7 +2255,7 @@ def plot_filter_norms(
             fig, ax = plt.subplots(1, 1, figsize=(7, 5))
             for m in range(filtersCentre[k].shape[2]):   
                 mse1 = np.abs(
-                    np.mean(np.abs(filtersCentre[k][:, :, m]), axis=0) -\
+                    np.mean(filtersCentre[k][:, :, m], axis=0) -\
                     netwideDANSEfilts_allNodes[k][:, m].T
                 ) ** 2
                 # Plot
@@ -2215,7 +2269,8 @@ def plot_filter_norms(
                 _format_axes(ax, ti)
                 ax.set_ylabel('$\\log_{{10}}||\\hat{{\\mathbf{{w}}}}_k - \\mathbf{{w}}_k||^2$ (avg. over $\\nu$)')
                 fig.tight_layout()
-                figs.append((f'filtnorms_c{k + 1}_net_mse1', fig))
+                plt.close(fig=fig)
+                figs.append((f'{fignamePrefix}_c{k + 1}_net_mse1', fig))
     
 
     # Transform to dict
@@ -2280,7 +2335,8 @@ def export_danse_outputs(
             print('Exporting filter norms plot...')
             out.plot_filter_evol(
                 p.exportParams.exportFolder,
-                exportNormsAsPickle=p.exportParams.filterNorms  # boolean to export filter norms as pickle  
+                exportNormsAsPickle=p.exportParams.filterNorms,  # boolean to export filter norms as pickle
+                plots=['norm']
             )
             print('Done.')
 

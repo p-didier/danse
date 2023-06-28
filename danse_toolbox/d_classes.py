@@ -229,7 +229,7 @@ class TestParameters:
             self.exportParams.filters = False
             self.exportParams.filterNormsPlot = False
         elif 'online' in self.danseParams.simType:
-            self.exportParams.filters = True
+            # self.exportParams.filters = True
             self.exportParams.filterNormsPlot = True
         if not self.wasnParams.trueRoom:
             self.exportParams.acousticScenarioPlot = False  # no room plot if no true room
@@ -325,7 +325,7 @@ class DANSEvariables(base.DANSEparameters):
             ))
             wLocal.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, wasn[k].nSensors), # FIXME: see above
-                self.referenceSensor,
+                refIdx=self.referenceSensor,
                 initType=self.filterInitType,
                 fixedValue=self.filterInitFixedValue
             ))
@@ -3070,6 +3070,8 @@ def update_covmats_batch(yAllFrames, vadAllFrames):
         Updated spatial covariance matrix estimate, averaged over
         all time frames - noise-only.
     """
+    if len(vadAllFrames) > yAllFrames.shape[1]:
+        vadAllFrames = vadAllFrames[:yAllFrames.shape[1]]
     Ryy = np.mean(np.einsum(
         'ikj,ikl->ikjl',
         yAllFrames[:, vadAllFrames.astype(bool), :],  # speech+noise VAD frames
