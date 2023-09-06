@@ -5,13 +5,13 @@ import librosa
 import resampy
 import numpy as np
 import pickle, gzip
+from . import classes
 from numba import njit
-from siggen import classes
 import scipy.signal as sig
 import pyroomacoustics as pra
 import matplotlib.pyplot as plt
-from pyANFgen.pyanfgen.utils import pyanfgen, ANFgenConfig
 from scipy.spatial.transform import Rotation as rot
+from pyANFgen.pyanfgen.utils import pyanfgen, ANFgenConfig
 
 
 def build_scenario(p: classes.WASNparameters):
@@ -246,9 +246,9 @@ def generate_random_rir(
         if prir.decay == 'exponential':
             rir *= np.exp(-np.arange(len(rir)) /\
                 (prir.decayTimeConstant * fs))
-        # Cut part before direct path
-        # idxDirectSound = np.argmax(rir)
-        # rir[:idxDirectSound] = 0
+        elif prir.decay == 'immediate':
+            rir[1:] = 0  # turns into a Dirac
+            rir[0] = np.abs(rir[0])  # make sure the Dirac is positive
         #
         rirs.append(rir)
     return rirs
@@ -1168,11 +1168,15 @@ def build_wasn(
     
     # Get sensor signals
     sensorSignals = np.zeros(
-        (np.sum(p.nSensorPerNode), wetNoises[0].shape[-1])
+        (np.sum(p.nSensorPerNode), wetSpeeches[0].shape[-1])
     )
     for k in range(p.nNodes):
-        sensorSignals[p.sensorToNodeIndices == k, :] =\
-            wetNoises[k] + wetSpeeches[k]
+        if wetNoises is not None:  # if there are localized noise sources
+            sensorSignals[p.sensorToNodeIndices == k, :] =\
+                wetNoises[k] + wetSpeeches[k]
+        else:
+            sensorSignals[p.sensorToNodeIndices == k, :] =\
+                wetSpeeches[k]
 
     # Create network topological map (inter-node links)
     adjacencyMatrix, neighbors = get_topo(
@@ -1353,8 +1357,8 @@ def build_wasn(
 
 
 def apply_self_noise(sig, snr):
-    """Apply random self-noise to sensor signal `sig`."""
-    sn = np.random.uniform(-1, 1, size=sig.shape)
+    """Apply spectrally white self-noise to a sensor signal."""
+    sn = np.random.uniform(-1, 1, size=sig.shape)  # white noise
     sig, sn = apply_noise(sig, sn, snr)
     return sig, sn
 

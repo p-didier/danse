@@ -381,15 +381,9 @@ class DANSEvariables(base.DANSEparameters):
         self.yCentrBatch_n = np.concatenate(arraysSequenceCentr_n, axis=2)
         # Compute batch spatial covariance matrices for local and
         # centralized processing
-        self.Ryylocal = [None for _ in range(nNodes)]
-        self.Rnnlocal = [None for _ in range(nNodes)]
         self.Ryycentr = [None for _ in range(nNodes)]
         self.Rnncentr = [None for _ in range(nNodes)]
         for k in range(self.nNodes):
-            self.Ryylocal[k], self.Rnnlocal[k] = update_covmats_batch(
-                self.yinSTFT[k],  # use local pre-computed STFTs
-                self.oVADframes[k]
-            )
             self.Ryycentr[k], self.Rnncentr[k] = update_covmats_batch(
                 self.yCentrBatch,
                 self.centrVADframes
@@ -407,9 +401,6 @@ class DANSEvariables(base.DANSEparameters):
         self.dCentr = np.zeros_like(self.d)
         self.dCentr_s = np.zeros_like(self.d)
         self.dCentr_n = np.zeros_like(self.d)
-        self.dLocal = np.zeros_like(self.d)
-        self.dLocal_s = np.zeros_like(self.d)
-        self.dLocal_n = np.zeros_like(self.d)
         self.dhat = np.zeros(
             (self.nPosFreqs, self.nIter, nNodes), dtype=complex
         )
@@ -418,9 +409,6 @@ class DANSEvariables(base.DANSEparameters):
         self.dHatCentr = np.zeros_like(self.dhat)
         self.dHatCentr_s = np.zeros_like(self.dhat)
         self.dHatCentr_n = np.zeros_like(self.dhat)
-        self.dHatLocal = np.zeros_like(self.dhat)
-        self.dHatLocal_s = np.zeros_like(self.dhat)
-        self.dHatLocal_n = np.zeros_like(self.dhat)
         
         return self
 
@@ -3137,9 +3125,8 @@ def update_w_gevd(
     Evect = np.zeros((n,))
     Evect[refSensorIdx] = 1
 
-    sigma = np.zeros((nFreqs, n))
     Xmat = np.zeros((nFreqs, n, n), dtype=complex)
-
+    sigma = np.zeros((nFreqs, n))
     for kappa in range(nFreqs):
         # Perform generalized eigenvalue decomposition 
         # -- as of 2022/02/17: scipy.linalg.eigh()
@@ -3156,17 +3143,19 @@ def update_w_gevd(
         sigma[kappa, :] = sigmacurr[idx]
         Xmat[kappa, :, :] = Xmatcurr[:, idx]
 
-    Qmat = np.linalg.inv(np.transpose(Xmat.conj(), axes=[0, 2, 1]))
+    Qmat = np.linalg.inv(
+        np.transpose(Xmat.conj(), axes=[0, 2, 1])
+    )
     # GEVLs tensor
     Dmat = np.zeros((nFreqs, n, n))
-    for ii in range(rank):
-        Dmat[:, ii, ii] = np.squeeze(1 - 1 / sigma[:, ii])
+    for r in range(rank):
+        Dmat[:, r, r] = np.squeeze(1 - 1 / sigma[:, r])
     # LMMSE weights
     Qhermitian = np.transpose(Qmat.conj(), axes=[0, 2, 1])
     w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
     return w
 # --------------------------------------------------------------------------- #
-# Jitted functions
+# Jitted functionsnp
 # --------------------------------------------------------------------------- #
 
 @jit(nopython=True)

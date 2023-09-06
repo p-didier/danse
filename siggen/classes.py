@@ -14,7 +14,7 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 @dataclass
 class RandomIRParameters:
-    distribution: str = 'uniform'  # distribution of randomly generated IR
+    distribution: str = 'uniform'  # statistic distribution of randomly generated IR
         # ^^^ valid values:
         #  - "uniform": uniform distribution;
         #  - "normal": normal distribution.
@@ -25,6 +25,7 @@ class RandomIRParameters:
         # ^^^ valid values:
         #  - "none" (or `None`): no decay;
         #  - "exponential": exponential decay with time constant `decayTimeConstant`.
+        #  - "immediate": IR is non-zero at t=0, 0 elsewhere.
     decayTimeConstant: float = 0.1  # [s] time constant of exponential decay
 
 @dataclass

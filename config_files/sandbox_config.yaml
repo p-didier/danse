@@ -2,7 +2,7 @@ seed: 12351
 # seed: 12347
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230628_tests/forSOUNDSSC11/gevddanse/3_speech_Mk_eq_3 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230703_tests/rank1model_tests/1_irs # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230628_tests/quicktests/filtplot_exports/1_test # folder to export outputs
   metricsInPlots:
   - snr
@@ -71,7 +71,8 @@ wasnParams:
   randIRsParams:
     distribution: normal
     duration: 0.1  # [s] random IR duration
-    decay: exponential
+    # decay: exponential
+    decay: immediate
     decayTimeConstant: 0.02
   # Diffuse noise params
   # diffuseNoise: true
@@ -90,8 +91,9 @@ wasnParams:
   # rd: '[10, 10, 10]'
   rd: '[5, 5, 5]'
   # sigDur: 30  # [s]
-  sigDur: 30  # [s]
-  selfnoiseSNR: 30  # [dB]
+  sigDur: 15  # [s]
+  # selfnoiseSNR: 30  # [dB]
+  selfnoiseSNR: 5  # [dB]
   # selfnoiseSNR: 999  # [dB]
   layoutType: random
   # layoutType: vert_spinning_top
@@ -102,8 +104,9 @@ wasnParams:
   spinTop_randomWiggleAmount: 0.1  # [m]
   spinTop_minInterNodeDist: 1  # [m]
   spinTop_minSourceSpacing: 0.5  # [m]
-  t60: 0.2  # [s]
-  # t60: 0.0  # [s]
+  # t60: 0.2  # [s]
+  t60: 0.0  # [s]
+  nNodes: 2
   # SROperNode: '[0, 100, 200]'  # [PPM]
   # SROperNode: '[0, 5, 10]'  # [PPM]
   # SROperNode: '[10, 0, 5]'  # [PPM]
@@ -112,9 +115,9 @@ wasnParams:
   # nSensorPerNode: '[3, 3]'
   # nSensorPerNode: '[1, 1, 1]'
   # nSensorPerNode: '[2, 2, 2]'
-  nSensorPerNode: '[3, 3, 3]'
+  # nSensorPerNode: '[3, 3, 3]'
   # nSensorPerNode: '[1, 1]'
-  # nSensorPerNode: '[2, 2]'
+  nSensorPerNode: '[2, 2]'
   interSensorDist: 0.2
   #
   # baseSNR: 0
@@ -130,8 +133,7 @@ wasnParams:
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
-  nNodes: 3
-  nNoiseSources: 3
+  nNoiseSources: 0
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files

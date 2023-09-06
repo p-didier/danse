@@ -68,9 +68,6 @@ def danse(
         # Process events at current instant
         events = eventInstants[idxInstant]
 
-        if idxInstant == 930:
-            stop = 1
-
         # Parse event matrix and inform user (if asked)
         base.events_parser(events, dv.startUpdates, p)
 
@@ -563,6 +560,6 @@ def get_best_perf(wasnObj: WASN, p: base.DANSEparameters):
     bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
     bdv.init()  # batch-mode-specific initialization
     # Get centralized and local estimates
-    bdv.get_centralized_estimates()
+    bdv.get_cmentralized_estimates()
 
     return bdv

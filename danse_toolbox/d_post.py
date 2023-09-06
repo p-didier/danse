@@ -1357,7 +1357,7 @@ def plot_asc(
         ax,
         p.rd[-2:],
         np.array([ii.position[-2:] for ii in asc.sources[:p.nDesiredSources]]), 
-        np.array([ii.position[-2:] for ii in asc.sources[-p.nNoiseSources:]]), 
+        noiseSourcePos, 
         asc.mic_array.R[-2:, :].T,
         sensorToNodeIdx,
         dotted=p.t60==0,
