@@ -14,7 +14,6 @@ BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting
 
 def main(
         p: TestParameters=None,
-        plotASCearly=False,
         cfgFilename: str=''
     ) -> pp.DANSEoutputs:
     """Main function.
@@ -33,6 +32,7 @@ def main(
     outPostProc: DANSEoutputs
         Output object containing all necessary info from DANSE run.
     """
+
     if p is None:
         # Load parameters from config file
         print('Loading parameters...')
@@ -66,7 +66,7 @@ def main(
     )
     print('WASN built.')
 
-    if plotASCearly:
+    if 0:
         pp.plot_asc(
             room,
             p.wasnParams,
@@ -76,7 +76,6 @@ def main(
             plot3Dview=True
         )
         plt.show()
-
     # Parameters check and pre-DANSE computations
     p, wasnObj = core.prep_for_danse(p, wasnObj)
     
@@ -107,6 +106,7 @@ def danse_it_up(
         else:
             danse_function = core.danse
     else:  # Ad-hoc WASN topology case
+        raise NotImplementedError('Ad-hoc WASN topology case not ready yet.')
         print(f'Running {p.danseParams.simType} TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         
         if p.danseParams.simType == 'batch':  # true batch mode

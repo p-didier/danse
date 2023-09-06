@@ -560,6 +560,6 @@ def get_best_perf(wasnObj: WASN, p: base.DANSEparameters):
     bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
     bdv.init()  # batch-mode-specific initialization
     # Get centralized and local estimates
-    bdv.get_cmentralized_estimates()
+    bdv.get_centralized_estimates()
 
     return bdv

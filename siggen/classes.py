@@ -250,8 +250,15 @@ class WASNparameters(AcousticScenarioParameters):
             """Helper function -- selects `nFiles` files randomly from a folder."""
             # Get all files in folder
             files = list(Path(folder).glob('**/*'))
-            files = [x for x in files if x.is_file() and\
-                not Path.samefile(x, self.fileDiffuseBabble)]
+            
+            if self.fileDiffuseBabble != '':
+                # Remove diffuse babble file, if any
+                files = [x for x in files if x.is_file() and\
+                    not Path.samefile(x, self.fileDiffuseBabble)]
+            else:
+                # Remove folders
+                files = [x for x in files if x.is_file()]
+            
             if fs is not None:
                 # For each file, check if there is a corresponding file with
                 # the same name but different sampling rate

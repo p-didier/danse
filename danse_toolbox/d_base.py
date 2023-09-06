@@ -206,8 +206,8 @@ class DANSEparameters(Hyperparameters):
     GEVDrank: int = 1           # GEVD rank
     noExternalFilterRelaxation: bool = False  # if True, bypass external
         # filter updates.
-    timeBtwExternalFiltUpdates: float = 1.  # [s] bw. external filter updates.
-    alphaExternalFilters: float = .5    # exponential averaging constant
+    timeBtwExternalFiltUpdates: float = 0.  # [s] bw. external filter updates.
+    alphaExternalFilters: float = 1.    # exponential averaging constant
         # for external filter _target_ update using internal DANSE filters.
     t_expAvg50pExternalFilters: float = 2.  # [s] Time in the past at which
         # the target external asynchronous node-updating DANSE filters are

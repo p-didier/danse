@@ -3153,9 +3153,12 @@ def update_w_gevd(
     # LMMSE weights
     Qhermitian = np.transpose(Qmat.conj(), axes=[0, 2, 1])
     w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
+    
     return w
+
+
 # --------------------------------------------------------------------------- #
-# Jitted functionsnp
+# Jitted functions
 # --------------------------------------------------------------------------- #
 
 @jit(nopython=True)
