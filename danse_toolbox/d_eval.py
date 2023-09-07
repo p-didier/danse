@@ -71,18 +71,18 @@ def get_metrics(
         noisy,
         filtSpeech,
         filtNoise,
-        filtSpeech_c,
-        filtNoise_c,
-        filtSpeech_l,
-        filtNoise_l,
-        enhan,
+        filtSpeech_c=None,
+        filtNoise_c=None,
+        filtSpeech_l=None,
+        filtNoise_l=None,
+        enhan=None,
         enhan_c=None,
         enhan_l=None,
         fs=16e3,
         vad=None,
         dynamic: DynamicMetricsParameters=None,
         startIdx=0,
-        endIdx=0,
+        endIdx=None,
         gamma=0.2,
         fLen=0.03,
         metricsToPlot: list[str]=['snr', 'stoi'],
@@ -148,6 +148,8 @@ def get_metrics(
     """
 
     metricsDict = dict()
+    if endIdx is None:
+        endIdx = clean.shape[0]
 
     # Trim to correct lengths (avoiding initial filter convergence
     # in calculation of metrics)
@@ -163,7 +165,10 @@ def get_metrics(
     if enhan_l is not None:
         enhan_l = enhan_l[startIdx:endIdx]
         vad_l = vad[startIdx:endIdx]
-    enhan = enhan[startIdx:endIdx]
+    if enhan is not None:
+        enhan = enhan[startIdx:endIdx]
+    else:
+        enhan = filtSpeech[startIdx:endIdx] + filtNoise[startIdx:endIdx]
     noisy = noisy[startIdx:endIdx]
     vad = vad[startIdx:endIdx]
     filtSpeech = filtSpeech[startIdx:endIdx]
@@ -519,7 +524,7 @@ def getSNR(timeDomainSignal, VAD):
     return SNRout
 
 
-def get_snr(s: np.ndarray, n: np.ndarray, vad: np.ndarray):
+def get_snr(s: np.ndarray, n: np.ndarray, vad: np.ndarray=None):
     """
     Estimate SNR based on (filtered) speech and (filtered) noise (+ VAD).
 

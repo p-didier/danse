@@ -1224,11 +1224,15 @@ def build_wasn(
         # If asked, add diffuse noise
         if p.diffuseNoise:
             sigs += diffuseNoise[:, p.sensorToNodeIndices == k]
+            sigs_noSROs	+= diffuseNoise[:, p.sensorToNodeIndices == k]
         # Apply microphone self-noise
         selfNoise = np.zeros_like(sigs)
         for m in range(sigs.shape[-1]):
             sigs[:, m], selfNoise[:, m] = apply_self_noise(
                 sigs[:, m], p.selfnoiseSNR
+            )
+            sigs_noSROs[:, m], _ = apply_self_noise(
+                sigs_noSROs[:, m], p.selfnoiseSNR
             )
         selfNoiseRefSensor = selfNoise[:, 0]
 

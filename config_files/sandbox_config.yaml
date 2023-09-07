@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230906_tests/test2 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230907_tests/test3_selfNoiseOnly_correctBest # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -48,7 +48,7 @@ wasnParams:
   vadMinProportionActive: 0.25
   rd: '[5, 5, 5]'
   sigDur: 15  # [s]
-  selfnoiseSNR: 50  # [dB]
+  selfnoiseSNR: 5  # [dB]
   layoutType: random
   minDistToWalls: 0.5
   t60: 0.0  # [s]
@@ -62,7 +62,7 @@ wasnParams:
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
-  nNoiseSources: 1
+  nNoiseSources: 0
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
