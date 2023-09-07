@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230907_tests/test3_selfNoiseOnly_correctBest # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230907_tests/with_sqrthann/test4_tmp # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -11,8 +11,6 @@ exportParams:
   conditionNumberPlot: false
   mseBatchPerfPlot: false
 danseParams:
-  winWOLAanalysisType: rect_normNs
-  winWOLAsynthesisType: rect_normNs
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
   performGEVD: true
@@ -48,10 +46,10 @@ wasnParams:
   vadMinProportionActive: 0.25
   rd: '[5, 5, 5]'
   sigDur: 15  # [s]
-  selfnoiseSNR: 5  # [dB]
+  selfnoiseSNR: 15  # [dB]
   layoutType: random
   minDistToWalls: 0.5
-  t60: 0.0  # [s]
+  t60: 0.4  # [s]
   nNodes: 2
   nSensorPerNode: '[1, 4]'
   SROperNode: '[0, 0]'  # [PPM]
@@ -62,7 +60,7 @@ wasnParams:
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
-  nNoiseSources: 0
+  nNoiseSources: 1
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files

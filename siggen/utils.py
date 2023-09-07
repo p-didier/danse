@@ -128,7 +128,8 @@ def get_raw_source_signals(p: classes.WASNparameters):
                 y = np.concatenate((y, y))  # loop
                 y = y[:desiredNumSamples]
         # Whiten
-        y = (y - np.mean(y)) / np.std(y)  # whiten
+        # y = (y - np.mean(y)) / np.std(y)  # whiten [commented out by PD on 2023.09.07 (see journal week36 THU)]
+        y = y / np.std(y)  # normalie
         return y
 
     # Desired number of samples
@@ -147,6 +148,7 @@ def get_raw_source_signals(p: classes.WASNparameters):
                 desiredNumSamples,
                 p.fs
             )
+        # Remove DC offset
         desiredSignalsRaw[:, ii] = y
 
     # Add noise sources
@@ -223,9 +225,6 @@ def generate_random_rir(
         n: int,
         fs: float
     ) -> np.ndarray:
-
-    # Generate random RIRs
-
     # Generate random RIRs
     rirs = []
     for _ in range(n):
