@@ -248,6 +248,9 @@ class DANSEparameters(Hyperparameters):
     covMatSameInitForAllFreqs: bool = True
         # If True, the same initial covariance matrices are used for all
         # frequency bins. Else, all bins get a different initialization.
+    use1stFrameAsBasis: bool = False  # if True, use conditional SCM
+        # updates, i.e., use the 1st available frame as basis for the 
+        # subsequent exponential averaging.
     # ---- Plotting
     printoutsAndPlotting : PrintoutsAndPlotting = PrintoutsAndPlotting()
     # ---- Desired signal estimation
@@ -1627,7 +1630,7 @@ def danse_compression_whole_chunk(
     if flagSingleSensor:
         yqHat = np.fft.fft(
             np.squeeze(yq) * h, DFTsize, axis=0
-        )
+        ) / np.sqrt(Ns)
         # Keep only positive frequencies
         yqHat = yqHat[:int(DFTsize // 2 + 1)]
         # Apply linear combination to form compressed signal.
@@ -1638,7 +1641,7 @@ def danse_compression_whole_chunk(
     else:
         yqHat = np.fft.fft(
             np.squeeze(yq) * h[:, np.newaxis], DFTsize, axis=0
-        )
+        ) / np.sqrt(Ns)
         # Keep only positive frequencies
         yqHat = yqHat[:int(DFTsize // 2 + 1), :]
         # Apply linear combination to form compressed signal.
@@ -1647,7 +1650,7 @@ def danse_compression_whole_chunk(
     # WOLA synthesis stage
     if zqPrevious is not None:
         # IDFT
-        zqCurr = back_to_time_domain(zqHat, DFTsize, axis=0)
+        zqCurr = np.sqrt(Ns) * back_to_time_domain(zqHat, DFTsize, axis=0)
         zqCurr = np.real_if_close(zqCurr)
         zqCurr *= f    # multiply by synthesis window
         # zqCurr *= normFactWOLA    # multiply by WOLA normalization factor

@@ -1979,7 +1979,7 @@ def plot_cond_numbers(condNumbers: ConditionNumbers, nSensorPerNode: int=None):
 def plot_filters(
         filters,
         filtersEXT,
-        filtersCentre=None,
+        filtersCentr=None,
         nSensorsPerNode=None,
         refSensorIdx=0,
         fignamePrefix='filters',
@@ -2003,7 +2003,7 @@ def plot_filters(
         local signals in the broadcasting stage.
         Can be the norm, real part, or imaginary part.
         Can also be the phase or magnitude of the filters.
-    filtersCentre : [K x 1] list of [Nf x Nt x J] np.ndarray[real]
+    filtersCentr : [K x 1] list of [Nf x Nt x J] np.ndarray[real]
         Centralized DANSE filters per node.
         Can be the norm, real part, or imaginary part.
         Can also be the phase or magnitude of the filters.
@@ -2085,7 +2085,7 @@ def plot_filters(
                         filters[k][:, :-1, [idxGkq]],
                     axis=0
                 )
-                # ^^^ NB: we must multiply g_kq^i by wqq^{i-1}
+                # ^^^ NB: we multiply g_kq^i by the (i-1)-th fusion vectors
                 currVal = np.concatenate(
                     (np.zeros((1, currVal.shape[1])), currVal),
                     axis=0
@@ -2107,7 +2107,7 @@ def plot_filters(
     maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     l = [np.log10(np.mean(filt, axis=0))\
-        for filt in filters + filtersCentre]  # concatenate `filters` and `filtersCentre`
+        for filt in filters + filtersCentr]  # concatenate `filters` and `filtersCentre`
     np.seterr(divide = 'warn')      # reset warnings
     maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     minNorm2 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
@@ -2192,15 +2192,15 @@ def plot_filters(
         plt.close(fig=fig)
         dataFigs.append(dataPlot)  # Save data for later use
 
-    if filtersCentre is not None:
+    if filtersCentr is not None:
         # Plot filter norms for ``centralized'' (== no-fusion DANSE) filters
         labelsCentr = [[] for _ in range(nNodes)]
         for k in range(nNodes):
             fig, ax = plt.subplots(1, 1, figsize=(7, 5))
             nodeCount = 0
             idxCurrNodeSensor = 0
-            dataFig = np.zeros_like(filtersCentre[k][0, :, :], dtype=float)
-            for m in range(filtersCentre[k].shape[2]):        
+            dataFig = np.zeros_like(filtersCentr[k][0, :, :], dtype=float)
+            for m in range(filtersCentr[k].shape[2]):        
                 # Get label for legend
                 lab = f'$m={m + 1}$, Node {nodeCount + 1}'
                 if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
@@ -2208,7 +2208,7 @@ def plot_filters(
                 # Mean over frequency bins
                 np.seterr(divide = 'ignore')   # avoid annoying warnings
                 dataFig[:, m] = np.log10(
-                    np.mean(filtersCentre[k][:, :, m], axis=0)
+                    np.mean(filtersCentr[k][:, :, m], axis=0)
                 )
                 np.seterr(divide = 'warn')     # reset warnings
                 ax.plot(
@@ -2253,9 +2253,9 @@ def plot_filters(
         # and network-wide DANSE filters
         for k in range(nNodes):
             fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-            for m in range(filtersCentre[k].shape[2]):   
+            for m in range(filtersCentr[k].shape[2]):   
                 mse1 = np.abs(
-                    np.mean(filtersCentre[k][:, :, m], axis=0) -\
+                    np.mean(filtersCentr[k][:, :, m], axis=0) -\
                     netwideDANSEfilts_allNodes[k][:, m].T
                 ) ** 2
                 # Plot

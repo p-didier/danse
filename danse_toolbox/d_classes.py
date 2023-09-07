@@ -593,12 +593,16 @@ class DANSEvariables(base.DANSEparameters):
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
+                    # initType='fixedValue',
+                    # fixedValue=1
                 ))
                 wTildeExtTarget.append(base.init_complex_filter(
                     (self.nPosFreqs, wasn[k].nSensors),
                     self.referenceSensor,
                     initType=self.filterInitType,
                     fixedValue=self.filterInitFixedValue
+                    # initType='fixedValue',
+                    # fixedValue=1
                 ))
             wCentr.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, nSensorsTotal),
@@ -1396,19 +1400,19 @@ class DANSEvariables(base.DANSEparameters):
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         yHatCentrCurr_s = np.fft.fft(
             self.yCentr_s[k][:, self.i[k], :] *\
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         yHatCentrCurr_n = np.fft.fft(
             self.yCentr_n[k][:, self.i[k], :] *\
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         self.yHatCentr[k][:, self.i[k], :] = yHatCentrCurr[:self.nPosFreqs, :]
         self.yHatCentr_s[k][:, self.i[k], :] = yHatCentrCurr_s[:self.nPosFreqs, :]
@@ -1734,19 +1738,19 @@ class DANSEvariables(base.DANSEparameters):
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         yTildeHatCurr_s = np.fft.fft(
             self.yTilde_s[k][:, self.i[k], :] *\
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         yTildeHatCurr_n = np.fft.fft(
             self.yTilde_n[k][:, self.i[k], :] *\
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
         self.yTildeHat_s[k][:, self.i[k], :] = yTildeHatCurr_s[:self.nPosFreqs, :]
@@ -1854,28 +1858,39 @@ class DANSEvariables(base.DANSEparameters):
             yyH : ndarray (nFreqs x nMics x nMics)
                 Current outer product.
             """
-            yyH = np.einsum('ij,ik->ijk', y, y.conj())  # outer product
+            # Outer product and mean
+            yyH = 1 / y.shape[1] * np.einsum('ij,ik->ijk', y, y.conj())
             if vad:
                 Ryy = beta * Ryy + (1 - beta) * yyH
             else:
                 Rnn = beta * Rnn + (1 - beta) * yyH
             return Ryy, Rnn, yyH
+        
+        # Shorter name
+        currVad = self.oVADframes[k][self.i[k]]
 
         # Count number of spatial covariance matrices updates
-        if self.oVADframes[k][self.i[k]]:
+        if currVad:
             self.numUpdatesRyy[k] += 1
         else:
             self.numUpdatesRnn[k] += 1
         
         # Perform DANSE covariance matrices udpates
         if self.simType == 'online':
-            self.Ryytilde[k], self.Rnntilde[k], self.yyH[k][self.i[k], :, :, :] =\
-                _update_covmats_online(
+            RyyCurr, RnnCurr, yyHcurr = _update_covmats_online(
                 self.Ryytilde[k],
                 self.Rnntilde[k],
                 y=self.yTildeHat[k][:, self.i[k], :],
-                vad=self.oVADframes[k][self.i[k]]
-            )  # update
+                vad=currVad
+            )
+            # Save
+            self.yyH[k][self.i[k], :, :, :] = yyHcurr
+
+            # Conditional updating of Ryy and Rnn
+            self.conditional_scm_updating(
+                k, currVad, RyyCurr, RnnCurr, yyHcurr, 'danse'
+            )
+        
         elif self.simType == 'batch':  # batch mode --> using entire signals
             # Update covariance matrices
             self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
@@ -1898,12 +1913,16 @@ class DANSEvariables(base.DANSEparameters):
         
         # Consider local estimates
         if self.computeLocal and self.simType == 'online':   
-            self.Ryylocal[k], self.Rnnlocal[k], _ = _update_covmats_online(
+            RyyCurr, RnnCurr, yyHcurr = _update_covmats_online(
                 self.Ryylocal[k],
                 self.Rnnlocal[k],
                 y=self.yHatLocal[k][:, self.i[k], :],
                 vad=self.oVADframes[k][self.i[k]]
-            )  # update local
+            )
+            # Conditional updating of Ryy and Rnn
+            self.conditional_scm_updating(
+                k, currVad, RyyCurr, RnnCurr, yyHcurr, 'local'
+            )
             # Consider condition number
             if self.saveConditionNumber and\
                 self.i[k] - self.lastCondNumberSaveRyyLocal[k] >=\
@@ -1920,12 +1939,16 @@ class DANSEvariables(base.DANSEparameters):
         
         # Consider centralised estimates
         if self.computeCentralised and self.simType == 'online':
-            self.Ryycentr[k], self.Rnncentr[k], _ = _update_covmats_online(
+            RyyCurr, RnnCurr, yyHcurr = _update_covmats_online(
                 self.Ryycentr[k],
                 self.Rnncentr[k],
                 y=self.yHatCentr[k][:, self.i[k], :],
                 vad=self.centrVADframes[self.i[k]]
-            )  # update centralised
+            )
+            # Conditional updating of Ryy and Rnn
+            self.conditional_scm_updating(
+                k, currVad, RyyCurr, RnnCurr, yyHcurr, 'centr'
+            )
             # Consider condition number
             if self.saveConditionNumber and\
                 self.i[k] - self.lastCondNumberSaveRyyCentr[k] >=\
@@ -1941,6 +1964,61 @@ class DANSEvariables(base.DANSEparameters):
                 self.lastCondNumberSaveRyyCentr[k] = self.i[k]
 
         stop = 1
+
+    def conditional_scm_updating(
+            self,
+            k,
+            currVad,
+            RyyCurr,
+            RnnCurr,
+            yyHcurr,
+            whichSCM='danse'  # 'danse', 'local', 'centr'
+        ):
+        
+        # Conditional updating of Ryy and Rnn
+        if self.use1stFrameAsBasis:
+            # Use the 1st available frame as basis and start the
+            # exponential averaging after that.
+            if self.numUpdatesRyy[k] == 1 and currVad:
+                if whichSCM == 'danse':
+                    self.Ryytilde[k] = yyHcurr
+                elif whichSCM == 'local':
+                    self.Ryylocal[k] = yyHcurr
+                elif whichSCM == 'centr':
+                    self.Ryycentr[k] = yyHcurr
+            elif self.numUpdatesRyy[k] > 1:
+                if whichSCM == 'danse':
+                    self.Ryytilde[k] = RyyCurr
+                elif whichSCM == 'local':
+                    self.Ryylocal[k] = RyyCurr
+                elif whichSCM == 'centr':
+                    self.Ryycentr[k] = RyyCurr
+            
+            if self.numUpdatesRnn[k] == 1 and not currVad:
+                if whichSCM == 'danse':
+                    self.Rnntilde[k] = yyHcurr
+                elif whichSCM == 'local':
+                    self.Rnnlocal[k] = yyHcurr
+                elif whichSCM == 'centr':
+                    self.Rnncentr[k] = yyHcurr
+            elif self.numUpdatesRnn[k] > 1:
+                if whichSCM == 'danse':
+                    self.Rnntilde[k] = RnnCurr
+                elif whichSCM == 'local':
+                    self.Rnnlocal[k] = RnnCurr
+                elif whichSCM == 'centr':
+                    self.Rnncentr[k] = RnnCurr
+        else:
+            # Start the exponential averaging right away.
+            if whichSCM == 'danse':
+                self.Ryytilde[k] = RyyCurr
+                self.Rnntilde[k] = RnnCurr
+            elif whichSCM == 'local':
+                self.Ryylocal[k] = RyyCurr
+                self.Rnnlocal[k] = RnnCurr
+            elif whichSCM == 'centr':
+                self.Ryycentr[k] = RyyCurr
+                self.Rnncentr[k] = RnnCurr
 
     def get_y_tilde_batch(
             self,
@@ -2291,7 +2369,7 @@ class DANSEvariables(base.DANSEparameters):
             'desSigProcessingType': self.desSigProcessingType,
             'win': self.winWOLAsynthesis,
             # 'normFactWOLA': self.normFactWOLA,
-            'normFactWOLA': 1,
+            'normFactWOLA': np.sqrt(self.Ns),
             'Ns': self.Ns,
         }
 
@@ -3134,8 +3212,8 @@ def update_w_gevd(
         sigmacurr, Xmatcurr = sla.eigh(
             Ryy[kappa, :, :],
             Rnn[kappa, :, :],
-            check_finite=False,
-            driver='gvd'
+            # check_finite=False,
+            # driver='gvd'
         )
         # Flip Xmat to sort eigenvalues in descending order
         # idx = np.flip(np.argsort(sigmacurr))
@@ -3152,7 +3230,10 @@ def update_w_gevd(
         Dmat[:, r, r] = np.squeeze(1 - 1 / sigma[:, r])
     # LMMSE weights
     Qhermitian = np.transpose(Qmat.conj(), axes=[0, 2, 1])
-    w = np.matmul(np.matmul(np.matmul(Xmat, Dmat), Qhermitian), Evect)
+    # Compute filters
+    fullWmat = np.matmul(np.matmul(Xmat, Dmat), Qhermitian)
+    w = fullWmat[:, :, refSensorIdx]
+    # w = fullWmat[:, refSensorIdx, :]
     
     return w
 
