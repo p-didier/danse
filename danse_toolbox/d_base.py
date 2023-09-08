@@ -189,6 +189,8 @@ class DANSEparameters(Hyperparameters):
         # The valid values are the same as for `winWOLAanalysisType`.
     upTDfilterEvery: float = 1. # [s] duration of pause between two 
                                     # consecutive time-domain filter updates.
+    noFusionAtSingleSensorNodes: bool = False  # if True, do not fuse the
+        # DANSE filters at nodes with only one sensor, leave them as is.
     # ---- SROs
     compensateSROs: bool = False    # if True, compensate for SROs
     estimateSROs: str = 'Oracle'    # SRO estimation method.
@@ -280,6 +282,9 @@ class DANSEparameters(Hyperparameters):
         # 1st utterance.
         # -- 'after_beginning_2nd_utterance_<x>': start computing metrics
         # `x` milliseconds after the beginning of the 2nd utterance.
+        # -- 'after_<x><y>': start computing metrics `x` ms after the
+        # beginning of the simulation if `y == 'ms'`, or `x` s after the
+        # beginning of the simulation if `y == 's'`.
     # ---- TI-DANSE specific
     treeFormationAlgorithm: str = 'prim'    # algorithm to prune ad-hoc WASN
         # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.

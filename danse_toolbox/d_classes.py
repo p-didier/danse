@@ -1440,9 +1440,16 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
         else:   # Simultaneous or asynchronous node-updating
             # Relaxed external filter update
-            self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
-                (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
+            if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
+                # If node `k` has only one sensor, do not perform external
+                # filter update (i.e., no "single-sensor signal fusion", as
+                # there is already just one channel).
+                self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                    self.wTildeExt[k][:, self.i[k], :]
+            else:
+                self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                    self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
+                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
             
             if t is None:
                 updateFlag = True  # update regardless of time elapsed

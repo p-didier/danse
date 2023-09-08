@@ -556,6 +556,20 @@ class WASN:
                     # 2nd utterance
                     durAfterMs = float(startComputeMetricsAt.split('_')[-1])
                     self.wasn[k].metricStartTime += durAfterMs / 1e3
+            
+            elif startComputeMetricsAt[:len('after')] == 'after':
+                if 'ms' in startComputeMetricsAt:
+                    unitFactor = 1e-3
+                    durAfterBeg = float(startComputeMetricsAt[len('after_'):-2])
+                elif 's' in startComputeMetricsAt:
+                    unitFactor = 1
+                    durAfterBeg = float(startComputeMetricsAt[len('after_'):-1])
+                else:
+                    raise ValueError(f'Invalid unit for `startComputeMetricsAt` ({startComputeMetricsAt}).')
+                # Set the metrics computation start time [s]
+                self.wasn[k].metricStartTime = durAfterBeg * unitFactor
+
+                stop = 1
                 
     def orientate(self):
         """Orientate the tree-topology from leaves towards root."""
