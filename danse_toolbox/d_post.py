@@ -2282,8 +2282,8 @@ def plot_filters(
 def export_danse_outputs(
         out: DANSEoutputs,
         wasnObj: WASN,
-        room: pra.room.ShoeBox,
-        p: TestParameters
+        p: TestParameters,
+        room: pra.room.ShoeBox=None,
     ):
     """
     Post-processing after a DANSE run.
@@ -2304,7 +2304,7 @@ def export_danse_outputs(
     out : `danse.danse_toolbox.d_post.DANSEoutputs` object
         DANSE outputs (signals, etc.), after post-processing.
     """
-        
+    
     if not p.exportParams.bypassAllExports:
 
         # If batch mode, export MMSE cost
@@ -2359,7 +2359,7 @@ def export_danse_outputs(
             )
 
         # Plot (+ export) acoustic scenario (WASN)
-        if p.exportParams.acousticScenarioPlot:
+        if p.exportParams.acousticScenarioPlot and room is not None:
             plot_asc(
                 asc=room,
                 p=p.wasnParams,

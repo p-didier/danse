@@ -1,5 +1,4 @@
 from danse_toolbox.d_classes import *
-import scipy.signal as sig
 
 @dataclass
 class BatchDANSEvariables(DANSEvariables):

@@ -1,5 +1,4 @@
 import copy
-import time
 import shutil
 import random
 import warnings
@@ -11,6 +10,7 @@ from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
 import danse_toolbox.dataclass_methods as met
+
 
 @dataclass
 class ConditionNumbers:
@@ -278,6 +278,34 @@ class TestParameters:
         else:
             raise ValueError('Cannot save YAML file: the parameters were not loaded from a YAML file.')
 
+
+@dataclass
+class OutputsForPostProcessing:
+    """Small dataclass to store necessary data for post-processing."""
+    danseOutputs: 'typing.Any' = None  # DANSE outputs (avoiding circular import)
+    wasnObj: WASN = None
+    # room: pra.Room  # <-- not including the room, because it is not picklable
+    testParams: TestParameters = None
+
+    def save(self, exportFolder, exportType='pkl'):
+        """Saves dataclass to Pickle archive."""
+        met.save(self, exportFolder, exportType=exportType)
+
+    def load(self, foldername, dataType='pkl'):
+        """Loads dataclass to Pickle archive in folder `foldername`."""
+        d: OutputsForPostProcessing = met.load(self, foldername, silent=True, dataType=dataType)
+        return d
+    
+    def ensure_consistency(self):
+        """Ensure consistency of class instance.
+        Useful when manually modifying `self.testParams` for
+        further post-processing tests."""
+        # Ensure that the WASN object's inner parameters are consistent
+        # with the test parameters
+        self.wasnObj.get_metrics_start_time(
+            self.testParams.danseParams.startComputeMetricsAt,
+            self.testParams.danseParams.minNoSpeechDurEndUtterance
+        ) 
 
 def check_if_fully_connected(wasn: list[Node]):
     """

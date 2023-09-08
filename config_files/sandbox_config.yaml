@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230908_tests/test3_wGEVD # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230908_tests/efficient_pp_tests/test1 # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -14,7 +14,7 @@ danseParams:
   noFusionAtSingleSensorNodes: true
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
-  performGEVD: true
+  performGEVD: false
   simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
@@ -40,7 +40,7 @@ danseParams:
     printout_profiler: false
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
-  startComputeMetricsAt: after_15s
+  # startComputeMetricsAt: after_15s
 referenceSensor: 0  # Python-index of reference sensor in DANSE
 snrYlimMax: null
 wasnParams:
@@ -52,7 +52,7 @@ wasnParams:
   VADwinLength: 0.04  # [s]
   vadMinProportionActive: 0.25
   rd: '[5, 5, 5]'
-  sigDur: 30  # [s]
+  sigDur: 5  # [s]
   selfnoiseSNR: 15  # [dB]
   layoutType: random
   minDistToWalls: 0.5

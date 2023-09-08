@@ -1,5 +1,6 @@
 
 import sys
+import pickle, gzip
 from pathlib import Path
 from siggen.classes import *
 import siggen.utils as sig_ut
@@ -84,7 +85,7 @@ def main(
 
     # Post-process results (save, export, plot...)
     print('Post-processing...')
-    outPostProc = postprocess(out, wasnObjUpdated, room, p)
+    outPostProc = postprocess(out, wasnObjUpdated, p, room)
     print('Done.')
 
     return outPostProc
@@ -130,8 +131,9 @@ def danse_it_up(
 def postprocess(
         out: pp.DANSEoutputs,
         wasnObj: WASN,
-        room: pra.room.ShoeBox,
         p: TestParameters,
+        room: pra.room.ShoeBox=None,
+        bypassGlobalPickleExport: bool=False
     ) -> pp.DANSEoutputs:
     """
     Defines the post-processing steps to be undertaken after a DANSE run.
@@ -147,6 +149,9 @@ def postprocess(
         Acoustic scenario under consideration.
     p : `TestParameters` object
         Test parameters.
+    bypassGlobalPickleExport : bool
+        If True, bypass the global Pickle export of aN
+        `OutputsForPostProcessing` object.
 
     Returns
     -------
@@ -179,7 +184,12 @@ def postprocess(
             Path(p.exportParams.exportFolder).mkdir(parents=True)
 
     if runit:
-        pp.export_danse_outputs(out, wasnObj, room, p)
+        if not bypassGlobalPickleExport:
+            # Export all required data as global Pickle archive
+            print('Exporting all data for further subsequent post-processing...')
+            forPP = OutputsForPostProcessing(out, wasnObj, p)
+            forPP.save(p.exportParams.exportFolder)
+        pp.export_danse_outputs(out, wasnObj, p, room)
 
     return out
 
