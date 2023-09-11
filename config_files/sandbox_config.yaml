@@ -1,7 +1,8 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/test1_Mk_2_2_1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/sros_tests/test2_0_100_200_PPM # folder to export outputs
+  # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -15,6 +16,7 @@ danseParams:
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
   performGEVD: true
+  # performGEVD: false
   simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
@@ -29,7 +31,6 @@ danseParams:
   #
   WOLAovlp: 0.5
   DFTsize: 1024
-  startComputeMetricsAt: after_beginning_2nd_utterance_200
   t_expAvg50p: 1
   t_expAvg50pExternalFilters: 1
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
@@ -41,6 +42,7 @@ danseParams:
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
   startComputeMetricsAt: after_15s
+  # startComputeMetricsAt: after_200ms
 referenceSensor: 0  # Python-index of reference sensor in DANSE
 snrYlimMax: null
 wasnParams:
@@ -59,12 +61,16 @@ wasnParams:
   t60: 0.0  # [s]
   nNodes: 3
   # nSensorPerNode: '[1, 4]'
-  nSensorPerNode: '[2, 2, 1]'
-  SROperNode: '[0]'  # [PPM]
+  # nSensorPerNode: '[2, 2, 1]'
+  nSensorPerNode: '[1, 2, 3]'
   interSensorDist: 0.05
   #
   snrBasis: at_mic_0
   snr: 5
+  # vvv SRO-related stuff vvv
+  # SROperNode: '[0]'  # [PPM]
+  SROperNode: '[0, 100, 200]'  # [PPM]
+  compensateSROs: false
   #
   signalType: from_file
   desiredSignalFile:

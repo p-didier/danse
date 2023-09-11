@@ -180,30 +180,33 @@ def get_metrics(
         filtSpeech_l = filtSpeech_l[startIdx:endIdx]
         filtNoise_l = filtNoise_l[startIdx:endIdx]
 
+    bypassVADuse = True  # HARD-CODED /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\
     if 'snr' in metricsToPlot:
         # Unweighted SNR
         snr = Metric()
-        snr.before = get_snr(clean, noiseOnly, vad)
-        snr.after = get_snr(filtSpeech, filtNoise, vad)
+        snr.before = get_snr(clean, noiseOnly, vad, bypassVADuse)
+        snr.after = get_snr(filtSpeech, filtNoise, vad, bypassVADuse)
         snr.diff = snr.after - snr.before
         if bestPerfData is not None:
             snr.best = get_snr(
                 bestPerfData['dCentr_s'][startIdx:endIdx, k],
                 bestPerfData['dCentr_n'][startIdx:endIdx, k],
-                vad
+                vad,
+                bypassVADuse
             )
     if 'sisnr' in metricsToPlot:
         # SI-SNR
         sisnr = Metric()
-        sisnr.before = get_sisnr(clean, noiseOnly, vad, fs)
-        sisnr.after = get_sisnr(filtSpeech, filtNoise, vad, fs)
+        sisnr.before = get_sisnr(clean, noiseOnly, vad, fs, bypassVADuse)
+        sisnr.after = get_sisnr(filtSpeech, filtNoise, vad, fs, bypassVADuse)
         sisnr.diff = sisnr.after - sisnr.before
         if bestPerfData is not None:
             sisnr.best = get_sisnr(
                 bestPerfData['dCentr_s'][startIdx:endIdx, k],
                 bestPerfData['dCentr_n'][startIdx:endIdx, k],
                 vad,
-                bestPerfData['fs']
+                bestPerfData['fs'],
+                bypassVADuse
             )
     if 'fwSNRseg' in metricsToPlot:
         # Frequency-weight segmental SNR
@@ -442,7 +445,7 @@ def get_dynamic_metric(
     return dynObjs
 
 
-def get_sisnr(s, n, vad, fs):
+def get_sisnr(s, n, vad, fs, bypassVADuse=False):
     """
     Estimate SI-SNR based on (filtered) speech and (filtered) noise (+ VAD).
 
@@ -456,6 +459,9 @@ def get_sisnr(s, n, vad, fs):
         Corresponding voice activity detector (VAD).
     fs : int
         Sampling frequency [samples/s].
+    bypassVADuse : bool
+        If True, bypass the use of the VAD and compute SNR over the whole
+        signal.
     
     Returns
     -------
@@ -464,7 +470,7 @@ def get_sisnr(s, n, vad, fs):
     """
 
     # Speech intelligibility indices (ANSI-S3.5-1997)
-    Indices = 1e-4 * np.array([83.0, 95.0, 150.0, 289.0, 440.0, 578.0, 653.0,\
+    indices = 1e-4 * np.array([83.0, 95.0, 150.0, 289.0, 440.0, 578.0, 653.0,\
         711.0, 818.0, 844.0, 882.0, 898.0, 868.0, 844.0, 771.0, 527.0, 364.0,\
         185.0])   
     fc = np.array([160.0, 200.0, 250.0, 315.0, 400.0, 500.0, 630.0, 800.0,\
@@ -473,7 +479,6 @@ def get_sisnr(s, n, vad, fs):
 
     sisnr = 0
     for ii, fc_curr in enumerate(fc):
-
         # Filter in 1/3-octave bands
         Wn = 1 / fs * np.array([
             fc_curr * 2 ** (-1/6),
@@ -486,7 +491,12 @@ def get_sisnr(s, n, vad, fs):
         n_filtered = sig.sosfilt(sos, n)  # filter noise-only
 
         # Build the SI-SNR sum
-        sisnr += Indices[ii] * get_snr(s_filtered, n_filtered, vad)
+        sisnr += indices[ii] * get_snr(
+            s_filtered,
+            n_filtered,
+            vad,
+            bypassVADuse
+        )
 
     return sisnr
 
@@ -524,7 +534,12 @@ def getSNR(timeDomainSignal, VAD):
     return SNRout
 
 
-def get_snr(s: np.ndarray, n: np.ndarray, vad: np.ndarray=None):
+def get_snr(
+        s: np.ndarray,
+        n: np.ndarray,
+        vad: np.ndarray=None,
+        bypassVADuse=False
+    ):
     """
     Estimate SNR based on (filtered) speech and (filtered) noise (+ VAD).
 
@@ -536,12 +551,19 @@ def get_snr(s: np.ndarray, n: np.ndarray, vad: np.ndarray=None):
         Time-domain (filtered) noise signal (no speech).
     vad : [Nt x Nchannels] np.ndarray[bool or int (1 or 0) or float (1. or 0.)]
         Corresponding voice activity detector (VAD).
+    bypassVADuse : bool
+        If True, bypass the use of the VAD and compute SNR over the whole
+        signal.
     
     Returns
     -------
     snrEst : [Nchannels x 1] np.ndarray[float] or float if `Nchannels == 1`
         Signal-to-noise ratio estimate [dB].
     """
+    # Ensure correct input formats
+    if vad is None or bypassVADuse:
+        vad = np.ones(s.shape, dtype=bool)  # use whole signal
+    
     # Check for single-channel case
     if s.ndim == 1:
         s = s[:, np.newaxis]

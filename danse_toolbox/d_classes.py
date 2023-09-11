@@ -215,11 +215,6 @@ class TestParameters:
                 self.danseParams.compensationStrategy = 'node-specific'
             else:
                 raise ValueError('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Aborting.')
-        # # Check that no external filter relaxation is used in batch mode.
-        # if self.danseParams.simType == 'batch':
-        #     if not self.danseParams.noExternalFilterRelaxation:
-        #         print('External filter relaxation not supported in batch mode. Setting `noExternalFilterRelaxation` to True.')
-        #         self.danseParams.noExternalFilterRelaxation = True
         # Check that the filter initialization type is supported in ad-hoc WASNs.
         if not self.is_fully_connected_wasn() and\
             self.danseParams.filterInitType == 'selectFirstSensor':
@@ -239,14 +234,23 @@ class TestParameters:
             self.exportParams.wavFiles = False  # no WAV files if no true room
         # Transfer useful export parameters to DANSE parameters
         self.danseParams.exportMSEBatchPerfPlot = self.exportParams.mseBatchPerfPlot
-
+        # Check that the `startComputeMetricsAt` parameter is not after
+        # the end of the signal.
+        var = self.danseParams.startComputeMetricsAt
+        if 'after' in var and 'beginning' not in var:
+            if 'ms' in var:
+                dur = float(var[len('after_'):-2]) / 1e3
+            elif 's' in var:
+                dur = float(var[len('after_'):-1])
+            if dur > self.wasnParams.sigDur:
+                raise ValueError('`danseParams.startComputeMetricsAt` is after the end of the signal.')
 
     def get_id(self):
         return f'J{self.wasnParams.nNodes}Mk{list(self.wasnParams.nSensorPerNode)}WNn{self.wasnParams.nNoiseSources}Nd{self.wasnParams.nDesiredSources}T60_{int(self.wasnParams.t60 * 1e3)}ms'
 
     def save(self, exportType='pkl'):
         """Saves dataclass to Pickle archive."""
-        met.save(self, self.exportFolder, exportType=exportType)
+        met.save(self, self.exportParams.exportFolder, exportType=exportType)
 
     def load(self, foldername, dataType='pkl'):
         """Loads dataclass to Pickle archive in folder `foldername`."""
