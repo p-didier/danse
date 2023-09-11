@@ -1,4 +1,5 @@
 import os
+import re
 import copy
 import yaml
 import librosa
@@ -37,7 +38,7 @@ def build_scenario(p: classes.WASNparameters):
         room = None
     
     # Get raw source signals
-    dRaw, nRaw = get_raw_source_signals(p)
+    dRaw, nRaw = get_raw_source_signals(p, irs_d, irs_n)
     
     # Get wet speech and compute VAD
     vad, wetSpeeches = get_vad(
@@ -53,6 +54,26 @@ def build_scenario(p: classes.WASNparameters):
             p,
             bypassVADcomputation=True  # save computation time
         )
+        if 'mic' in p.snrBasis:
+            # Verify that correct SNR is obtained at reference mic
+            #  -- NB: computation only valid for a single noise source.  # TODO: generalize
+            # Extract reference (network-wide) microphone index
+            refMicIdx = int(re.findall("\d+", p.snrBasis)[0])
+            # Find corresponding node index
+            refNodeIdx = np.where(p.sensorToNodeIndices == refMicIdx)[0][0]
+            # Find corresponding local sensor index (at node `refNodeIdx`)
+            refMicIdxLocal = int(
+                refMicIdx -np.sum(p.nSensorPerNode[:refNodeIdx])
+            )
+            # Compute SNR based on wet speech and wet noise
+            currSNR = 10 * np.log10(
+                np.sum(wetSpeeches[refNodeIdx][refMicIdxLocal, :] ** 2) / \
+                    np.sum(wetNoises[refNodeIdx][refMicIdxLocal, :] ** 2)
+            )
+            if np.round(currSNR) == p.snr:
+                print(f'Correct SNR ({currSNR} dB ~= {int(np.round(currSNR))} dB) obtained at reference microphone.')
+            else:
+                print(f'Incorrect SNR ({currSNR} dB ~= {int(np.round(currSNR))} dB) obtained at reference microphone.')
     else:
         wetNoises = None
 
@@ -95,7 +116,11 @@ def build_scenario(p: classes.WASNparameters):
 #     return signalsOut
 
 
-def get_raw_source_signals(p: classes.WASNparameters):
+def get_raw_source_signals(
+        p: classes.WASNparameters,
+        irs_d: list=None,
+        irs_n: list=None
+    ):
     """
     Obtain raw (unprocessed) source signals.
 
@@ -103,6 +128,11 @@ def get_raw_source_signals(p: classes.WASNparameters):
     ----------
     p : `WASNparameters` object
         Parameters.
+    irs_d : [Nnodes x 1] list of [Nm[k] x 1] lists of [Ndesired x 1] lists of [N x 1] np.ndarray (float)
+        RIRs from desired sources at each sensor of each node.
+        `Nm[k]` is the number of microphones at node `k`.
+    irs_n : [Nnodes x 1] list of [Nm[k] x 1] lists of [Nnoise x 1] lists of [N x 1] np.ndarray (float)
+        RIRs from noise sources at each sensor of each node.
 
     Returns
     -------
@@ -156,17 +186,42 @@ def get_raw_source_signals(p: classes.WASNparameters):
     for ii in range(p.nNoiseSources):
         if p.signalType == 'from_file':
             # Load sound file
-            y = _get_source_signal(p.noiseSignalFile[ii])
+            n = _get_source_signal(p.noiseSignalFile[ii])
         elif p.signalType == 'random':
             # Generate random signal
-            y = generate_rand_signal(
+            n = generate_rand_signal(
                 p.randSignalsParams,
                 desiredNumSamples,
                 p.fs,
                 noPauses=True  # no pauses for noise signals
             )
-        y *= 10 ** (-p.baseSNR / 20)    # gain to set SNR
-        noiseSignalsRaw[:, ii] = y
+        if p.snrBasis == 'dry_signals':
+            # Set SNR based on dry signals
+            n *= 10 ** (-p.snr / 20)    # gain to set SNR
+        elif 'mic' in p.snrBasis:
+            # Extract reference (network-wide) microphone index
+            refMicIdx = int(re.findall("\d+", p.snrBasis)[0])
+            # Find corresponding node index
+            refNodeIdx = np.where(p.sensorToNodeIndices == refMicIdx)[0][0]
+            # Find corresponding local sensor index (at node `refNodeIdx`)
+            refMicIdxLocal = int(
+                refMicIdx -np.sum(p.nSensorPerNode[:refNodeIdx])
+            )
+            # Extract relevant RIRs
+            irs_d_refMic = irs_d[refNodeIdx][refMicIdxLocal]  # [Ndesired x 1] list of [N x 1] np.ndarray (float)
+            ir_n_refMic = irs_n[refNodeIdx][refMicIdxLocal][ii]  # [N x 1] np.ndarray (float)
+            # Compute wet signals (target and noise) at reference microphone
+            y_refMic = np.zeros((desiredNumSamples,))
+            for jj, ir in enumerate(irs_d_refMic):  # loop over desired sources
+                y_refMic += sig.lfilter(ir, 1, desiredSignalsRaw[:, jj])
+            n_refMic = sig.lfilter(ir_n_refMic, 1, n)
+            # Compute current SNR, just due to RIRs
+            currSNR = 10 * np.log10(
+                np.sum(y_refMic ** 2) / np.sum(n_refMic ** 2)
+            )
+            # Set dry sources SNR based on current wet signals SNR
+            n *= 10 ** ((currSNR - p.snr) / 20)
+        noiseSignalsRaw[:, ii] = n
 
     return desiredSignalsRaw, noiseSignalsRaw
 
@@ -565,25 +620,6 @@ def add_sensors_and_sources_to_room(
         Raw (unprocessed) noise source signals.
     """
     
-    # def _get_source_signal(file):
-    #     """Helper function to load and process source signal."""
-    #     # Load
-    #     y, fsOriginal = librosa.load(file, sr=None)
-    #     # Resample
-    #     if fsOriginal != p.fs:
-    #         print(f'Resampling {file} from {fsOriginal} Hz to {p.fs} Hz...')
-    #         y = resampy.resample(y, fsOriginal, p.fs)
-    #     # Adjust length
-    #     if len(y) > desiredNumSamples:
-    #         y = y[:desiredNumSamples]
-    #     elif len(y) < desiredNumSamples:
-    #         while len(y) < desiredNumSamples:
-    #             y = np.concatenate((y, y))  # loop
-    #             y = y[:desiredNumSamples]
-    #     # Whiten
-    #     y = (y - np.mean(y)) / np.std(y)  # whiten
-    #     return y
-    
     # Add nodes
     room.add_microphone_array(sensorsCoords)
 
@@ -591,19 +627,7 @@ def add_sensors_and_sources_to_room(
     desiredNumSamples = int(p.sigDur * p.fs)
 
     # Add desired sources
-    # desiredSignalsRaw = np.zeros((desiredNumSamples, p.nDesiredSources))
     for ii in range(p.nDesiredSources):
-        # if p.signalType == 'from_file':
-        #     # Load sound file
-        #     y = _get_source_signal(p.desiredSignalFile[ii])
-        # elif p.signalType == 'random':
-        #     # Generate random signal
-        #     y = generate_rand_signal(
-        #         p.randSignalsParams,
-        #         desiredNumSamples,
-        #         p.fs
-        #     )
-        # desiredSignalsRaw[:, ii] = y  # save (for VAD computation)
         ssrc = pra.soundsource.SoundSource(
             position=desiredSourceCoords[:, ii], # coordinates
             signal=np.zeros(desiredNumSamples)  # placeholder
@@ -611,28 +635,14 @@ def add_sensors_and_sources_to_room(
         room.add_soundsource(ssrc)
 
     # Add noise sources
-    # noiseSignalsRaw = np.zeros((desiredNumSamples, p.nNoiseSources))
     for ii in range(p.nNoiseSources):
-        # if p.signalType == 'from_file':
-        #     # Load sound file
-        #     y = _get_source_signal(p.noiseSignalFile[ii])
-        # elif p.signalType == 'random':
-        #     # Generate random signal
-        #     y = generate_rand_signal(
-        #         p.randSignalsParams,
-        #         desiredNumSamples,
-        #         p.fs,
-        #         noPauses=True  # no pauses for noise signals
-        #     )
-        # y *= 10 ** (-p.baseSNR / 20)        # gain to set SNR
-        # noiseSignalsRaw[:, ii] = y  # save (for use in metrics computation)
         ssrc = pra.soundsource.SoundSource(
             position=noiseSourceCoords[:, ii], # coordinates
             signal=np.zeros(desiredNumSamples)  # placeholder
         )
         room.add_soundsource(ssrc)
 
-    return room#, desiredSignalsRaw, noiseSignalsRaw
+    return room
 
 
 def generate_rand_signal(

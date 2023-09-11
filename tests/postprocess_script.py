@@ -38,7 +38,7 @@ def main(foldername=''):
     a.testParams.exportParams.exportFolder += '\\further_pp'
 
     # Change other as desired
-    a.testParams.danseParams.startComputeMetricsAt = 'after_200ms'
+    a.testParams.danseParams.startComputeMetricsAt = 'after_3s'
 
     # Ensure consistency
     a.ensure_consistency()

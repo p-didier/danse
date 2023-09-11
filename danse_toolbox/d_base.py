@@ -285,6 +285,9 @@ class DANSEparameters(Hyperparameters):
         # -- 'after_<x><y>': start computing metrics `x` ms after the
         # beginning of the simulation if `y == 'ms'`, or `x` s after the
         # beginning of the simulation if `y == 's'`.
+    endComputeMetricsAt: str = None    # When to stop computing the speech
+        # enhancement metrics. Valid values: same as for
+        # `startComputeMetricsAt`.
     # ---- TI-DANSE specific
     treeFormationAlgorithm: str = 'prim'    # algorithm to prune ad-hoc WASN
         # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.

@@ -1,6 +1,5 @@
 
 import sys
-import pickle, gzip
 from pathlib import Path
 from siggen.classes import *
 import siggen.utils as sig_ut

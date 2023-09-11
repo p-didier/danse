@@ -130,7 +130,12 @@ class AcousticScenarioParameters:
     randSignalsParams: RandomSignalsParameters = RandomSignalsParameters()
     noiseSignalFilesLoadedFromFolder: str = None
         # folder from which noise signals were loaded. `None` by default.
-    baseSNR: int = 5                        # [dB] SNR between dry desired signals and dry noise
+    snrBasis: str = 'dry_signals'   # basis for SNR in acoustic scenario
+        # ^^^ valid values:
+        #  - "dry_signals": SNR computed between dry desired signals and dry noise;
+        #  - "at_mic_<x>": SNR computed at microphone <x> (e.g., "at_mic_0") - 
+        #       for each noise separately (NB: the microphone index is 0-based).
+    snr: int = 5   # [dB] SNR between dry desired signals and dry noise
     # vvv VAD parameters vvv
     VADenergyDecrease_dB: float = 30   # The threshold is `VADenergyDecrease_dB` below the peak signal energy
     VADwinLength: float = 20e-3     # [s] VAD window length

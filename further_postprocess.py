@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 import tests.postprocess_script as pp
 
-SUBFOLDER = '20230908_tests/efficient_pp_tests/test1'
+SUBFOLDER = '20230911_tests/test1_Mk_2_2_1'
 BASE_RESULTS_FOLDER = f'{Path(__file__).parent}/out/'
 
 def main():
