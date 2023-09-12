@@ -271,9 +271,9 @@ def get_metrics(
     # Consider centralised and local estimates
     if enhan_c is not None:
         if 'snr' in metricsToPlot:
-            snr.afterCentr = get_snr(filtSpeech_c, filtNoise_c, vad_c)
+            snr.afterCentr = get_snr(filtSpeech_c, filtNoise_c, vad_c, bypassVADuse)
         if 'sisnr' in metricsToPlot:
-            sisnr.afterCentr = get_sisnr(filtSpeech_c, filtNoise_c, vad_c, fs)
+            sisnr.afterCentr = get_sisnr(filtSpeech_c, filtNoise_c, vad_c, fs, bypassVADuse)
         if 'fwSNRseg' in metricsToPlot:
             fwSNRseg_allFrames = get_fwsnrseg(
                 clean_c, enhan_c, fs, fLen, gamma
@@ -283,9 +283,9 @@ def get_metrics(
             myStoi.afterCentr = stoi_fcn(clean_c, enhan_c, fs, extended=True)
     if enhan_l is not None:
         if 'snr' in metricsToPlot:
-            snr.afterLocal = get_snr(filtSpeech_l, filtNoise_l, vad_l)
+            snr.afterLocal = get_snr(filtSpeech_l, filtNoise_l, vad_l, bypassVADuse)
         if 'sisnr' in metricsToPlot:
-            sisnr.afterLocal = get_sisnr(filtSpeech_l, filtNoise_l, vad_l, fs)
+            sisnr.afterLocal = get_sisnr(filtSpeech_l, filtNoise_l, vad_l, fs, bypassVADuse)
         if 'fwSNRseg' in metricsToPlot:
             fwSNRseg_allFrames = get_fwsnrseg(
                 clean_l, enhan_l, fs, fLen, gamma

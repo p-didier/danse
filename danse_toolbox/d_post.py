@@ -579,7 +579,7 @@ class DANSEoutputs(DANSEparameters):
         self.neighbourIndex = [0 if k > 0 else 1 for k in range(nNodes)] # TODO: for now just valid for fully connected topology
         idxFirstNeighbour = [0 for _ in range(nNodes)]   # TODO: for now just valid for fully connected topology
 
-        fig = plt.figure(figsize=(6,2))
+        fig = plt.figure(figsize=(12, 4))
         ax = fig.add_subplot(111)
         for k in range(nNodes):
             if self.compensateSROs:

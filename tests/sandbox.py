@@ -7,7 +7,6 @@ import pyroomacoustics as pra
 import danse_toolbox.d_post as pp
 import danse_toolbox.d_core as core
 from danse_toolbox.d_classes import *
-from danse_toolbox.d_utils import wipe_folder
 
 PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sandbox_config.yaml'
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
@@ -45,47 +44,54 @@ def main(
         if p.danseParams.wasnInfoInitiated is False:
             p.danseParams.get_wasn_info(p.wasnParams)
 
-    # Build room
-    print('Building scenario...')
-    room, vad, wetSpeeches, wetNoises = sig_ut.build_scenario(p.wasnParams)
-    # Complete parameters (useful in case of YAML-loaded layout)
-    p.danseParams.get_wasn_info(p.wasnParams)
-    print('Scenario built.')
+    # Check export folder and whether we can run the test
+    runit = p.exportParams.check_export_folder()
 
-    # Build WASN (asynchronicities, topology)
-    print('Building WASN...')
-    wasnObj = sig_ut.build_wasn(
-        room,
-        vad,
-        wetSpeeches,
-        wetNoises,
-        p.wasnParams,
-        p.danseParams.startComputeMetricsAt,
-        p.danseParams.minNoSpeechDurEndUtterance,
-        p.setThoseSensorsToNoise
-    )
-    print('WASN built.')
+    if runit:
+        # Build room
+        print('Building scenario...')
+        room, vad, wetSpeeches, wetNoises = sig_ut.build_scenario(p.wasnParams)
+        # Complete parameters (useful in case of YAML-loaded layout)
+        p.danseParams.get_wasn_info(p.wasnParams)
+        print('Scenario built.')
 
-    if 0:
-        pp.plot_asc(
+        # Build WASN (asynchronicities, topology)
+        print('Building WASN...')
+        wasnObj = sig_ut.build_wasn(
             room,
+            vad,
+            wetSpeeches,
+            wetNoises,
             p.wasnParams,
-            p.exportParams.exportFolder,
-            wasnObj.adjacencyMatrix,
-            [node.nodeType for node in wasnObj.wasn],
-            plot3Dview=True
+            p.danseParams.startComputeMetricsAt,
+            p.danseParams.minNoSpeechDurEndUtterance,
+            p.setThoseSensorsToNoise
         )
-        plt.show()
-    # Parameters check and pre-DANSE computations
-    p, wasnObj = core.prep_for_danse(p, wasnObj)
-    
-    # DANSE
-    out, wasnObjUpdated = danse_it_up(wasnObj, p)
+        print('WASN built.')
 
-    # Post-process results (save, export, plot...)
-    print('Post-processing...')
-    outPostProc = postprocess(out, wasnObjUpdated, p, room)
-    print('Done.')
+        if 0:
+            pp.plot_asc(
+                room,
+                p.wasnParams,
+                p.exportParams.exportFolder,
+                wasnObj.adjacencyMatrix,
+                [node.nodeType for node in wasnObj.wasn],
+                plot3Dview=True
+            )
+            plt.show()
+        # Parameters check and pre-DANSE computations
+        p, wasnObj = core.prep_for_danse(p, wasnObj)
+        
+        # DANSE
+        out, wasnObjUpdated = danse_it_up(wasnObj, p)
+
+        # Post-process results (save, export, plot...)
+        print('Post-processing...')
+        outPostProc = postprocess(out, wasnObjUpdated, p, room)
+        print('Done.')
+    else:
+        print('Aborting DANSE run.')
+        outPostProc = None
 
     return outPostProc
 
@@ -94,9 +100,8 @@ def danse_it_up(
     wasnObj: WASN,
     p: TestParameters
     ) -> tuple[pp.DANSEoutputs, WASN]:
-    """
-    Container function for launching the- correct version of the DANSE algorithm.
-    """
+    """Container function for launching the- correct version of
+    the DANSE algorithm."""
     args = (wasnObj, p.danseParams)
     # Select appropriate function
     if p.is_fully_connected_wasn():  # Fully connected WASN case
@@ -134,8 +139,7 @@ def postprocess(
         room: pra.room.ShoeBox=None,
         bypassGlobalPickleExport: bool=False
     ) -> pp.DANSEoutputs:
-    """
-    Defines the post-processing steps to be undertaken after a DANSE run.
+    """Defines the post-processing steps to be undertaken after a DANSE run.
     Using the `danse.danse_toolbox.d_post` [abbrev. `pp`] functions.
 
     Parameters
@@ -158,37 +162,37 @@ def postprocess(
         DANSE outputs (signals, etc.), after post-processing.
     """
 
-    # Default booleans
-    runit = True   # by default, run
-    if p.exportParams.bypassAllExports:
-        print('Not exporting figures and sounds export (`bypassExport` is True).')
-    else:
-        # Check whether export folder exists
-        if Path(p.exportParams.exportFolder).is_dir():
-            # Check whether the folder contains something
-            if Path(p.exportParams.exportFolder).stat().st_size > 0:
-                inp = input(f'The folder\n"{p.exportParams.exportFolder}"\ncontains data. Overwrite? [y/n]:  ')
-                while inp not in ['y', 'n']:
-                    inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
-                if inp == 'n':
-                    runit = False   # don't run
-                    print('Aborting figures and sounds export.')
-                elif inp == 'y':
-                    print('Wiping folder before new figures and sounds exports.')
-                    wipe_folder(p.exportParams.exportFolder)
-        else:
-            print(f'Create export folder "{p.exportParams.exportFolder}".')
-            # Create dir. with missing parents directories.
-            # https://stackoverflow.com/a/50110841
-            Path(p.exportParams.exportFolder).mkdir(parents=True)
+    # # Default booleans
+    # runit = True   # by default, run
+    # if p.exportParams.bypassAllExports:
+    #     print('Not exporting figures and sounds export (`bypassExport` is True).')
+    # else:
+    #     # Check whether export folder exists
+    #     if Path(p.exportParams.exportFolder).is_dir():
+    #         # Check whether the folder contains something
+    #         if Path(p.exportParams.exportFolder).stat().st_size > 0:
+    #             inp = input(f'The folder\n"{p.exportParams.exportFolder}"\ncontains data. Overwrite? [y/n]:  ')
+    #             while inp not in ['y', 'n']:
+    #                 inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
+    #             if inp == 'n':
+    #                 runit = False   # don't run
+    #                 print('Aborting figures and sounds export.')
+    #             elif inp == 'y':
+    #                 print('Wiping folder before new figures and sounds exports.')
+    #                 wipe_folder(p.exportParams.exportFolder)
+    #     else:
+    #         print(f'Create export folder "{p.exportParams.exportFolder}".')
+    #         # Create dir. with missing parents directories.
+    #         # https://stackoverflow.com/a/50110841
+    #         Path(p.exportParams.exportFolder).mkdir(parents=True)
 
-    if runit:
-        if not bypassGlobalPickleExport:
-            # Export all required data as global Pickle archive
-            print('Exporting all data for further subsequent post-processing...')
-            forPP = OutputsForPostProcessing(out, wasnObj, p)
-            forPP.save(p.exportParams.exportFolder)
-        pp.export_danse_outputs(out, wasnObj, p, room)
+    # if runit:
+    if not bypassGlobalPickleExport:
+        # Export all required data as global Pickle archive
+        print('Exporting all data for further subsequent post-processing...')
+        forPP = OutputsForPostProcessing(out, wasnObj, p)
+        forPP.save(p.exportParams.exportFolder)
+    pp.export_danse_outputs(out, wasnObj, p, room)
 
     return out
 

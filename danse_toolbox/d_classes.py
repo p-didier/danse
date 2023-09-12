@@ -1071,15 +1071,16 @@ class DANSEvariables(base.DANSEparameters):
                 self.lastTDfilterUp[k] = tCurr
 
             # If "efficient" events for broadcast
-            # (unnecessary broadcast instants were aggregated):
+            # (broadcast instants are aggregated when possible):
             if self.efficientSpSBC:
                 # Count samples recorded since the last broadcast at node `k`
-                # and consequently adapt the `L` "broadcast length" variable
+                # and adapt the "broadcast length" variable
                 # used in `danse_compression_few_samples` and
                 # `fill_buffers_td_few_samples`.
-                nSamplesSinceLastBroadcast = ((self.timeInstants[:, k] >\
-                    self.lastBroadcastInstant[k]) &\
-                    (self.timeInstants[:, k] <= tCurr)).sum()
+                nSamplesSinceLastBroadcast = np.sum(
+                    (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
+                    (self.timeInstants[:, k] <= tCurr)
+                )  # NB: using `&` instead of `and` for element-wise logical AND
                 self.lastBroadcastInstant[k] = tCurr
                 currL = nSamplesSinceLastBroadcast
             else:
@@ -1247,12 +1248,12 @@ class DANSEvariables(base.DANSEparameters):
                 self.wLocal[k][:, self.i[k] + 1, :] =\
                     self.wLocal[k][:, self.i[k], :]
             if skipUpdate:
-                print(f'Node {k+1}: {self.i[k]+1}^th update skipped.')
+                print(f'Node {k+1}: {self.i[k]+1}-th update skipped.')
         if self.bypassUpdates:
             print('!! User-forced bypass of filter coefficients updates !!')
 
-        if self.exportMSEBatchPerfPlot:
-            self.compute_batch_mse_cost(k)
+        # if self.exportMSEBatchPerfPlot:
+        #     self.compute_batch_mse_cost(k)
 
         # Update external filters (for broadcasting)
         self.update_external_filters(k, tCurr)
@@ -1265,6 +1266,19 @@ class DANSEvariables(base.DANSEparameters):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
+
+        if all([self.i[k] == 100 for k in range(self.nNodes)]):  # DEBUG ONLY
+            stop = 1
+            
+            fig, axes = plt.subplots(self.nNodes, 1)
+            fig.set_size_inches(8.5, 3.5)
+            showNsamples = 100
+            for k in range(self.nNodes):
+                for m in range(self.yTilde[k].shape[-1]):
+                    axes[k].plot(self.yTilde[k][:showNsamples, self.i[k] - 1, m], label=f'DANSE: $\\tilde{{y}}_{{k={k},m={m}}}$')
+                    axes[k].plot(self.yCentr[k][:showNsamples, self.i[k] - 1, m], '--', label=f'Centr: $y_{{k={k},m={m}}}$')
+                axes[k].legend()
+                axes[k].set_title(f'Node {k+1}, $i={self.i[0]}$ ({showNsamples} first samples)')
 
     def compute_batch_mse_cost(self, k):
         """
@@ -1648,38 +1662,46 @@ class DANSEvariables(base.DANSEparameters):
                         zCurrBuffer = self.zBuffer[k][idxq]
                         zCurrBuffer_s = self.zBuffer_s[k][idxq]
                         zCurrBuffer_n = self.zBuffer_n[k][idxq]
-                    elif (Ndft - Bq) % Lbc == 0 and Bq < Ndft:
-                        # Node `q` has not yet transmitted enough data to node
-                        # `k`, but node `k` has already reached its first
-                        # update instant. Interpretation: Node `q` samples
-                        # slower than node `k`. 
-                        nMissingBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
-                        # Raise negative flag
-                        bufferFlags[idxq] = -1 * nMissingBroadcasts
-                        zCurrBuffer = np.concatenate(
-                            (np.zeros(Ndft - Bq), self.zBuffer[k][idxq]),
-                            axis=0
-                        )
-                        zCurrBuffer_s = np.concatenate(
-                            (np.zeros(Ndft - Bq), self.zBuffer_s[k][idxq]),
-                            axis=0
-                        )
-                        zCurrBuffer_n = np.concatenate(
-                            (np.zeros(Ndft - Bq), self.zBuffer_n[k][idxq]),
-                            axis=0
-                        )
-                    elif (Ndft - Bq) % Lbc == 0 and Bq > Ndft:
-                        # Node `q` has already transmitted too much data
-                        # to node `k`. Interpretation: Node `q` samples faster
-                        # than node `k`.
-                        nExtraBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
-                        # Raise positive flag
-                        bufferFlags[idxq] = +1 * nExtraBroadcasts
-                        zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
-                        zCurrBuffer_s = self.zBuffer_s[k][idxq][-Ndft:]
-                        zCurrBuffer_n = self.zBuffer_n[k][idxq][-Ndft:]
+                    # vvv If the over- or under-flow is a multiple of the broadcast length
+                    elif (Ndft - Bq) % Lbc == 0:
+                        if Bq < Ndft:
+                            # Node `q` has not yet transmitted enough data to node
+                            # `k`, but node `k` has already reached its first
+                            # update instant. Interpretation: Node `q` samples
+                            # slower than node `k`. 
+                            nMissingBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
+                            print(f'[b- @ t={np.round(t, 3)}s] Buffer underflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingBroadcasts} broadcast(s)')
+                            # Raise negative flag
+                            bufferFlags[idxq] = -1 * nMissingBroadcasts
+                            zCurrBuffer = np.concatenate(
+                                (np.zeros(Ndft - Bq), self.zBuffer[k][idxq]),
+                                axis=0
+                            )
+                            zCurrBuffer_s = np.concatenate(
+                                (np.zeros(Ndft - Bq), self.zBuffer_s[k][idxq]),
+                                axis=0
+                            )
+                            zCurrBuffer_n = np.concatenate(
+                                (np.zeros(Ndft - Bq), self.zBuffer_n[k][idxq]),
+                                axis=0
+                            )
+                        elif Bq > Ndft:
+                            # Node `q` has already transmitted too much data
+                            # to node `k`. Interpretation: Node `q` samples faster
+                            # than node `k`.
+                            nExtraBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
+                            print(f'[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node`s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraBroadcasts} broadcasts(s)')
+                            if nExtraBroadcasts > 1:  # TODO: get rid of this before properly publishing
+                                print('^^^ explanation for the above can be found in the Research Journal 2023, week 37, TUE 12.09')
+                            # Raise positive flag
+                            bufferFlags[idxq] = +1 * nExtraBroadcasts  # explicit
+                            zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
+                            zCurrBuffer_s = self.zBuffer_s[k][idxq][-Ndft:]
+                            zCurrBuffer_n = self.zBuffer_n[k][idxq][-Ndft:]
+                        
+                    # vvv If the over- or under-flow is NOT a multiple of the broadcast length
+                    elif (Ndft - Bq) % Lbc != 0:
+                        raise ValueError(f'Unexpected buffer size ({Bq} samples, with L={Lbc} and N={Ndft}) for neighbor node q={self.neighbors[k][idxq]+1}.')
                 
                 else:   # not the first DANSE iteration 
                     # -- we are expecting a normally full buffer,
@@ -1792,14 +1814,6 @@ class DANSEvariables(base.DANSEparameters):
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
         self.yTilde_s[k][:, self.i[k], :] = yTildeCurr_s
         self.yTilde_n[k][:, self.i[k], :] = yTildeCurr_n
-
-        # if k == 0 and self.startUpdates[k] and self.oVADframes[k][self.i[k]]:
-        # if k == 0 and self.i[k] > 50 and self.oVADframes[k][self.i[k]]:
-        # if k == 0 and self.oVADframes[k][self.i[k]]:
-        #     plt.figure()
-        #     plt.plot(yTildeCurr)
-        #     plt.show()
-        #     stop = 1
 
         # Go to frequency domain
         yTildeHatCurr = np.fft.fft(

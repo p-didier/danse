@@ -83,6 +83,8 @@ class AcousticScenarioParameters:
         #  - "vert_spinning_top": vertical spinning top layout
         #       Description: same as above, but with a vertical source line.
         #  - "predefined": predefined layout from YAML file `predefinedLayoutFile`.
+        #  - "all_nodes_in_center": all nodes at the center of the room
+        #       (useful for debugging).
     predefinedLayoutFile: str = ''  # used iff `layoutType == "predefined"`.
     #
     spinTop_randomWiggleAmount: float = 0.0  # [m] amount of random wiggle

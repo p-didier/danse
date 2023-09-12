@@ -181,6 +181,9 @@ class DANSEparameters(Hyperparameters):
         # -- 'wholeChunk': chunks of compressed signals in time-domain,
         # -- 'fewSamples': T(z)-approximation of WOLA compression process.
         # broadcast L ≪ Ns samples at a time.
+    broadcastLength: float = None  # [samples] length of broadcast
+        # (used iff `broadcastType == 'fewSamples'`)
+        # If None, is automatically set to 1 in __post_init__.
     winWOLAanalysisType: str = 'sqrthann'    # type of analysis window
         # - 'sqrthann': sqrt(hann)
         # - 'rect': rectangular window
@@ -188,7 +191,7 @@ class DANSEparameters(Hyperparameters):
     winWOLAsynthesisType: str = 'sqrthann'    # type of synthesis window
         # The valid values are the same as for `winWOLAanalysisType`.
     upTDfilterEvery: float = 1. # [s] duration of pause between two 
-                                    # consecutive time-domain filter updates.
+        # consecutive time-domain filter updates.
     noFusionAtSingleSensorNodes: bool = False  # if True, do not fuse the
         # DANSE filters at nodes with only one sensor, leave them as is.
     # ---- SROs
@@ -333,8 +336,13 @@ class DANSEparameters(Hyperparameters):
         # ---- T(z)-approximation | Sample-wise broadcasts
         if self.broadcastType == 'wholeChunk':
             self.broadcastLength = self.Ns
-        elif self.broadcastType == 'fewSamples':
+        elif self.broadcastType == 'fewSamples' and self.broadcastLength is None:
             self.broadcastLength = 1
+        elif self.broadcastType == 'fewSamples' and self.broadcastLength is not None:
+            if self.broadcastLength > self.Ns:
+                raise ValueError(f'Broadcast length ({self.broadcastLength}) cannot be larger than the WOLA frame size ({self.Ns}).')
+            else:
+                pass  # all good
         if self.estimateSROs not in ['Oracle', 'CohDrift', 'DXCPPhaT']:
             raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
         if self.noExternalFilterRelaxation:
@@ -739,13 +747,12 @@ def prep_evmat_build(
             # samples to perform compression.
         elif 'fewSamples' in p.broadcastType:
             if p.efficientSpSBC:
-                # Combine update instants
+                # Combine update instants across nodes
                 combinedUpInstants = list(upInstants[0])
-                for k in range(nNodes):
-                    if k > 0:
-                        for ii in range(len(upInstants[k])):
-                            if upInstants[k][ii] not in combinedUpInstants:
-                                combinedUpInstants.append(upInstants[k][ii])
+                for k in range(1, nNodes):
+                    for ii in range(len(upInstants[k])):
+                        if upInstants[k][ii] not in combinedUpInstants:
+                            combinedUpInstants.append(upInstants[k][ii])
                 combinedUpInstants = np.sort(np.array(combinedUpInstants))
                 # Same BC instants for all nodes
                 bcInstants = [combinedUpInstants for _ in range(nNodes)]

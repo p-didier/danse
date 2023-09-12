@@ -1,13 +1,13 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/sros_tests/test2_0_100_200_PPM # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230912_tests/sros_tests/tmp # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
   - estoi
-  sroEstimPerfPlot: false
+  sroEstimPerfPlot: true
   filters: false
   conditionNumberPlot: false
   mseBatchPerfPlot: false
@@ -41,8 +41,26 @@ danseParams:
     printout_profiler: false
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
-  startComputeMetricsAt: after_15s
+  startComputeMetricsAt: after_10s
+  # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
+  # vvvvvvvvv SRO-related vvvvvvvvv
+  # broadcastType: wholeChunk
+  broadcastType: fewSamples
+  broadcastLength: 3
+  # broadcastLength: 1
+  compensateSROs: false
+  estimateSROs: Oracle
+  # estimateSROs: CohDrift
+  compensationStrategy: node-specific
+  cohDrift:
+    alpha: 0.95
+    segLength: 10
+    estEvery: 1
+    startAfterNups: 11
+    estimationMethod: gs
+    alphaRps: .05
+    loop: open  # as in OJSP paper
 referenceSensor: 0  # Python-index of reference sensor in DANSE
 snrYlimMax: null
 wasnParams:
@@ -54,29 +72,37 @@ wasnParams:
   VADwinLength: 0.04  # [s]
   vadMinProportionActive: 0.25
   rd: '[5, 5, 5]'
-  sigDur: 30  # [s]
-  selfnoiseSNR: 15  # [dB]
-  layoutType: random
+  # rd: '[.005, .005, .005]'
+  # minDistToWalls: 0
   minDistToWalls: 0.5
+  interSensorDist: 0.0
+  # interSensorDist: 0.05
+  sigDur: 20  # [s]
+  selfnoiseSNR: 999999999  # [dB]
+  # selfnoiseSNR: 15  # [dB]
+  # layoutType: random
+  layoutType: all_nodes_in_center
+  # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  nNodes: 3
+  nNodes: 2
+  nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
-  nSensorPerNode: '[1, 2, 3]'
-  interSensorDist: 0.05
+  # nSensorPerNode: '[1, 2, 3]'
   #
   snrBasis: at_mic_0
   snr: 5
-  # vvv SRO-related stuff vvv
+  #
   # SROperNode: '[0]'  # [PPM]
-  SROperNode: '[0, 100, 200]'  # [PPM]
-  compensateSROs: false
+  # SROperNode: '[0, 3]'  # [PPM]
+  SROperNode: '[0, 200]'  # [PPM]
+  # SROperNode: '[0, 100, 200]'  # [PPM]
   #
   signalType: from_file
   desiredSignalFile:
   - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
-  nNoiseSources: 1
+  nNoiseSources: 0
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
   vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
