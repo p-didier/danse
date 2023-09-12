@@ -369,6 +369,30 @@ def build_room(p: classes.WASNparameters):
 
         # Extract noise sources coordinates
         noiseSourceCoords = np.array(layoutInfo['interfererCoords']).T
+
+    elif p.layoutType == 'all_nodes_in_center':
+        # Compute sensor coordinates
+        sensorsCoords = []
+        for k in range(p.nNodes):
+            # Generate node and sensors
+            r = np.array([p.rd[0] / 2, p.rd[1] / 2, p.rd[2] / 2])
+            sensorsCoords.append(generate_array_pos(
+                r,
+                p.nSensorPerNode[k],
+                p.arrayGeometry,
+                p.interSensorDist,
+                applyRandomRot=False
+            ))
+        # Flatten list
+        sensorsCoords = np.concatenate(sensorsCoords, axis=0).T
+            
+        # Compute desired sources coordinates
+        desiredSourceCoords = np.random.uniform(size=(3, p.nDesiredSources)) *\
+            (p.rd[:, np.newaxis] - 2 * p.minDistToWalls) + p.minDistToWalls
+
+        # Compute noise sources coordinates
+        noiseSourceCoords = np.random.uniform(size=(3, p.nNoiseSources)) *\
+            (p.rd[:, np.newaxis] - 2 * p.minDistToWalls) + p.minDistToWalls\
         
     elif p.layoutType == 'random':
         # Compute sensor coordinates
@@ -1564,6 +1588,7 @@ def resample_for_sro(x, baseFs, SROppm):
 
     t = np.arange(len(xResamp)) / fsSRO
 
+    # Truncate or pad
     if len(xResamp) >= len(x):
         xResamp = xResamp[:len(x)]
         t = t[:len(x)]

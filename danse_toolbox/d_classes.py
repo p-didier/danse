@@ -9,6 +9,7 @@ from siggen.classes import *
 from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
+from danse_toolbox.d_utils import wipe_folder
 import danse_toolbox.dataclass_methods as met
 
 
@@ -156,6 +157,35 @@ class ExportParameters:
     def __post_init__(self):
         if len(self.metricsInPlots) == 0:
             self.metricsInPlots = ['snr', 'estoi']  # default metrics to plot
+
+    def check_export_folder(self):
+        """Checks whether the export folder is valid and whether it contains
+        data. If it does, asks the user whether to overwrite."""
+        # Default booleans
+        runit = True   # by default, run
+        if self.bypassAllExports:
+            print('Not exporting figures and sounds export (`bypassExport` is True).')
+        else:
+            # Check whether export folder exists
+            if Path(self.exportFolder).is_dir():
+                # Check whether the folder contains something
+                if Path(self.exportFolder).stat().st_size > 0:
+                    inp = input(f'The folder\n"{self.exportFolder}"\ncontains data. Overwrite? [y/n]:  ')
+                    while inp not in ['y', 'n']:
+                        inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
+                    if inp == 'n':
+                        runit = False   # don't run
+                        print('Aborting figures and sounds export.')
+                    elif inp == 'y':
+                        print('Wiping folder before new figures and sounds exports.')
+                        wipe_folder(self.exportFolder)
+            else:
+                print(f'Create export folder "{self.exportFolder}".')
+                # Create dir. with missing parents directories.
+                # https://stackoverflow.com/a/50110841
+                Path(self.exportFolder).mkdir(parents=True)
+        
+        return runit
 
 @dataclass
 class TestParameters:
@@ -788,7 +818,7 @@ class DANSEvariables(base.DANSEparameters):
         self.neighbors = [node.neighborsIdx for node in wasn]
         self.yin = [node.data for node in wasn]
 
-        # For centralised and local estimates
+        # For centralised estimates
         self.yinStacked = np.concatenate(
             tuple([x for x in self.yin]),
             axis=-1
@@ -1079,7 +1109,7 @@ class DANSEvariables(base.DANSEparameters):
             )  # local compressed signals
 
             # Fill buffers in
-            self.fill_buffers_td_few_samples(k)
+            self.fill_buffers_td_few_samples(k, L=currL)
 
     def fill_buffers_td_few_samples(self, k, L):
         """
@@ -1851,12 +1881,14 @@ class DANSEvariables(base.DANSEparameters):
                 self.phaseShiftFactorThroughTime[self.i[k]:] =\
                     self.phaseShiftFactors[k][self.nLocalMic[k] + q]
             # Apply phase shift factors
-            self.yTildeHat[k][:, self.i[k], :] *=\
-                np.exp(-1 * 1j * 2 * np.pi / self.DFTsize *\
-                    np.outer(
-                        np.arange(self.nPosFreqs),
-                        self.phaseShiftFactors[k]
-                    ))
+            psf = np.exp(-1 * 1j * 2 * np.pi / self.DFTsize *\
+                np.outer(
+                    np.arange(self.nPosFreqs),
+                    self.phaseShiftFactors[k]
+                ))
+            self.yTildeHat[k][:, self.i[k], :] *= psf
+            self.yTildeHat_s[k][:, self.i[k], :] *= psf
+            self.yTildeHat_n[k][:, self.i[k], :] *= psf
 
         return skipUpdate
 
