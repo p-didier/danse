@@ -751,6 +751,7 @@ class DANSEvariables(base.DANSEparameters):
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
         self.lastBroadcastInstant = np.zeros(nNodes)
+        self.lastUpdateInstant = np.zeros(nNodes)
         self.lastTDfilterUp = np.zeros(nNodes)
         self.Rnncentr = Rnncentr
         self.Ryycentr = Ryycentr
@@ -982,16 +983,19 @@ class DANSEvariables(base.DANSEparameters):
                     self.centrVADframes
                 )
 
-    def broadcast(self, tCurr, fs, k):
+    def broadcast(self, tCurr, fs, k, currentlyUpdatingNode=None):
         """
         Parameters
         ----------
         tCurr : float
             Broadcast event global time instant [s].
         fs : float
-            Node's sampling frequency [Hz].
+            node {k}'s sampling frequency [Hz].
         k : int
             Node index.
+        currentlyUpdatingNode : int, optional
+            Index of the node that is currently updating its DANSE filter
+            (only used in `efficientSpSBC` mode).
         """
 
         # Common keyword arguments for `base.local_chunk_for_broadcast`
@@ -1070,9 +1074,6 @@ class DANSEvariables(base.DANSEparameters):
                 updateBroadcastFilter = True
                 self.lastTDfilterUp[k] = tCurr
 
-            if k == 0:
-                stop = 1
-
             # If "efficient" events for broadcast
             # (broadcast instants are aggregated when possible):
             if self.efficientSpSBC:
@@ -1080,14 +1081,32 @@ class DANSEvariables(base.DANSEparameters):
                 # and adapt the "broadcast length" variable
                 # used in `danse_compression_few_samples` and
                 # `fill_buffers_td_few_samples`.
+                # nSamplesSinceLastBroadcast = np.sum(
+                #     (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
+                #     (self.timeInstants[:, k] <= tCurr)
+                # )  # NB: using `&` instead of `and` for element-wise logical AND
                 nSamplesSinceLastBroadcast = np.sum(
                     (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
                     (self.timeInstants[:, k] <= tCurr)
-                )  # NB: using `&` instead of `and` for element-wise logical AND
+                ) # NB: using `&` instead of `and` for element-wise logical AND
+                if nSamplesSinceLastBroadcast == 513:
+                    stop = 1	
                 self.lastBroadcastInstant[k] = tCurr
+                # nSamplesSinceLastBroadcast = np.sum(
+                #     (self.timeInstants[:, k] > self.lastUpdateInstant[k]) &\
+                #     (self.timeInstants[:, k] <= tCurr)
+                # )  # NB: using `&` instead of `and` for element-wise logical AND
+                # if k == currentlyUpdatingNode:
+                # Use `floor` function
                 currL = int(np.floor(
-                    nSamplesSinceLastBroadcast // self.broadcastLength
+                    nSamplesSinceLastBroadcast / self.broadcastLength
                 ) * self.broadcastLength)
+
+                # else:
+                # # Use `round` function
+                # currL = int(np.round(
+                #     nSamplesSinceLastBroadcast / self.broadcastLength
+                # ) * self.broadcastLength)
             else:
                 currL = self.broadcastLength
 
@@ -1114,8 +1133,11 @@ class DANSEvariables(base.DANSEparameters):
                 **kwargs
             )  # noise-only for SNR computation
 
+            if np.round(tCurr, 3) >= 0.32 and currentlyUpdatingNode == 0:
+                stop = 1
             # Fill buffers in
             self.fill_buffers_td_few_samples(k, L=currL)
+
 
     def fill_buffers_td_few_samples(self, k, L):
         """
@@ -1152,6 +1174,8 @@ class DANSEvariables(base.DANSEparameters):
                 (self.zBuffer_n[q][idxKforNeighborQ], zLocalK_n[-L:]),
                 axis=0
             )
+            # print(f'======Node {q+1}, size buffer = {len(self.zBuffer[q][idxKforNeighborQ])}')
+
     
     def fill_buffers_whole_chunk(self, k):
         """
@@ -1203,7 +1227,7 @@ class DANSEvariables(base.DANSEparameters):
 
         # Process buffers
         self.process_incoming_signals_buffers(k, tCurr)
-        # Wipe local buffers
+        # Wipe _local_ buffers for next iteration
         self.zBuffer[k] = [np.array([])\
             for _ in range(len(self.neighbors[k]))]
         self.zBuffer_s[k] = [np.array([])\
@@ -1271,6 +1295,7 @@ class DANSEvariables(base.DANSEparameters):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
+        self.lastUpdateInstant[k] = tCurr  # <-- for computationally efficient simulated broadcasting
 
         if 0:
             if all([self.i[k] == 100 for k in range(self.nNodes)]):  # DEBUG ONLY
@@ -1555,7 +1580,7 @@ class DANSEvariables(base.DANSEparameters):
 
     def process_incoming_signals_buffers(self, k, t):
         """
-        Processes the incoming data from other nodes, as stored in local node's
+        Processes the incoming data from other nodes, as stored in local node {k}'s
         buffers. Called whenever a DANSE update can be performed
         (`N` new local samples were captured since last update).
         
@@ -1570,7 +1595,7 @@ class DANSEvariables(base.DANSEparameters):
         # Shorter renaming
         Ndft = self.DFTsize
         Ns = self.Ns
-        Lbc = self.broadcastLength
+        # Lbc = self.broadcastLength
 
         # Initialize compressed signal matrix
         # ($\mathbf{z}_{-k}$ in [1]'s notation)
@@ -1618,7 +1643,7 @@ class DANSEvariables(base.DANSEparameters):
                         # `k`, but node `k` has already reached its first
                         # update instant. Interpretation: Node `q` samples
                         # slower than node `k`. 
-                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at current node's B_{self.neighbors[k][idxq]+1} buffer | -1 broadcast")
+                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -1 broadcast")
                         bufferFlags[idxq] = -1      # raise negative flag
                         zCurrBuffer = np.zeros(Ndft)
                         zCurrBuffer_s = np.zeros(Ndft)
@@ -1679,7 +1704,7 @@ class DANSEvariables(base.DANSEparameters):
                         # slower than node `k`. 
                         # nMissingBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
                         nMissingSamples = int(np.abs(Ndft - Bq))
-                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at current node's B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
+                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
                         # Raise negative flag
                         bufferFlags[idxq] = -1 * nMissingSamples
                         zCurrBuffer = np.concatenate(
@@ -1700,9 +1725,9 @@ class DANSEvariables(base.DANSEparameters):
                         # than node `k`.
                         # nExtraBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
                         nExtraSamples = int(np.abs(Ndft - Bq))
-                        print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node's B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
-                        if nExtraSamples > 1:  # TODO: get rid of this before properly publishing
-                            print('^^^ explanation for the above can be found in the Research Journal 2023, week 37, TUE 12.09')
+                        print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
+                        # if nExtraSamples > 1:  # TODO: get rid of this before properly publishing
+                        #     print('^^^ explanation for the above can be found in the Research Journal 2023, week 37, TUE 12.09')
                         # Raise positive flag
                         bufferFlags[idxq] = +1 * nExtraSamples  # explicit "+1" positive factor
                         zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
@@ -1726,7 +1751,7 @@ class DANSEvariables(base.DANSEparameters):
                     elif Bq < Ns:
                         # nMissingBroadcasts = int(np.abs((Ns - Bq) / Lbc))
                         nMissingSamples = int(np.abs(Ns - Bq))
-                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at current node's B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
+                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
                         # Raise negative flag
                         bufferFlags[idxq] = -1 * nMissingSamples
                     # case 3: positive mismatch
@@ -1734,7 +1759,7 @@ class DANSEvariables(base.DANSEparameters):
                     elif Bq > Ns:
                         # nExtraBroadcasts = int(np.abs((Ns - Bq) / Lbc))
                         nExtraSamples = int(np.abs(Ns - Bq))
-                        print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at current node's B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
+                        print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
                         # Raise positive flag
                         bufferFlags[idxq] = +1 * nExtraSamples
                     # else:
