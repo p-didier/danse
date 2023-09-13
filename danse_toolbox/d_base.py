@@ -5,6 +5,8 @@
 
 import copy
 import warnings
+import itertools
+import collections
 import numpy as np
 import networkx as nx
 from numba import njit
@@ -12,7 +14,6 @@ import scipy.signal as sig
 import scipy.linalg as sla
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
-from scipy.signal._arraytools import zero_ext
 from siggen.classes import WASNparameters, Node, WASN
 from danse_toolbox.d_eval import DynamicMetricsParameters
 
@@ -342,7 +343,9 @@ class DANSEparameters(Hyperparameters):
             if self.broadcastLength > self.Ns:
                 raise ValueError(f'Broadcast length ({self.broadcastLength}) cannot be larger than the WOLA frame size ({self.Ns}).')
             else:
-                pass  # all good
+                if self.Ns % self.broadcastLength != 0:
+                    possibleDivisors = get_divisors(self.Ns)
+                    raise ValueError(f'Broadcast length ({self.broadcastLength}) must be a divisor of the WOLA frame size ({self.Ns}). Possible divisors: {list(possibleDivisors)}.')
         if self.estimateSROs not in ['Oracle', 'CohDrift', 'DXCPPhaT']:
             raise ValueError(f'The field "estimateSROs" accepts values ["Oracle", "CohDrift", "DXCPPhaT"]. Current value: "{self.estimateSROs}".')
         if self.noExternalFilterRelaxation:
@@ -723,7 +726,7 @@ def prep_evmat_build(
                 islice(wasnObjListCycled, None, len(trInstants))
             )
         else:
-            raise ValueError('Not yet implemented')
+            raise ValueError('fewSamples - Not yet implemented for TI-DANSE.')
 
     else:   # fully connected WASN
         fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
@@ -1688,9 +1691,15 @@ def danse_compression_whole_chunk(
 
 
 def danse_compression_few_samples(
-    yq, wqqHat, L, wIRprevious,
-    winWOLAanalysis, winWOLAsynthesis, Ns, 
-    updateBroadcastFilter=False):
+        yq,
+        wqqHat,
+        L,
+        wIRprevious,
+        winWOLAanalysis,
+        winWOLAsynthesis,
+        Ns, 
+        updateBroadcastFilter=False
+    ):
     """
     Performs local signals compression according to DANSE theory [1],
     in the time-domain (to be able to broadcast the compressed signal sample
@@ -2408,3 +2417,40 @@ def get_y_tilde_batch(
         return yTildeBatch, yTildeBatch_s, yTildeBatch_n
     else:
         return yTildeBatch
+
+
+# ----------------------------------
+# 3 functions below:
+# from https://alexwlchan.net/2019/finding-divisors-with-python/
+# (accessed 2023.09.13)
+def prime_factors(n):
+    i = 2
+    while i * i <= n:
+        if n % i == 0:
+            n /= i
+            yield i
+        else:
+            i += 1
+
+    if n > 1:
+        yield n
+
+def prod(iterable):
+    result = 1
+    for i in iterable:
+        result *= i
+    return result
+
+def get_divisors(n):
+    pf = prime_factors(n)
+
+    pf_with_multiplicity = collections.Counter(pf)
+
+    powers = [
+        [factor ** i for i in range(count + 1)]
+        for factor, count in pf_with_multiplicity.items()
+    ]
+
+    for prime_power_combo in itertools.product(*powers):
+        yield prod(prime_power_combo)
+# ----------------------------------

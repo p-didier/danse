@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230912_tests/sros_tests/tmp # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230913_tests/sros_tests/LeqNs # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
@@ -26,8 +26,8 @@ danseParams:
   # computeLocal: false
   # computeCentralised: false
   filterInitType: selectFirstSensor
-  covMatRandomInitScaling: 0  # <-- init SCMs as zeros
-  use1stFrameAsBasis: true
+  # covMatRandomInitScaling: 0  # <-- init SCMs as zeros
+  use1stFrameAsBasis: true  # <-- init SCMs using first available frame
   #
   WOLAovlp: 0.5
   DFTsize: 1024
@@ -47,8 +47,9 @@ danseParams:
   # vvvvvvvvv SRO-related vvvvvvvvv
   # broadcastType: wholeChunk
   broadcastType: fewSamples
-  broadcastLength: 3
+  broadcastLength: 1   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
   # broadcastLength: 1
+  efficientSpSBC: false
   compensateSROs: false
   estimateSROs: Oracle
   # estimateSROs: CohDrift
@@ -84,7 +85,6 @@ wasnParams:
   layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  nNodes: 2
   nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'

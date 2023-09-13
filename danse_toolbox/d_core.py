@@ -67,8 +67,7 @@ def danse(
 
         # Process events at current instant
         events = eventInstants[idxInstant]
-
-        # Parse event matrix and inform user (if asked)
+        # Parse event matrix and inform user
         base.events_parser(events, dv.startUpdates, p)
 
         for idxEventCurrInstant in range(events.nEvents):

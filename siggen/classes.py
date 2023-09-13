@@ -148,7 +148,6 @@ class AcousticScenarioParameters:
     enableVADloadFromFile: bool = True  # if True, loads VAD from file
     vadFilesFolder: str = ''    # folder containing VAD files
     #
-    nNodes: int = 0        # number of nodes in scenario
     nSensorPerNode: list[int] = field(default_factory=list)    # number of sensors per node
     #
     loadFrom: str = ''  # if provided, tries and load an ASC from .pkl.gz archives (used to load older scenarios (<= year 2022))')
@@ -215,6 +214,8 @@ class WASNparameters(AcousticScenarioParameters):
         """Post-initialization commands, automatically conducted when invoking
         a class instance."""
         self.topologyParams.__post_init__()
+        # Define `self.nNodes`
+        self.nNodes = len(self.nSensorPerNode)
         #
         if int(self.generateRandomWASNwithSeed) > 0:
             rng = np.random.default_rng(int(self.generateRandomWASNwithSeed))
