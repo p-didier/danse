@@ -764,6 +764,21 @@ def prep_evmat_build(
                             if upInstants[q][ii] not in combinedUpInstants:
                                 combinedUpInstants.append(upInstants[q][ii])
                     bcInstants.append(np.sort(np.array(combinedUpInstants)))
+                # Align broadcast instants to actual possible broadcast instants
+                # bcInstantUntouched = copy.deepcopy(bcInstants)
+                for k in range(nNodes):
+                    instants = wasnObj.wasn[k].timeStamps
+                    possibleBcInstants = instants[p.broadcastLength::p.broadcastLength]
+                    for ii in range(len(bcInstants[k])):
+                        if bcInstants[k][ii] not in possibleBcInstants:
+                            # Replace by closest past sample instant
+                            possibleInstants = possibleBcInstants[
+                                possibleBcInstants < bcInstants[k][ii]
+                            ]
+                            if len(possibleInstants) > 0:
+                                bcInstants[k][ii] = possibleInstants[-1]
+                            else:
+                                bcInstants[k][ii] = possibleBcInstants[0]
             else:
                 bcInstants = generate_aligned_instants(
                     startIdx=1,
@@ -774,6 +789,9 @@ def prep_evmat_build(
                 )
                 # ^ note that we start broadcasting sooner:
                 # when we have `L` samples, enough for linear convolution.
+
+    # for k in range(nNodes):
+    #     print(all([ins in wasnObj.wasn[k].timeStamps for ins in bcInstants[k]]))
 
     # Create output dictionary
     out = {
@@ -808,6 +826,8 @@ def generate_aligned_instants(
         instants = wasnObj.wasn[k].timeStamps
         for ii in range(len(ev[k])):
             if ev[k][ii] not in instants:
+                # # Replace by closest sample instant
+                # ev[k][ii] = instants[np.argmin(np.abs(instants - ev[k][ii]))]
                 # Replace by closest future sample instant
                 possibleInstants = instants[instants > ev[k][ii]]
                 if len(possibleInstants) > 0:
@@ -1518,45 +1538,52 @@ def events_parser(
         DANSE parameters.
     """
     if p.printoutsAndPlotting.printout_eventsParser:
-        if 'up' in events.type:
+        if 'up' in events.type or ('bc' in events.type and p.efficientSpSBC):
             txt = f'[{p.simType}] [{p.nodeUpdating}] t={np.round(events.t, 3):.3f}s -- '
-            updatesTxt = 'Updating nodes: '
+            updatesTxt = 'UP: '
             updatesFlag = False
+            broadcastsFlag = False
             if p.printoutsAndPlotting.printout_eventsParserNoBC:
                 broadcastsTxt = ''
             else:
-                broadcastsTxt = 'Broadcasting nodes: '
+                broadcastsTxt = 'BC: '
             # vvv -- little flag to add a comma (`,`) at the right spot.
             flagCommaUpdating = False
             for idxEvent in range(len(events.type)):
                 k = int(events.nodes[idxEvent])   # node index
                 if events.type[idxEvent] == 'bc' and\
                     not p.printoutsAndPlotting.printout_eventsParserNoBC:
+                    broadcastsFlag = True
                     if idxEvent > 0:
                         broadcastsTxt += ','
-                    broadcastsTxt += f'{k + 1}'
+                    broadcastsTxt += f' {k + 1} '
                 elif events.type[idxEvent] == 'up' and\
                     not events.bypassUpdate[idxEvent]:
                     # Only print if the node actually has started updating
                     # (i.e. there has been sufficiently many autocorrelation
                     # matrices updates since the start of recording).
+                    updatesFlag = True
+                    if not flagCommaUpdating:
+                        flagCommaUpdating = True
+                    else:
+                        updatesTxt += ','
                     if startUpdates[k]:
-                        updatesFlag = True
-                        if not flagCommaUpdating:
-                            flagCommaUpdating = True
-                        else:
-                            updatesTxt += ','
-                        updatesTxt += f'{k + 1}'
+                        updatesTxt += f' {k + 1} '
+                    else:
+                        updatesTxt += f'{{{k + 1}}}'  # {.} indicates that the node is not effectively updating (e.g., because its covariance matrices are not full-rank yet)
             # Get ready to print
             if not updatesFlag:
-                updatesTxt = ''
-            fullTxt = txt + broadcastsTxt + '; ' + updatesTxt
+                updatesTxt += ' - '
+            elif not broadcastsFlag:
+                broadcastsTxt += ' - '
+            fullTxt = txt + updatesTxt + '; ' + broadcastsTxt
             if is_interactive():  # if we are running from a notebook
                 # Print on the same line
                 print(f"\r{fullTxt}", end="")
             else:
                 # Print on the next line
                 print(fullTxt)
+
 
 
 def events_parser_ti_danse(

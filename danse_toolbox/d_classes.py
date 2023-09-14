@@ -1076,40 +1076,17 @@ class DANSEvariables(base.DANSEparameters):
             # (broadcast instants are aggregated when possible):
             if self.efficientSpSBC:
                 # Count samples recorded since the last broadcast at node `k`
-                # and adapt the "broadcast length" variable
+                # and adapt the effective "broadcast length" variable
                 # used in `danse_compression_few_samples` and
                 # `fill_buffers_td_few_samples`.
-                # nSamplesSinceLastBroadcast = np.sum(
-                #     (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
-                #     (self.timeInstants[:, k] <= tCurr)
-                # )  # NB: using `&` instead of `and` for element-wise logical AND
-                nSamplesRecordedSoFar = np.floor(self.fs[k] * tCurr)
-                nSamplesRecordedAtLastBroadcast =\
-                    np.floor(self.fs[k] * self.lastBroadcastInstant[k])
-                nSamplesSinceLastBroadcast = np.sum(
+                nRecordedSamplesSinceLastBroadcast = np.sum(
                     (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
                     (self.timeInstants[:, k] <= tCurr)
                 ) # NB: using `&` instead of `and` for element-wise logical AND
-                # nSamplesSinceLastBroadcast = int(
-                #     nSamplesRecordedSoFar - nSamplesRecordedAtLastBroadcast
-                # )
-                self.lastBroadcastInstant[k] = tCurr
-                # nSamplesSinceLastBroadcast = np.sum(
-                #     (self.timeInstants[:, k] > self.lastUpdateInstant[k]) &\
-                #     (self.timeInstants[:, k] <= tCurr)
-                # )  # NB: using `&` instead of `and` for element-wise logical AND
-                # Use `floor` function
-                # currL = int(np.floor(
-                #     nSamplesSinceLastBroadcast / self.broadcastLength
-                # ) * self.broadcastLength)
-                currL = nSamplesSinceLastBroadcast
-
-
-                # else:
-                # # Use `round` function
-                # currL = int(np.round(
-                #     nSamplesSinceLastBroadcast / self.broadcastLength
-                # ) * self.broadcastLength)
+                currL = int(self.broadcastLength * np.floor(
+                    nRecordedSamplesSinceLastBroadcast / self.broadcastLength
+                ))
+                self.lastBroadcastInstant[k] = tCurr  # update last broadcast instant
             else:
                 currL = self.broadcastLength
 
