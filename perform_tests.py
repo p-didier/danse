@@ -12,12 +12,12 @@ import tests.sandbox
 
 CONFIG_FILES_FOLDER = f'{Path(__file__).parent}/config_files'
 
-def main():
+def main(configFilesFolder: str=CONFIG_FILES_FOLDER):
 
     t0 = time.time()
 
     tests.sandbox.main(
-        cfgFilename=f'{CONFIG_FILES_FOLDER}/sandbox_config.yaml',
+        cfgFilename=f'{configFilesFolder}/sandbox_config.yaml',
     )
 
     print(f'\n\nTotal runtime: {str(datetime.timedelta(seconds=time.time() - t0))}.')

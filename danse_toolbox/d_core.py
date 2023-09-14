@@ -70,16 +70,11 @@ def danse(
         # Parse event matrix and inform user
         base.events_parser(events, dv.startUpdates, p)
 
-        if p.efficientSpSBC:
-            currentlyUpdatingNode = events.nodes[np.array(events.type) == 'up'][0]
-        else:
-            currentlyUpdatingNode = None
-
         for idxEventCurrInstant in range(events.nEvents):
             k = events.nodes[idxEventCurrInstant]  # node index
             # Broadcast event
             if events.type[idxEventCurrInstant] == 'bc':
-                dv.broadcast(events.t, fs[k], k, currentlyUpdatingNode)
+                dv.broadcast(events.t, fs[k], k)
             # Filter updates and desired signal estimates event
             elif events.type[idxEventCurrInstant] == 'up':
                 dv.update_and_estimate(

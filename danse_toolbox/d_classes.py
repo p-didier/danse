@@ -750,6 +750,7 @@ class DANSEvariables(base.DANSEparameters):
         self.numUpdatesRnn = np.zeros(nNodes, dtype=int)
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
+        # self.lastBroadcastInstant = np.full(nNodes, fill_value=-1, dtype=float)
         self.lastBroadcastInstant = np.zeros(nNodes)
         self.lastUpdateInstant = np.zeros(nNodes)
         self.lastTDfilterUp = np.zeros(nNodes)
@@ -983,7 +984,7 @@ class DANSEvariables(base.DANSEparameters):
                     self.centrVADframes
                 )
 
-    def broadcast(self, tCurr, fs, k, currentlyUpdatingNode=None):
+    def broadcast(self, tCurr, fs, k):
         """
         Parameters
         ----------
@@ -993,9 +994,6 @@ class DANSEvariables(base.DANSEparameters):
             node {k}'s sampling frequency [Hz].
         k : int
             Node index.
-        currentlyUpdatingNode : int, optional
-            Index of the node that is currently updating its DANSE filter
-            (only used in `efficientSpSBC` mode).
         """
 
         # Common keyword arguments for `base.local_chunk_for_broadcast`
@@ -1085,22 +1083,27 @@ class DANSEvariables(base.DANSEparameters):
                 #     (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
                 #     (self.timeInstants[:, k] <= tCurr)
                 # )  # NB: using `&` instead of `and` for element-wise logical AND
+                nSamplesRecordedSoFar = np.floor(self.fs[k] * tCurr)
+                nSamplesRecordedAtLastBroadcast =\
+                    np.floor(self.fs[k] * self.lastBroadcastInstant[k])
                 nSamplesSinceLastBroadcast = np.sum(
                     (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
                     (self.timeInstants[:, k] <= tCurr)
                 ) # NB: using `&` instead of `and` for element-wise logical AND
-                if nSamplesSinceLastBroadcast == 513:
-                    stop = 1	
+                # nSamplesSinceLastBroadcast = int(
+                #     nSamplesRecordedSoFar - nSamplesRecordedAtLastBroadcast
+                # )
                 self.lastBroadcastInstant[k] = tCurr
                 # nSamplesSinceLastBroadcast = np.sum(
                 #     (self.timeInstants[:, k] > self.lastUpdateInstant[k]) &\
                 #     (self.timeInstants[:, k] <= tCurr)
                 # )  # NB: using `&` instead of `and` for element-wise logical AND
-                # if k == currentlyUpdatingNode:
                 # Use `floor` function
-                currL = int(np.floor(
-                    nSamplesSinceLastBroadcast / self.broadcastLength
-                ) * self.broadcastLength)
+                # currL = int(np.floor(
+                #     nSamplesSinceLastBroadcast / self.broadcastLength
+                # ) * self.broadcastLength)
+                currL = nSamplesSinceLastBroadcast
+
 
                 # else:
                 # # Use `round` function
@@ -1133,8 +1136,6 @@ class DANSEvariables(base.DANSEparameters):
                 **kwargs
             )  # noise-only for SNR computation
 
-            if np.round(tCurr, 3) >= 0.32 and currentlyUpdatingNode == 0:
-                stop = 1
             # Fill buffers in
             self.fill_buffers_td_few_samples(k, L=currL)
 

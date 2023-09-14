@@ -735,14 +735,25 @@ def prep_evmat_build(
         leafToRootOrderings = None
         wasnObjList = None
         # Expected DANSE update instants
-        # upInstants = [
-        #     np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
-        #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-        # ]
         upInstants = [
-            np.arange(np.ceil((p.DFTsize) / p.Ns),
+            np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
             int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
         ]
+        # upInstants = [
+        #     np.arange(np.ceil(p.DFTsize / p.Ns),
+        #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+        # ]
+        # Make the update instants match actual sample instants
+        for k in range(nNodes):
+            timeInstants = wasnObj.wasn[k].timeStamps
+            for ii in range(len(upInstants[k])):
+                if upInstants[k][ii] not in timeInstants:
+                    # Replace by closest future sample instant
+                    possibleTimeInstants = timeInstants[timeInstants > upInstants[k][ii]]
+                    if len(possibleTimeInstants) > 0:
+                        upInstants[k][ii] = possibleTimeInstants[0]
+                    else:
+                        upInstants[k][ii] = timeInstants[-1]
         # ^ note that we only start updating when we have enough samples.
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
@@ -760,10 +771,27 @@ def prep_evmat_build(
                 for k in range(nNodes):
                     combinedUpInstants = []
                     for q in wasnObj.wasn[k].neighborsIdx:
+                        # vvv include the first update instant (t=0 s)
+                        # combinedUpInstants.append(0)
+                        # combinedUpInstants.append(p.Ns/fs[q])
                         for ii in range(len(upInstants[q])):
                             if upInstants[q][ii] not in combinedUpInstants:
                                 combinedUpInstants.append(upInstants[q][ii])
                     bcInstants.append(np.sort(np.array(combinedUpInstants)))
+                # Ensure that the broadcast instants include the time corresponding to Ns samples
+                # for k in range(nNodes):
+                #     bcInstants[k] = np.concatenate(
+                #         (
+                #             np.array([0, p.Ns/fs[k]]),
+                #             bcInstants[k]
+                #         )
+                #     )
+                    # bcInstants[k] = np.insert(
+                    #     bcInstants[k],
+                    #     0,
+                    #     p.Ns/fs[k]
+                    # )
+
                 # # Combine update instants across nodes
                 # combinedUpInstants = list(upInstants[0])
                 # for k in range(1, nNodes):
@@ -1498,6 +1526,7 @@ def events_parser(
         if 'up' in events.type:
             txt = f'[{p.simType}] [{p.nodeUpdating}] t={np.round(events.t, 3):.3f}s -- '
             updatesTxt = 'Updating nodes: '
+            updatesFlag = False
             if p.printoutsAndPlotting.printout_eventsParserNoBC:
                 broadcastsTxt = ''
             else:
@@ -1516,13 +1545,16 @@ def events_parser(
                     # Only print if the node actually has started updating
                     # (i.e. there has been sufficiently many autocorrelation
                     # matrices updates since the start of recording).
-                    # if startUpdates[k]:
-                    if not flagCommaUpdating:
-                        flagCommaUpdating = True
-                    else:
-                        updatesTxt += ','
-                    updatesTxt += f'{k + 1}'
+                    if startUpdates[k]:
+                        updatesFlag = True
+                        if not flagCommaUpdating:
+                            flagCommaUpdating = True
+                        else:
+                            updatesTxt += ','
+                        updatesTxt += f'{k + 1}'
             # Get ready to print
+            if not updatesFlag:
+                updatesTxt = ''
             fullTxt = txt + broadcastsTxt + '; ' + updatesTxt
             if is_interactive():  # if we are running from a notebook
                 # Print on the same line
