@@ -684,16 +684,24 @@ def prep_evmat_build(
             # samples so that the first update is not affected by the WOLA
             # analysis window (no "fading in" of the data) -- see journal 2023
             # week19 MON entry --------vvvv--------
-            upInstants = [
-                np.arange(np.ceil(2 * p.DFTsize / p.Ns),
-                int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-            ]
-            # ^ note that we only start updating when we have enough samples.
-            fuInstants = [
-                np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
-                    p.broadcastLength/fs[k] for k in range(nNodes)
-            ]
-            # ^ note that we only start fusing when we have enough samples.
+            # upInstants = [
+            #     np.arange(np.ceil(2 * p.DFTsize / p.Ns),
+            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
+            # ]
+            upInstants = generate_aligned_instants(
+                startIdx=np.ceil(2 * p.DFTsize / p.Ns),  # we only start updating when we have enough samples
+                eventSep=p.Ns,
+                nEventTotal=numUpInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
+            fuInstants = generate_aligned_instants(
+                startIdx=p.DFTsize/p.broadcastLength,  # we only start fusing when we have enough samples
+                eventSep=p.broadcastLength,
+                nEventTotal=numBcInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
 
             bcInstants = copy.deepcopy(fuInstants)
             # ^ we differentiate fusion instants from broadcast instants to 
@@ -735,26 +743,13 @@ def prep_evmat_build(
         leafToRootOrderings = None
         wasnObjList = None
         # Expected DANSE update instants
-        upInstants = [
-            np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
-            int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-        ]
-        # upInstants = [
-        #     np.arange(np.ceil(p.DFTsize / p.Ns),
-        #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-        # ]
-        # Make the update instants match actual sample instants
-        for k in range(nNodes):
-            timeInstants = wasnObj.wasn[k].timeStamps
-            for ii in range(len(upInstants[k])):
-                if upInstants[k][ii] not in timeInstants:
-                    # Replace by closest future sample instant
-                    possibleTimeInstants = timeInstants[timeInstants > upInstants[k][ii]]
-                    if len(possibleTimeInstants) > 0:
-                        upInstants[k][ii] = possibleTimeInstants[0]
-                    else:
-                        upInstants[k][ii] = timeInstants[-1]
-        # ^ note that we only start updating when we have enough samples.
+        upInstants = generate_aligned_instants(
+            startIdx=np.ceil((p.DFTsize + p.Ns) / p.Ns),  # we only start fusing when we have enough samples
+            eventSep=p.Ns,
+            nEventTotal=numUpInTtot,
+            nNodes=nNodes,
+            wasnObj=wasnObj
+        )
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             bcInstants = [
@@ -821,6 +816,35 @@ def prep_evmat_build(
     }
 
     return out
+
+
+def generate_aligned_instants(
+        startIdx: int,
+        eventSep: int,
+        nEventTotal: np.ndarray,
+        nNodes: int,
+        wasnObj: WASN,
+    ):
+    """Generate event instants for all nodes, which are aligned to
+    actual sample time instants."""
+
+    ev = [
+        np.arange(startIdx, int(nEventTotal[k])) *\
+            eventSep / wasnObj.wasn[k].fs for k in range(nNodes)
+    ]
+    # Make the update instants match actual sample instants
+    for k in range(nNodes):
+        instants = wasnObj.wasn[k].timeStamps
+        for ii in range(len(ev[k])):
+            if ev[k][ii] not in instants:
+                # Replace by closest future sample instant
+                possibleInstants = instants[instants > ev[k][ii]]
+                if len(possibleInstants) > 0:
+                    ev[k][ii] = possibleInstants[0]
+                else:
+                    ev[k][ii] = instants[-1]
+
+    return ev
 
 
 def get_sequential_update_instants(
