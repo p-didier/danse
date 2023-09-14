@@ -797,10 +797,13 @@ def prep_evmat_build(
                 # # Same BC instants for all nodes
                 # bcInstants = [combinedUpInstants for _ in range(nNodes)]
             else:
-                bcInstants = [
-                    np.arange(1, int(numBcInTtot[k])) *\
-                        p.broadcastLength / fs[k] for k in range(nNodes)
-                ]
+                bcInstants = generate_aligned_instants(
+                    startIdx=1,
+                    eventSep=p.broadcastLength,
+                    nEventTotal=numBcInTtot,
+                    nNodes=nNodes,
+                    wasnObj=wasnObj
+                )
                 # ^ note that we start broadcasting sooner:
                 # when we have `L` samples, enough for linear convolution.
 
