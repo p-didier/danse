@@ -528,9 +528,11 @@ def initialize_events(
     Ttot = timeInstants[-1, :]
 
     # Prepare events matrix building
+    print('Preparing events matrix building...')
     prepOutput = prep_evmat_build(p, nNodes, wasnObj, fs, Ttot)
 
     # Build event matrix
+    print('Building events matrix...')
     outputEvents = build_events_matrix(
         up_t=prepOutput['upInstants'],
         bc_t=prepOutput['bcInstants'],
@@ -759,6 +761,7 @@ def prep_evmat_build(
                 # update instants of all its neighbors.
                 for k in range(nNodes):
                     combinedUpInstants = []
+                    combinedUpInstants.append(p.DFTsize/fs[k])  # we start fusing as soon as we have enough samples
                     for q in wasnObj.wasn[k].neighborsIdx:
                         for ii in range(len(upInstants[q])):
                             if upInstants[q][ii] not in combinedUpInstants:
@@ -1439,7 +1442,7 @@ def back_to_time_domain(x, n, axis=0):
     
     return xout
 
-
+# @njit
 def extract_few_samples_from_convolution(idDesired, a, b):
     """
     Manually computes convolution between `a` and `b`
@@ -1797,7 +1800,6 @@ def danse_compression_few_samples(
         Compress local sensor signals (1-D).
     """
 
-    # Profiling
     if updateBroadcastFilter:
         wIR = dist_fct_approx(
             wqqHat,

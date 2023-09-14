@@ -378,7 +378,7 @@ class DANSEoutputs(DANSEparameters):
                 figs, dataFigs = plot_filters(
                     [np.abs(filt) for filt in self.filters],
                     [np.abs(filt) for filt in self.filtersEXT],
-                    [np.abs(filt) for filt in self.filtersCentr],
+                    [np.abs(filt) for filt in self.filtersCentr] if self.filtersCentr is not None else None,
                     fignamePrefix='filtnorm',
                     **kwargs
                 )
@@ -389,7 +389,7 @@ class DANSEoutputs(DANSEparameters):
                 figs, dataFigs = plot_filters(
                     [np.real(filt) for filt in self.filters],
                     [np.real(filt) for filt in self.filtersEXT],
-                    [np.real(filt) for filt in self.filtersCentr],
+                    [np.real(filt) for filt in self.filtersCentr] if self.filtersCentr is not None else None,
                     fignamePrefix='filtreal',
                     **kwargs
                 )
@@ -399,7 +399,7 @@ class DANSEoutputs(DANSEparameters):
                 figs, dataFigs = plot_filters(
                     [np.imag(filt) for filt in self.filters],
                     [np.imag(filt) for filt in self.filtersEXT],
-                    [np.imag(filt) for filt in self.filtersCentr],
+                    [np.imag(filt) for filt in self.filtersCentr] if self.filtersCentr is not None else None,
                     fignamePrefix='filtimag',
                     **kwargs
                 )
@@ -1196,7 +1196,7 @@ def export_sounds(
                     int(wasn[k].fs), data
                 )
             elif out.broadcastType != 'wholeChunk':
-                print('Node {k+1}: Fused signals not exported (not yet implemented for per-sample broadcasting).')
+                print(f'Node {k+1}: Fused signals not exported (not yet implemented for per-sample broadcasting).')
             elif not fullyConnected:
                 print(f'Node {k+1}: Fused signals not exported (not implemented for non-fully connected WASNs).')
         # vvv if enhancement has been performed and centralised estimate computed
@@ -2106,8 +2106,12 @@ def plot_filters(
         for filt in netwideDANSEfilts_allNodes]
     maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-    l = [np.log10(np.mean(filt, axis=0))\
-        for filt in filters + filtersCentr]  # concatenate `filters` and `filtersCentre`
+    if filtersCentr is not None:
+        l = [np.log10(np.mean(filt, axis=0))\
+            for filt in filters + filtersCentr]  # concatenate `filters` and `filtersCentr`
+    else:
+        l = [np.log10(np.mean(filt, axis=0))\
+            for filt in filters]
     np.seterr(divide = 'warn')      # reset warnings
     maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
     minNorm2 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's

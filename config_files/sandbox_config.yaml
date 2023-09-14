@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230914_tests/sros_tests/LeqNs # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230914_tests/Tz_function_tests/other/1_ # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
@@ -23,8 +23,8 @@ danseParams:
   noExternalFilterRelaxation: false
   computeLocal: true
   computeCentralised: true
-  # computeLocal: false
-  # computeCentralised: false
+  computeLocal: false
+  computeCentralised: false
   filterInitType: selectFirstSensor
   # covMatRandomInitScaling: 0  # <-- init SCMs as zeros
   use1stFrameAsBasis: true  # <-- init SCMs using first available frame
@@ -35,22 +35,24 @@ danseParams:
   t_expAvg50pExternalFilters: 1
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
-  timeBtwExternalFiltUpdates: 0.0
+  timeBtwExternalFiltUpdates: 0.
   covMatInitType: fully_random
   printoutsAndPlotting:
     printout_profiler: false
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
-  startComputeMetricsAt: after_10s
+  startComputeMetricsAt: after_5s
+  # startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
-  # broadcastType: wholeChunk
-  broadcastType: fewSamples
-  broadcastLength: 4   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+  broadcastType: wholeChunk
+  # broadcastType: fewSamples
+  broadcastLength: 512   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
   # broadcastLength: 1
   efficientSpSBC: true
   # efficientSpSBC: false
+  upTDfilterEvery: 9999
   compensateSROs: false
   estimateSROs: Oracle
   # estimateSROs: CohDrift
@@ -77,16 +79,17 @@ wasnParams:
   # rd: '[.005, .005, .005]'
   # minDistToWalls: 0
   minDistToWalls: 0.5
-  interSensorDist: 0.0
-  # interSensorDist: 0.05
-  sigDur: 20  # [s]
-  selfnoiseSNR: 999999999  # [dB]
-  # selfnoiseSNR: 15  # [dB]
-  # layoutType: random
-  layoutType: all_nodes_in_center
+  # interSensorDist: 0.0
+  interSensorDist: 0.05
+  sigDur: 10  # [s]
+  # selfnoiseSNR: 999999999  # [dB]
+  selfnoiseSNR: 15  # [dB]
+  layoutType: random
+  # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  nSensorPerNode: '[1, 1]'
+  # nSensorPerNode: '[1, 1]'
+  nSensorPerNode: '[2, 2]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
   # nSensorPerNode: '[1, 2, 3]'
@@ -94,9 +97,9 @@ wasnParams:
   snrBasis: at_mic_0
   snr: 5
   #
-  # SROperNode: '[0]'  # [PPM]
+  SROperNode: '[0]'  # [PPM]
   # SROperNode: '[0, 40]'  # [PPM]
-  SROperNode: '[0, 200]'  # [PPM]
+  # SROperNode: '[0, 200]'  # [PPM]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   #
   signalType: from_file

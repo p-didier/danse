@@ -623,8 +623,8 @@ class DANSEvariables(base.DANSEparameters):
             t[:, k] = wasn[k].timeStamps
             #
             wtmp = np.zeros((2 * self.DFTsize - 1, wasn[k].nSensors))
-            # initialize time-domain filter as Dirac for first sensor signal
-            wtmp[self.DFTsize, 0] = 1   
+            # initialize time-domain filter as Dirac for the reference sensor signal
+            wtmp[self.DFTsize, self.referenceSensor] = 1   
             wIR.append(wtmp)
             wTilde.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, dimYTilde[k]),
@@ -1069,14 +1069,18 @@ class DANSEvariables(base.DANSEparameters):
             # Only update filter every so often
             updateBroadcastFilter = False
             if np.abs(tCurr - self.lastTDfilterUp[k]) >= self.upTDfilterEvery:
-                updateBroadcastFilter = True
+                if self.noFusionAtSingleSensorNodes and self.nSensorPerNode[k] == 1:
+                    # Do not update filter if there is only 1 sensor at node `k`
+                    pass
+                else:
+                    updateBroadcastFilter = True
                 self.lastTDfilterUp[k] = tCurr
 
             # If "efficient" events for broadcast
             # (broadcast instants are aggregated when possible):
             if self.efficientSpSBC:
                 # Count samples recorded since the last broadcast at node `k`
-                # and adapt the effective "broadcast length" variable
+                # and adapt the "broadcast length" variable
                 # used in `danse_compression_few_samples` and
                 # `fill_buffers_td_few_samples`.
                 nRecordedSamplesSinceLastBroadcast = np.sum(
@@ -1273,7 +1277,6 @@ class DANSEvariables(base.DANSEparameters):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
-        self.lastUpdateInstant[k] = tCurr  # <-- for computationally efficient simulated broadcasting
 
         if 0:
             if all([self.i[k] == 100 for k in range(self.nNodes)]):  # DEBUG ONLY
