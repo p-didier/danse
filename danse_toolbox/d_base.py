@@ -675,19 +675,10 @@ def prep_evmat_build(
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
             # Expected DANSE update instants
-            # upInstants = [
-            #     np.arange(np.ceil((p.DFTsize + p.Ns) / p.Ns),
-            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-            # ]
-
-            # Edit on 2023.05.08 we only start updating when we have enough
-            # samples so that the first update is not affected by the WOLA
-            # analysis window (no "fading in" of the data) -- see journal 2023
-            # week19 MON entry --------vvvv--------
-            # upInstants = [
-            #     np.arange(np.ceil(2 * p.DFTsize / p.Ns),
-            #     int(numUpInTtot[k])) * p.Ns/fs[k] for k in range(nNodes)
-            # ]
+            # > Edit on 2023.05.08 we only start updating when we have enough
+            # > samples so that the first update is not affected by the WOLA
+            # > analysis window (no "fading in" of the data) -- see journal 2023
+            # > week19 MON entry --------vvvv--------
             upInstants = generate_aligned_instants(
                 startIdx=np.ceil(2 * p.DFTsize / p.Ns),  # we only start updating when we have enough samples
                 eventSep=p.Ns,
