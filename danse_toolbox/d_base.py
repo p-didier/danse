@@ -752,10 +752,13 @@ def prep_evmat_build(
         )
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
-            bcInstants = [
-                np.arange(p.DFTsize/p.broadcastLength, int(numBcInTtot[k])) *\
-                    p.broadcastLength/fs[k] for k in range(nNodes)
-            ]
+            bcInstants = generate_aligned_instants(
+                startIdx=p.DFTsize/p.broadcastLength,
+                eventSep=p.broadcastLength,
+                nEventTotal=numBcInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
             # ^ note that we only start broadcasting when we have enough
             # samples to perform compression.
         elif 'fewSamples' in p.broadcastType:
@@ -766,36 +769,10 @@ def prep_evmat_build(
                 for k in range(nNodes):
                     combinedUpInstants = []
                     for q in wasnObj.wasn[k].neighborsIdx:
-                        # vvv include the first update instant (t=0 s)
-                        # combinedUpInstants.append(0)
-                        # combinedUpInstants.append(p.Ns/fs[q])
                         for ii in range(len(upInstants[q])):
                             if upInstants[q][ii] not in combinedUpInstants:
                                 combinedUpInstants.append(upInstants[q][ii])
                     bcInstants.append(np.sort(np.array(combinedUpInstants)))
-                # Ensure that the broadcast instants include the time corresponding to Ns samples
-                # for k in range(nNodes):
-                #     bcInstants[k] = np.concatenate(
-                #         (
-                #             np.array([0, p.Ns/fs[k]]),
-                #             bcInstants[k]
-                #         )
-                #     )
-                    # bcInstants[k] = np.insert(
-                    #     bcInstants[k],
-                    #     0,
-                    #     p.Ns/fs[k]
-                    # )
-
-                # # Combine update instants across nodes
-                # combinedUpInstants = list(upInstants[0])
-                # for k in range(1, nNodes):
-                #     for ii in range(len(upInstants[k])):
-                #         if upInstants[k][ii] not in combinedUpInstants:
-                #             combinedUpInstants.append(upInstants[k][ii])
-                # combinedUpInstants = np.sort(np.array(combinedUpInstants))
-                # # Same BC instants for all nodes
-                # bcInstants = [combinedUpInstants for _ in range(nNodes)]
             else:
                 bcInstants = generate_aligned_instants(
                     startIdx=1,
