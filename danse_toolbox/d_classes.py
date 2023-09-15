@@ -1059,9 +1059,9 @@ class DANSEvariables(base.DANSEparameters):
                 (self.zFullTD_n[k], self.zLocal_n[k][:self.Ns])
             )
 
-            # Fill buffers in
-            self.fill_buffers_whole_chunk(k)
-        
+            # Prepare to fill buffers in
+            nSamplesToBC = self.Ns  #  <-- /!\ important: use positive `n` to broadcast first `n` samples
+
         elif self.broadcastType == 'fewSamples':
             # Time-domain broadcasting, `L` samples at a time,
             # via linear-convolution approximation of WOLA filtering process
@@ -1117,11 +1117,14 @@ class DANSEvariables(base.DANSEparameters):
                 **kwargs
             )  # noise-only for SNR computation
 
-            # Fill buffers in
-            self.fill_buffers_td_few_samples(k, L=currL)
+            # Prepare to fill buffers in
+            nSamplesToBC = -1 * currL  #  <-- /!\ important: use positive `n` to broadcast first `n` samples
+        
+        # Fill buffers in
+        self.fill_buffers(k, n=nSamplesToBC)
 
 
-    def fill_buffers_td_few_samples(self, k, L):
+    def fill_buffers(self, k, n):
         """
         Fill in buffers -- simulating broadcast of compressed signals
         from one node (`k`) to its neighbours.
@@ -1130,9 +1133,12 @@ class DANSEvariables(base.DANSEparameters):
         ----------
         k : int
             Current node index.
-        L : int
-            Broadcast chunk length.
+        n : int
+            Broadcast chunk length. If positive, broadast first `n` samples
+            of local compressed signals. If negative, broadcast last `n`
+            samples of local compressed signals.
         """
+
         zLocalK = self.zLocal[k]
         zLocalK_s = self.zLocal_s[k]  # - speech-only for SNR computation
         zLocalK_n = self.zLocal_n[k]  # - noise-only for SNR computation
@@ -1143,47 +1149,35 @@ class DANSEvariables(base.DANSEparameters):
             idxKforNeighborQ = [i for i, x in enumerate(self.neighbors[q]) if x == k]
             # Node `k`'s "neighbor index", from node `q`'s perspective
             idxKforNeighborQ = idxKforNeighborQ[0]
-            # Only broadcast the `L` last samples of local compressed signals
+            if n < 0:
+                # Only broadcast the `n` last samples of local compressed signals
+                zLocalChunk = zLocalK[n:]
+                zLocalChunk_s = zLocalK_s[n:]
+                zLocalChunk_n = zLocalK_n[n:]
+            elif n > 0:
+                # Only broadcast the `n` first samples of local compressed signals
+                zLocalChunk = zLocalK[:n]
+                zLocalChunk_s = zLocalK_s[:n]
+                zLocalChunk_n = zLocalK_n[:n]
+            else:
+                # No broadcasting
+                zLocalChunk = np.array([])
+                zLocalChunk_s = np.array([])
+                zLocalChunk_n = np.array([])
+            # Fill in buffers
             self.zBuffer[q][idxKforNeighborQ] = np.concatenate(
-                (self.zBuffer[q][idxKforNeighborQ], zLocalK[-L:]),
+                (self.zBuffer[q][idxKforNeighborQ], zLocalChunk),
                 axis=0
             )
             self.zBuffer_s[q][idxKforNeighborQ] = np.concatenate(
-                (self.zBuffer_s[q][idxKforNeighborQ], zLocalK_s[-L:]),
+                (self.zBuffer_s[q][idxKforNeighborQ], zLocalChunk_s),
                 axis=0
             )
             self.zBuffer_n[q][idxKforNeighborQ] = np.concatenate(
-                (self.zBuffer_n[q][idxKforNeighborQ], zLocalK_n[-L:]),
+                (self.zBuffer_n[q][idxKforNeighborQ], zLocalChunk_n),
                 axis=0
             )
-            # print(f'======Node {q+1}, size buffer = {len(self.zBuffer[q][idxKforNeighborQ])}')
 
-    
-    def fill_buffers_whole_chunk(self, k):
-        """
-        Fills neighbors nodes' buffers, using frequency domain data.
-        Data comes from compression via function `danse_compression_freq_domain`.
-        
-            Parameters
-        ----------
-        k : int
-            Current node index.
-        """
-
-        zLocalK = self.zLocal[k][:self.Ns]
-        zLocalK_s = self.zLocal_s[k][:self.Ns]  # - speech-only for SNR computation
-        zLocalK_n = self.zLocal_n[k][:self.Ns]  # - noise-only for SNR computation
-        # Loop over neighbors of `k`
-        for idxq in range(len(self.neighbors[k])):
-            # Network-wide index of node `q` (one of node `k`'s neighbors)
-            q = self.neighbors[k][idxq]
-            idxKforNeighborQ = [i for i, x in enumerate(self.neighbors[q]) if x == k]
-            # Node `k`'s "neighbor index", from node `q`'s perspective
-            idxKforNeighborQ = idxKforNeighborQ[0]
-            # Fill in neighbor's buffer
-            self.zBuffer[q][idxKforNeighborQ] = zLocalK
-            self.zBuffer_s[q][idxKforNeighborQ] = zLocalK_s
-            self.zBuffer_n[q][idxKforNeighborQ] = zLocalK_n
 
     def update_and_estimate(self, tCurr, fs, k, bypassUpdateEventMat=False):
         """
@@ -1248,17 +1242,6 @@ class DANSEvariables(base.DANSEparameters):
             # If covariance matrices estimates are full-rank, update filters
             self.perform_update(k)
             # ^^^ depends on outcome of `check_covariance_matrices()`.
-            if 1:
-                if self.oVADframes[k][self.i[k]]:
-                    stop = 1
-                    fig, axes = plt.subplots(1,1)
-                    fig.set_size_inches(8.5, 3.5)
-                    plt.plot(self.yTilde[k][:, self.i[k], 0], label=f'$\\tilde{{y}}_{{k={k},m=0}}$')
-                    plt.plot(self.yTilde[k][:, self.i[k], 1], label=f'$\\tilde{{y}}_{{k={k},m=1}}$')
-                    plt.legend()
-                    axes.set_ylim([-3, 3])
-                    axes.set_title(f'Node {k+1}, $i={self.i[0]}$')
-                    pass
         else:
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
@@ -1602,188 +1585,93 @@ class DANSEvariables(base.DANSEparameters):
             
             Bq = len(self.zBuffer[k][idxq])  # buffer size for neighbour `q`
 
-            # True node index
-            q = self.neighbors[k][idxq]
-
-            # Time-domain chunks broadcasting
-            if self.broadcastType == 'wholeChunk':
-                if self.i[k] == 0:
-                    if Bq == Ns:
-                        # Not yet any previous buffer -- need to appstart
-                        # something (using the raw reference sensor signal).
-                        indices = np.arange(
-                            self.idxBegChunkBroadcast - (self.DFTsize - self.Ns),
-                            self.idxEndChunkBroadcast - (self.DFTsize - self.Ns) - self.Ns
-                        )
-                        zCurrBuffer = np.concatenate((
-                            # np.zeros(Ndft - Bq),
-                            self.yin[q][indices, self.referenceSensor],
-                            self.zBuffer[k][idxq]
-                        ))
-                        zCurrBuffer_s = np.concatenate((
-                            # np.zeros(Ndft - Bq),
-                            self.cleanSpeechSignalsAtNodes[q][indices, self.referenceSensor],
-                            self.zBuffer_s[k][idxq]
-                        ))
-                        zCurrBuffer_n = np.concatenate((
-                            # np.zeros(Ndft - Bq),
-                            self.cleanNoiseSignalsAtNodes[q][indices, self.referenceSensor],
-                            self.zBuffer_n[k][idxq]
-                        ))
-                    elif Bq == 0:
-                        # Node `q` has not yet transmitted enough data to node
-                        # `k`, but node `k` has already reached its first
-                        # update instant. Interpretation: Node `q` samples
-                        # slower than node `k`. 
-                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -1 broadcast")
-                        bufferFlags[idxq] = -1      # raise negative flag
-                        zCurrBuffer = np.zeros(Ndft)
-                        zCurrBuffer_s = np.zeros(Ndft)
-                        zCurrBuffer_n = np.zeros(Ndft)
-                else:
-                    if Bq == Ns:
-                        # All good, no under-/over-flows
-                        if not np.any(self.z[k]):
-                            # Not yet any previous buffer
-                            # -- need to appstart zeros.
-                            zCurrBuffer = np.concatenate((
-                                np.zeros(Ndft - Bq), self.zBuffer[k][idxq]
-                            ))
-                            zCurrBuffer_s = np.concatenate((
-                                np.zeros(Ndft - Bq), self.zBuffer_s[k][idxq]
-                            ))
-                            zCurrBuffer_n = np.concatenate((
-                                np.zeros(Ndft - Bq), self.zBuffer_n[k][idxq]
-                            ))
-                        else:
-                            # Concatenate last `Ndft - Ns` samples of previous buffer
-                            # with current buffer.
-                            zCurrBuffer = np.concatenate((
-                                self.z[k][-(Ndft - Ns):, idxq],
-                                self.zBuffer[k][idxq]
-                            ))
-                            zCurrBuffer_s = np.concatenate((
-                                self.z_s[k][-(Ndft - Ns):, idxq],
-                                self.zBuffer_s[k][idxq]
-                            ))
-                            zCurrBuffer_n = np.concatenate((
-                                self.z_n[k][-(Ndft - Ns):, idxq],
-                                self.zBuffer_n[k][idxq]
-                            ))
-                    else:
-                        # Under- or over-flow...
-                        raise ValueError('[NOT YET IMPLEMENTED]')
-                    
-            elif self.broadcastType == 'fewSamples':
-
-                if self.i[k] == 0: # first DANSE iteration case 
-                    # -- we are expecting an abnormally full buffer,
-                    # with an entire DANSE chunk size inside of it
-                    if Bq == Ndft: 
-                        # There is no significant SRO between node `k` and `q`.
-                        # Response: `k` uses all samples in the `q` buffer.
-                        zCurrBuffer = self.zBuffer[k][idxq]
-                        zCurrBuffer_s = self.zBuffer_s[k][idxq]
-                        zCurrBuffer_n = self.zBuffer_n[k][idxq]
-                    
-                    # vvv If the over- or under-flow is a multiple of the broadcast length,
-                    # vvv then the number of missing or extra broadcasts is an integer.
-                    # elif (Ndft - Bq) % Lbc == 0:
-                    elif Bq < Ndft:
-                        # Node `q` has not yet transmitted enough data to node
-                        # `k`, but node `k` has already reached its first
-                        # update instant. Interpretation: Node `q` samples
-                        # slower than node `k`. 
-                        # nMissingBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        nMissingSamples = int(np.abs(Ndft - Bq))
-                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
-                        # Raise negative flag
-                        bufferFlags[idxq] = -1 * nMissingSamples
-                        zCurrBuffer = np.concatenate(
-                            (np.zeros(Ndft - Bq), self.zBuffer[k][idxq]),
-                            axis=0
-                        )
-                        zCurrBuffer_s = np.concatenate(
-                            (np.zeros(Ndft - Bq), self.zBuffer_s[k][idxq]),
-                            axis=0
-                        )
-                        zCurrBuffer_n = np.concatenate(
-                            (np.zeros(Ndft - Bq), self.zBuffer_n[k][idxq]),
-                            axis=0
-                        )
-                    elif Bq > Ndft:
-                        # Node `q` has already transmitted too much data
-                        # to node `k`. Interpretation: Node `q` samples faster
-                        # than node `k`.
-                        # nExtraBroadcasts = int(np.abs((Ndft - Bq) / Lbc))
-                        nExtraSamples = int(np.abs(Ndft - Bq))
-                        print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
-                        # if nExtraSamples > 1:  # TODO: get rid of this before properly publishing
-                        #     print('^^^ explanation for the above can be found in the Research Journal 2023, week 37, TUE 12.09')
-                        # Raise positive flag
-                        bufferFlags[idxq] = +1 * nExtraSamples  # explicit "+1" positive factor
-                        zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
-                        zCurrBuffer_s = self.zBuffer_s[k][idxq][-Ndft:]
-                        zCurrBuffer_n = self.zBuffer_n[k][idxq][-Ndft:]
-                    
-                    # # vvv If the over- or under-flow is NOT a multiple of the broadcast length
-                    # # vvv then the number of missing or extra broadcasts is a float.
-                    # elif (Ndft - Bq) % Lbc != 0:
-                    #     raise ValueError(f'Unexpected buffer size ({Bq} samples, with L={Lbc} and N={Ndft}) for neighbor node q={self.neighbors[k][idxq]+1}.')
+            if self.i[k] == 0: # first DANSE iteration case 
+                # -- we are expecting an abnormally full buffer,
+                # with an entire DANSE chunk size inside of it
+                if Bq == Ndft: 
+                    # There is no significant SRO between node `k` and `q`.
+                    # Response: `k` uses all samples in the `q` buffer.
+                    zCurrBuffer = self.zBuffer[k][idxq]
+                    zCurrBuffer_s = self.zBuffer_s[k][idxq]
+                    zCurrBuffer_n = self.zBuffer_n[k][idxq]
                 
-                else:   # not the first DANSE iteration 
-                    # -- we are expecting a normally full buffer,
-                    # with a DANSE chunk size considering overlap.
+                # vvv If the over- or under-flow is a multiple of the broadcast length,
+                # vvv then the number of missing or extra broadcasts is an integer.
+                # elif (Ndft - Bq) % Lbc == 0:
+                elif Bq < Ndft:
+                    # Node `q` has not yet transmitted enough data to node
+                    # `k`, but node `k` has already reached its first
+                    # update instant. Interpretation: Node `q` samples
+                    # slower than node `k`. 
+                    nMissingSamples = int(np.abs(Ndft - Bq))
+                    print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
+                    # Raise negative flag
+                    bufferFlags[idxq] = -1 * nMissingSamples
+                    zCurrBuffer = np.concatenate(
+                        (np.zeros(Ndft - Bq), self.zBuffer[k][idxq]),
+                        axis=0
+                    )
+                    zCurrBuffer_s = np.concatenate(
+                        (np.zeros(Ndft - Bq), self.zBuffer_s[k][idxq]),
+                        axis=0
+                    )
+                    zCurrBuffer_n = np.concatenate(
+                        (np.zeros(Ndft - Bq), self.zBuffer_n[k][idxq]),
+                        axis=0
+                    )
+                elif Bq > Ndft:
+                    # Node `q` has already transmitted too much data
+                    # to node `k`. Interpretation: Node `q` samples faster
+                    # than node `k`.
+                    nExtraSamples = int(np.abs(Ndft - Bq))
+                    print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
+                    # Raise positive flag
+                    bufferFlags[idxq] = +1 * nExtraSamples  # explicit "+1" positive factor
+                    zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
+                    zCurrBuffer_s = self.zBuffer_s[k][idxq][-Ndft:]
+                    zCurrBuffer_n = self.zBuffer_n[k][idxq][-Ndft:]
+            
+            else:   # not the first DANSE iteration 
+                # -- we are expecting a normally full buffer,
+                # with a DANSE chunk size considering overlap.
 
-                    # case 1: no mismatch between node `k` and node `q`.
-                    if Bq == Ns:
-                        pass
-                    # case 2: negative mismatch
-                    # elif (Ns - Bq) % Lbc == 0 and Bq < Ns:
-                    elif Bq < Ns:
-                        # nMissingBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                        nMissingSamples = int(np.abs(Ns - Bq))
-                        print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
-                        # Raise negative flag
-                        bufferFlags[idxq] = -1 * nMissingSamples
-                    # case 3: positive mismatch
-                    # elif (Ns - Bq) % Lbc == 0 and Bq > Ns:
-                    elif Bq > Ns:
-                        # nExtraBroadcasts = int(np.abs((Ns - Bq) / Lbc))
-                        nExtraSamples = int(np.abs(Ns - Bq))
-                        print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
-                        # Raise positive flag
-                        bufferFlags[idxq] = +1 * nExtraSamples
-                    # else:
-                    #     if (Ns - Bq) % Lbc != 0 and\
-                    #         np.abs(self.i[k] - (self.nIter - 1)) < 10:
-                    #         print("[b! @ t={np.round(t, 3)}s] This is the last iteration -- not enough samples anymore due to cumulated SROs effect, skip update.')
-                    #         # Raise "end of signal" flag
-                    #         bufferFlags[idxq] = np.NaN
-                    #     else:
-                    #         raise ValueError(f'Unexpected buffer size ({Bq} samples, with L={Lbc} and N={Ns}) for neighbor node q={self.neighbors[k][idxq]+1}.')
-                    
-                    # Build current buffer
-                    if Ndft - Bq > 0:
-                        zCurrBuffer = np.concatenate(
-                            (self.z[k][-(Ndft - Bq):, idxq],
-                            self.zBuffer[k][idxq]),
-                            axis=0
-                        )
-                        zCurrBuffer_s = np.concatenate(
-                            (self.z_s[k][-(Ndft - Bq):, idxq],
-                            self.zBuffer_s[k][idxq]),
-                            axis=0
-                        )
-                        zCurrBuffer_n = np.concatenate(
-                            (self.z_n[k][-(Ndft - Bq):, idxq],
-                            self.zBuffer_n[k][idxq]),
-                            axis=0
-                        )
-                    else:   # edge case: no overlap between consecutive frames
-                        zCurrBuffer = self.zBuffer[k][idxq]
-                        zCurrBuffer_s = self.zBuffer_s[k][idxq]
-                        zCurrBuffer_n = self.zBuffer_n[k][idxq]
+                # case 1: no mismatch between node `k` and node `q`.
+                if Bq == Ns:
+                    pass
+                # case 2: negative mismatch
+                elif Bq < Ns:
+                    nMissingSamples = int(np.abs(Ns - Bq))
+                    print(f"[b- @ t={np.round(t, 3)}s] Buffer underflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | -{nMissingSamples} samples(s)")
+                    # Raise negative flag
+                    bufferFlags[idxq] = -1 * nMissingSamples
+                # case 3: positive mismatch
+                elif Bq > Ns:
+                    nExtraSamples = int(np.abs(Ns - Bq))
+                    print(f"[b+ @ t={np.round(t, 3)}s] Buffer overflow at node {k+1}'s B_{self.neighbors[k][idxq]+1} buffer | +{nExtraSamples} samples(s)")
+                    # Raise positive flag
+                    bufferFlags[idxq] = +1 * nExtraSamples
+
+                # Build current buffer
+                if Ndft - Bq > 0:
+                    zCurrBuffer = np.concatenate(
+                        (self.z[k][-(Ndft - Bq):, idxq],
+                        self.zBuffer[k][idxq]),
+                        axis=0
+                    )
+                    zCurrBuffer_s = np.concatenate(
+                        (self.z_s[k][-(Ndft - Bq):, idxq],
+                        self.zBuffer_s[k][idxq]),
+                        axis=0
+                    )
+                    zCurrBuffer_n = np.concatenate(
+                        (self.z_n[k][-(Ndft - Bq):, idxq],
+                        self.zBuffer_n[k][idxq]),
+                        axis=0
+                    )
+                else:   # edge case: no overlap between consecutive frames
+                    zCurrBuffer = self.zBuffer[k][idxq]
+                    zCurrBuffer_s = self.zBuffer_s[k][idxq]
+                    zCurrBuffer_n = self.zBuffer_n[k][idxq]
 
             # Stack compressed signals
             zk = np.concatenate((zk, zCurrBuffer[:, np.newaxis]), axis=1)

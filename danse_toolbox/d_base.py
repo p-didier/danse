@@ -735,16 +735,16 @@ def prep_evmat_build(
         trInstantsArranged = [np.array([]) for _ in range(nNodes)]  # no tree-formation instants
         leafToRootOrderings = None
         wasnObjList = None
-        # Expected DANSE update instants
-        upInstants = generate_aligned_instants(
-            startIdx=np.ceil((p.DFTsize + p.Ns) / p.Ns),  # we only start fusing when we have enough samples
-            eventSep=p.Ns,
-            nEventTotal=numUpInTtot,
-            nNodes=nNodes,
-            wasnObj=wasnObj
-        )
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
+            # Expected DANSE update instants
+            upInstants = generate_aligned_instants(
+                startIdx=np.ceil((p.DFTsize + p.Ns) / p.Ns),  # we only start fusing when we have enough samples
+                eventSep=p.Ns,
+                nEventTotal=numUpInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
             bcInstants = generate_aligned_instants(
                 startIdx=p.DFTsize/p.broadcastLength,
                 eventSep=p.broadcastLength,
@@ -755,13 +755,21 @@ def prep_evmat_build(
             # ^ note that we only start broadcasting when we have enough
             # samples to perform compression.
         elif 'fewSamples' in p.broadcastType:
+            # Expected DANSE update instants
+            upInstants = generate_aligned_instants(
+                startIdx=np.ceil(p.DFTsize / p.Ns),  # we only start fusing when we have enough samples
+                eventSep=p.Ns,
+                nEventTotal=numUpInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
             if p.efficientSpSBC:
                 bcInstants = []
                 # The broadcast instants at node `k` are the union of the
                 # update instants of all its neighbors.
                 for k in range(nNodes):
                     combinedUpInstants = []
-                    combinedUpInstants.append(p.DFTsize/fs[k])  # we start fusing as soon as we have enough samples
+                    # combinedUpInstants.append(p.DFTsize/fs[k])  # we start fusing as soon as we have enough samples
                     for q in wasnObj.wasn[k].neighborsIdx:
                         for ii in range(len(upInstants[q])):
                             if upInstants[q][ii] not in combinedUpInstants:
@@ -949,12 +957,12 @@ def build_events_matrix(
         if len(t) == 0:   # no instants
             return np.zeros((0, 3))
         else:
-            nInstants = sum(
+            nInstants = int(np.sum(
                 [len(np.unique(t[k])) for k in range(K)]
-            )
+            ))
             eventInstants = np.zeros((nInstants, 3))
             for k in range(K):
-                idxStart = sum([len(t[q]) for q in range(k)])
+                idxStart = int(np.sum([len(t[q]) for q in range(k)]))
                 idxEnd = idxStart + len(t[k])
                 eventInstants[idxStart:idxEnd, 0] = t[k]
                 eventInstants[idxStart:idxEnd, 1] = k

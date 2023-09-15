@@ -84,8 +84,6 @@ def danse(
                     events.bypassUpdate[idxEventCurrInstant],
                     # True  # debugging
                 )
-                if dv.i[0] == 57:
-                    stop = 1
             else:
                 raise ValueError(
                     f'Unknown event: "{events.type[idxEventCurrInstant]}".'

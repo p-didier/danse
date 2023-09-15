@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230914_tests/Tz_function_tests/test5/_ # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230915_tests/newBCsystem/test2_fewSamples # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
@@ -47,10 +47,10 @@ danseParams:
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
-  broadcastType: wholeChunk
-  # broadcastType: fewSamples
+  # broadcastType: wholeChunk
+  broadcastType: fewSamples
   broadcastLength: 512   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-  # broadcastLength: 1
+  # broadcastLength: 2
   efficientSpSBC: true
   # efficientSpSBC: false
   upTDfilterEvery: 9999
@@ -83,8 +83,8 @@ wasnParams:
   # interSensorDist: 0.0
   interSensorDist: 0.05
   sigDur: 10  # [s]
-  selfnoiseSNR: 999999999  # [dB]
-  # selfnoiseSNR: 15  # [dB]
+  # selfnoiseSNR: 999999999  # [dB]
+  selfnoiseSNR: 15  # [dB]
   layoutType: random
   # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
