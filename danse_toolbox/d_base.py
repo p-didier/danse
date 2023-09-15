@@ -2517,9 +2517,10 @@ def prod(iterable):
     result = 1
     for i in iterable:
         result *= i
-    return result
+    return int(result)
 
 def get_divisors(n):
+    n = int(n)
     pf = prime_factors(n)
 
     pf_with_multiplicity = collections.Counter(pf)

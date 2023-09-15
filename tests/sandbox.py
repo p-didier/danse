@@ -97,8 +97,8 @@ def main(
 
 
 def danse_it_up(
-    wasnObj: WASN,
-    p: TestParameters
+        wasnObj: WASN,
+        p: TestParameters
     ) -> tuple[pp.DANSEoutputs, WASN]:
     """Container function for launching the- correct version of
     the DANSE algorithm."""
