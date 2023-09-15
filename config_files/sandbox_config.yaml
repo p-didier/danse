@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230914_tests/Tz_function_tests/other/1_ # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230914_tests/Tz_function_tests/test5/_ # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
@@ -35,7 +35,8 @@ danseParams:
   t_expAvg50pExternalFilters: 1
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
-  timeBtwExternalFiltUpdates: 0.
+  # timeBtwExternalFiltUpdates: 0.
+  timeBtwExternalFiltUpdates: 99999.
   covMatInitType: fully_random
   printoutsAndPlotting:
     printout_profiler: false
@@ -82,8 +83,8 @@ wasnParams:
   # interSensorDist: 0.0
   interSensorDist: 0.05
   sigDur: 10  # [s]
-  # selfnoiseSNR: 999999999  # [dB]
-  selfnoiseSNR: 15  # [dB]
+  selfnoiseSNR: 999999999  # [dB]
+  # selfnoiseSNR: 15  # [dB]
   layoutType: random
   # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5

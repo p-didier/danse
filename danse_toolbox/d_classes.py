@@ -1248,6 +1248,17 @@ class DANSEvariables(base.DANSEparameters):
             # If covariance matrices estimates are full-rank, update filters
             self.perform_update(k)
             # ^^^ depends on outcome of `check_covariance_matrices()`.
+            if 1:
+                if self.oVADframes[k][self.i[k]]:
+                    stop = 1
+                    fig, axes = plt.subplots(1,1)
+                    fig.set_size_inches(8.5, 3.5)
+                    plt.plot(self.yTilde[k][:, self.i[k], 0], label=f'$\\tilde{{y}}_{{k={k},m=0}}$')
+                    plt.plot(self.yTilde[k][:, self.i[k], 1], label=f'$\\tilde{{y}}_{{k={k},m=1}}$')
+                    plt.legend()
+                    axes.set_ylim([-3, 3])
+                    axes.set_title(f'Node {k+1}, $i={self.i[0]}$')
+                    pass
         else:
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
@@ -1606,17 +1617,17 @@ class DANSEvariables(base.DANSEparameters):
                         )
                         zCurrBuffer = np.concatenate((
                             # np.zeros(Ndft - Bq),
-                            self.yin[q][indices, 0],
+                            self.yin[q][indices, self.referenceSensor],
                             self.zBuffer[k][idxq]
                         ))
                         zCurrBuffer_s = np.concatenate((
                             # np.zeros(Ndft - Bq),
-                            self.cleanSpeechSignalsAtNodes[q][indices, 0],
+                            self.cleanSpeechSignalsAtNodes[q][indices, self.referenceSensor],
                             self.zBuffer_s[k][idxq]
                         ))
                         zCurrBuffer_n = np.concatenate((
                             # np.zeros(Ndft - Bq),
-                            self.cleanNoiseSignalsAtNodes[q][indices, 0],
+                            self.cleanNoiseSignalsAtNodes[q][indices, self.referenceSensor],
                             self.zBuffer_n[k][idxq]
                         ))
                     elif Bq == 0:
