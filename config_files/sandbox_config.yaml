@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230915_tests/newBCsystem/test2_fewSamples # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230915_tests/wTildeExt_on/test2_Tz_every1s # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
@@ -35,8 +35,8 @@ danseParams:
   t_expAvg50pExternalFilters: 1
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
   forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
-  # timeBtwExternalFiltUpdates: 0.
-  timeBtwExternalFiltUpdates: 99999.
+  timeBtwExternalFiltUpdates: 0.
+  # timeBtwExternalFiltUpdates: 99999.
   covMatInitType: fully_random
   printoutsAndPlotting:
     printout_profiler: false
@@ -53,7 +53,7 @@ danseParams:
   # broadcastLength: 2
   efficientSpSBC: true
   # efficientSpSBC: false
-  upTDfilterEvery: 9999
+  upTDfilterEvery: 1.
   compensateSROs: false
   estimateSROs: Oracle
   # estimateSROs: CohDrift
