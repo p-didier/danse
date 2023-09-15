@@ -175,6 +175,12 @@ class DANSEoutputs(DANSEparameters):
         else:
             met.save(self, foldername, exportType=exportType)
 
+    def save_metrics(self, foldername):
+        """Saves metrics to file."""
+        self.check_init()  # check if object is correctly initialised
+        with open(f'{foldername}/metrics.pkl', 'wb') as f:
+            pickle.dump(self.metrics, f)
+
     def load(self, foldername, dataType='pkl') -> 'DANSEoutputs':
         """Loads dataclass to Pickle archive in folder `foldername`."""
         return met.load(self, foldername, silent=True, dataType=dataType)
@@ -2404,6 +2410,8 @@ def export_danse_outputs(
         # Save `DANSEoutputs` object after metrics computation
         if p.exportParams.danseOutputsFile:
             out.save(foldername=p.exportParams.exportFolder, light=True)
+            # Save just metrics (for faster loading in post-processing scripts)
+            out.save_metrics(foldername=p.exportParams.exportFolder)
         # Save `TestParameters` object
         if p.exportParams.parametersFile:
             if p.loadedFromYaml:

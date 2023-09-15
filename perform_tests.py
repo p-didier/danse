@@ -10,6 +10,7 @@ from pathlib import Path
 #
 import tests.sandbox
 import tests.battery20230915_sros_asfctofL
+import tests.battery20230915_pp
 
 CONFIG_FILES_FOLDER = f'{Path(__file__).parent}/config_files'
 
@@ -21,7 +22,8 @@ def main(configFilesFolder: str=CONFIG_FILES_FOLDER):
     #     cfgFilename=f'{configFilesFolder}/sandbox_config.yaml',
     # )
 
-    tests.battery20230915_sros_asfctofL.main()
+    # tests.battery20230915_sros_asfctofL.main()
+    tests.battery20230915_pp.main()
 
     print(f'\n\nTotal runtime: {str(datetime.timedelta(seconds=time.time() - t0))}.')
 

@@ -15,8 +15,8 @@ from danse_toolbox.d_classes import TestParameters
 
 N = 1024            # DFT size
 WOLA_OVLP = 0.5     # WOLA overlap factor
-MK = [1, 1]         # number of sensors per node (`len(MK) = nNodes`)
-# MK = [2, 3]         # number of sensors per node (`len(MK) = nNodes`)
+# MK = [1, 1]         # number of sensors per node (`len(MK) = nNodes`)
+MK = [2, 3]         # number of sensors per node (`len(MK) = nNodes`)
 BASE_CONFIG_FILE = './danse/config_files/sandbox_config.yaml'
 
 # Broadcast lengths to test
@@ -35,12 +35,14 @@ def main():
     battery = prepare_test_battery()
 
     for test in battery:
+        print('----------------------------------------')
         print(f"Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) in progress...")
+        print('----------------------------------------')
         t0 = time.time()
         # blockPrint()
         launch(test)  # launch test
         # enablePrint()
-        print(f"-- Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) completed in {time.time() - t0} s.\n")
+        print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) completed in {time.time() - t0} s.\n")
 
 
 def prepare_test_battery():
@@ -49,21 +51,24 @@ def prepare_test_battery():
     battery = []
     
     for sro in SROS:
-        for l in L_TO_TEST:
+        if sro > 0:  # if SRO = 0, no need to test `fewSample` mode (already done -- see research journal 2023, week 37, FRI)
+            for l in L_TO_TEST:
+                battery.append({
+                    'L': l,
+                    'SRO': [0, sro],
+                    'mode': 'fewSamples',
+                    'ref': f'L{l}_SRO{sro}',
+                })
+        else:  # if SRO = 0
             battery.append({
-                'N': N,
-                'WOLA_OVLP': WOLA_OVLP,
-                'MK': MK,
-                'L': l,
+                'L': 1,
                 'SRO': [0, sro],
                 'mode': 'fewSamples',
-                'ref': f'L{l}_SRO{sro}',
+                'ref': f'L1_SRO{sro}',
             })
+        # Always test `wholeChunk` mode
         battery.append({
-            'N': N,
-            'WOLA_OVLP': WOLA_OVLP,
-            'MK': MK,
-            'L': l,
+            'L': None,  # irrelevant
             'SRO': [0, sro],
             'mode': 'wholeChunk',
             'ref': f'wholeChunk_SRO{sro}',
@@ -77,17 +82,16 @@ def launch(test: dict):
     # Load base parameters from config file
     p = TestParameters().load_from_yaml(BASE_CONFIG_FILE)
     # Adapt parameters
-    p.danseParams.DFTsize = test['N']
-    p.danseParams.WOLAovlp = test['WOLA_OVLP']
+    p.danseParams.DFTsize = N
+    p.danseParams.WOLAovlp = WOLA_OVLP
     p.danseParams.broadcastType = test['mode']
     p.danseParams.broadcastLength = test['L']
-    p.wasnParams.nSensorPerNode = test['MK']
+    p.wasnParams.nSensorPerNode = MK
     p.wasnParams.SROperNode = test['SRO']
     p.exportParams.exportFolder = f'{EXPORT_FOLDER}/{test["ref"]}'
     p.exportParams.wavFiles = False
     p.exportParams.filterNorms = False
     p.exportParams.sroEstimPerfPlot = False
-    p.exportParams.acousticScenarioPlot = False
     p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
     p.__post_init__()
 
