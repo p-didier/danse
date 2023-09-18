@@ -25,10 +25,19 @@ def main(dataFolder: str=DATA_FOLDER):
     data = get_data(dataFolder, Ns=NS)
 
     # Plot
-    plot_data(data)
+    fig, _ = plot_data(data)
+
+    # Export
+    fig.savefig(f'{dataFolder}/combined_metrics.pdf', bbox_inches='tight')
+    fig.savefig(f'{dataFolder}/combined_metrics.png', dpi=300, bbox_inches='tight')
+
+    print('Done.')
+
+    return 0
 
 
 def plot_data(data: dict[dict[pd.DataFrame]]):
+    """Plot data."""
 
     nodes = list(data.keys())
     metrics = list(data[nodes[0]].keys())
@@ -36,15 +45,20 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
     nRows = len(metrics)
     nCols = len(nodes)
     fig, axes = plt.subplots(nRows, nCols, sharex=True, sharey='row')
-    fig.set_size_inches(3 * nRows, 2 * nCols)
+    fig.set_size_inches(5 * nRows, 3 * nCols)
     for ii in range(nRows):
         for jj in range(nCols):
-            # if nRows == 1:   # TODO: special cases
-            #     if nCols == 1:
-            #         currAx = axes
-            #     else:
-            #         currAx = axes[jj]
-            currAx = axes[ii, jj]
+            # Axes object selection
+            if nRows == 1 and nCols == 1:
+                currAx = axes
+            elif nRows == 1:
+                currAx = axes[jj]
+            elif nCols == 1:
+                currAx = axes[ii]
+            else:
+                currAx = axes[ii, jj]
+            
+            # Plot
             k = nodes[jj]
             m = metrics[ii]
             currData = data[k][m]
@@ -70,11 +84,16 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
             if 'stoi' in m:
                 currAx.set_ylim([0, 1])
 
-    plt.show()  
+    plt.tight_layout()
+    return fig, axes
 
 
 
-def get_data(dataFolder: str, Ns=512) -> dict[dict[pd.DataFrame]]:
+def get_data(
+        dataFolder: str,
+        Ns=512
+    ) -> dict[dict[pd.DataFrame]]:
+    """Load and organize data from DANSE battery test output folder."""
     data, params = load_data(dataFolder, Ns)
     
     # Create one dataframe for each node
@@ -100,6 +119,7 @@ def get_data(dataFolder: str, Ns=512) -> dict[dict[pd.DataFrame]]:
 
 
 def load_data(dataFolder: str, Ns=512) -> dict:
+    """Load data from DANSE battery test output folder."""
     # List all subfolders
     subfolders = [f for f in Path(dataFolder).iterdir() if f.is_dir()]
     # Loop over subfolders
