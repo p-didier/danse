@@ -1081,13 +1081,6 @@ class DANSEvariables(base.DANSEparameters):
         if self.computeCentralised:
             # Directly fill in centralised processing buffers
             if self.broadcastType == 'wholeChunk':
-                # Make equivalent WOLA by multiplying twice by the analysis
-                # window at the very first broadcast
-                # if self.nBroadcasts[k] == 0:
-                #     self.yLocalCentr[k] = (ykFrame.T * self.winWOLAanalysis ** 2).T
-                #     self.yLocalCentr_s[k] = (ykFrame_s.T * self.winWOLAanalysis ** 2).T
-                #     self.yLocalCentr_n[k] = (ykFrame_n.T * self.winWOLAanalysis ** 2).T
-                # else:
                 self.yLocalCentr[k] = ykFrame
                 self.yLocalCentr_s[k] = ykFrame_s
                 self.yLocalCentr_n[k] = ykFrame_n
@@ -1139,16 +1132,6 @@ class DANSEvariables(base.DANSEparameters):
 
             # Prepare to fill buffers in
             nSamplesToBC = self.Ns  #  <-- /!\ important: use positive `n` to broadcast first `n` samples
-
-            if not np.allclose(
-                self.zLocal[k][:self.Ns],
-                self.yLocalCentr[k][:self.Ns],
-            ) and self.nBroadcasts[k] > 1:
-                stop = 1
-            # self.yLocalCentr[k] = self.zLocal[k][:, np.newaxis]
-            # self.yLocalCentr_s[k] = self.zLocal_s[k][:, np.newaxis]
-            # self.yLocalCentr_n[k] = self.zLocal_n[k][:, np.newaxis]
-
 
         elif self.broadcastType == 'fewSamples':
             # Time-domain broadcasting, `L` samples at a time,
@@ -1376,26 +1359,6 @@ class DANSEvariables(base.DANSEparameters):
         # Account for buffer flags
         skipUpdate = self.compensate_sros(k, tCurr)
 
-        # Force
-        # self.yCentr[k][:, self.i[k], :] =\
-        #     self.yTilde[k][:, self.i[k], :]
-        # self.yCentr_s[k][:, self.i[k], :] =\
-        #     self.yTilde_s[k][:, self.i[k], :]
-        # self.yCentr_n[k][:, self.i[k], :] =\
-        #     self.yTilde_n[k][:, self.i[k], :]
-        # self.yHatCentr[k][:, self.i[k], :] =\
-        #     self.yTildeHat[k][:, self.i[k], :]
-        # self.yHatCentr_s[k][:, self.i[k], :] =\
-        #     self.yTildeHat_s[k][:, self.i[k], :]
-        # self.yHatCentr_n[k][:, self.i[k], :] =\
-        #     self.yTildeHat_n[k][:, self.i[k], :]
-
-        if not np.allclose(
-            self.yTilde[k][:, self.i[k], :],
-            self.yCentr[k][:, self.i[k], :]
-        ): 
-            stop = 1
-        
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
         
@@ -1633,22 +1596,26 @@ class DANSEvariables(base.DANSEparameters):
             **kwargs
         )
         # Build full available observation vector
-        if k == 0:
-            yCentrCurr = np.concatenate((yLocalCurr, self.yc[k]), axis=1)
-            yCentrCurr_s = np.concatenate((yLocalCurr_s, self.yc_s[k]), axis=1)
-            yCentrCurr_n = np.concatenate((yLocalCurr_n, self.yc_n[k]), axis=1)
-        elif k == self.nNodes - 1:
-            yCentrCurr = np.concatenate((self.yc[k], yLocalCurr), axis=1)
-            yCentrCurr_s = np.concatenate((self.yc_s[k], yLocalCurr_s), axis=1)
-            yCentrCurr_n = np.concatenate((self.yc_n[k], yLocalCurr_n), axis=1)
-        else:
-            yCentrCurr = np.empty((self.DFTsize, 0))
-            yCentrCurr_s = np.empty((self.DFTsize, 0))
-            yCentrCurr_n = np.empty((self.DFTsize, 0))
-            # First stack the neighbours whose index is smaller than `k`
-            for q in range(k - 1):
-                idxBeg = int(np.sum(self.nSensorPerNode[:q]))
-                idxEnd = int(np.sum(self.nSensorPerNode[:(q + 1)]))
+        yCentrCurr = np.empty((self.DFTsize, 0))
+        yCentrCurr_s = np.empty((self.DFTsize, 0))
+        yCentrCurr_n = np.empty((self.DFTsize, 0))
+        nSensorsNeighborsOfK = [self.nSensorPerNode[q] for q in range(self.nNodes) if q != k]
+        nNeighboursCovered = 0
+        for ii in range(self.nNodes):
+            if ii == k:
+                # Include local data chunk
+                yCentrCurr = np.concatenate(
+                    (yCentrCurr, yLocalCurr), axis=1
+                )
+                yCentrCurr_s = np.concatenate(
+                    (yCentrCurr_s, yLocalCurr_s), axis=1
+                )
+                yCentrCurr_n = np.concatenate(
+                    (yCentrCurr_n, yLocalCurr_n), axis=1
+                )
+            else:
+                idxBeg = int(np.sum(nSensorsNeighborsOfK[:nNeighboursCovered]))
+                idxEnd = int(np.sum(nSensorsNeighborsOfK[:(nNeighboursCovered + 1)]))
                 yCentrCurr = np.concatenate(
                     (yCentrCurr, self.yc[k][:, idxBeg:idxEnd]), axis=1
                 )
@@ -1658,24 +1625,8 @@ class DANSEvariables(base.DANSEparameters):
                 yCentrCurr_n = np.concatenate(
                     (yCentrCurr_n, self.yc_n[k][:, idxBeg:idxEnd]), axis=1
                 )
-            # Then include local data chunk
-            yCentrCurr = np.concatenate((yCentrCurr, yLocalCurr), axis=1)
-            yCentrCurr_s = np.concatenate((yCentrCurr_s, yLocalCurr_s), axis=1)
-            yCentrCurr_n = np.concatenate((yCentrCurr_n, yLocalCurr_n), axis=1)
-            # Finally stack the neighbours whose index is larger than `k`
-            for q in range(k + 1, self.nNodes):
-                idxBeg = int(np.sum(self.nSensorPerNode[:q]))
-                idxEnd = int(np.sum(self.nSensorPerNode[:(q + 1)]))
-                yCentrCurr = np.concatenate(
-                    (yCentrCurr, self.yc[k][:, idxBeg:idxEnd]), axis=1
-                )
-                yCentrCurr_s = np.concatenate(
-                    (yCentrCurr_s, self.yc_s[k][:, idxBeg:idxEnd]), axis=1
-                )
-                yCentrCurr_n = np.concatenate(
-                    (yCentrCurr_n, self.yc_n[k][:, idxBeg:idxEnd]), axis=1
-                )
-
+                nNeighboursCovered += 1
+        
         self.yCentr[k][:, self.i[k], :] = yCentrCurr
         self.yCentr_s[k][:, self.i[k], :] = yCentrCurr_s
         self.yCentr_n[k][:, self.i[k], :] = yCentrCurr_n
@@ -1893,9 +1844,9 @@ class DANSEvariables(base.DANSEparameters):
             for q in range(self.nNodes):
                 if q != k:
                     # Centralised indices
-                    if k < q:
+                    if q > k:
                         idxQforKcentr = q - 1
-                    elif k > q:
+                    elif q < k:
                         idxQforKcentr = q
                     
                     Bq = len(self.yBufferCentr[k][idxQforKcentr])  # buffer size for neighbour `q`
