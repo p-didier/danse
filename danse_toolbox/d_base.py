@@ -197,6 +197,7 @@ class DANSEparameters(Hyperparameters):
         # DANSE filters at nodes with only one sensor, leave them as is.
     # ---- SROs
     compensateSROs: bool = False    # if True, compensate for SROs
+    includeFSDflags: bool = True    # if True, include flags for FSDs
     estimateSROs: str = 'Oracle'    # SRO estimation method.
         # If 'Oracle', no estimation: using oracle if `compensateSROs == True`.
         # If "CohDrift", use coherence-drift method (see [3]).

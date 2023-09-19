@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230915_tests/wTildeExt_on/test3_Tz_every1s_Leq1 # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230919_tests/fewSamples_centr/_ # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
@@ -15,8 +15,8 @@ danseParams:
   noFusionAtSingleSensorNodes: true
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
-  performGEVD: true
-  # performGEVD: false
+  # performGEVD: true
+  performGEVD: false
   simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
@@ -42,18 +42,20 @@ danseParams:
     printout_profiler: false
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
-  startComputeMetricsAt: after_5s
+  # startComputeMetricsAt: after_5s
   # startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
-  # startComputeMetricsAt: after_200ms
+  startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
-  # broadcastType: wholeChunk
-  broadcastType: fewSamples
+  broadcastType: wholeChunk
+  # broadcastType: fewSamples
   broadcastLength: 1   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
   # broadcastLength: 2
   efficientSpSBC: true
   # efficientSpSBC: false
   upTDfilterEvery: 1.
+  #
+  # compensateSROs: true
   compensateSROs: false
   estimateSROs: Oracle
   # estimateSROs: CohDrift
@@ -82,15 +84,15 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 10  # [s]
+  sigDur: 5  # [s]
   # selfnoiseSNR: 999999999  # [dB]
   selfnoiseSNR: 15  # [dB]
   layoutType: random
   # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  # nSensorPerNode: '[1, 1]'
-  nSensorPerNode: '[2, 2]'
+  nSensorPerNode: '[1, 1]'
+  # nSensorPerNode: '[2, 2]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
   # nSensorPerNode: '[1, 2, 3]'
