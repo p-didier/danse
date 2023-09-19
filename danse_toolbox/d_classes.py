@@ -1211,39 +1211,32 @@ class DANSEvariables(base.DANSEparameters):
             of local compressed signals. If negative, broadcast last `n`
             samples of local compressed signals.
         """
-
-        zLocalK = self.zLocal[k]
-        zLocalK_s = self.zLocal_s[k]  # - speech-only for SNR computation
-        zLocalK_n = self.zLocal_n[k]  # - noise-only for SNR computation
         if n < 0:
             # Only broadcast the `n` last samples of local compressed signals
-            zLocalChunk = zLocalK[n:]
-            zLocalChunk_s = zLocalK_s[n:]
-            zLocalChunk_n = zLocalK_n[n:]
+            zLocalChunk = self.zLocal[k][n:]
+            zLocalChunk_s = self.zLocal_s[k][n:]
+            zLocalChunk_n = self.zLocal_n[k][n:]
         elif n > 0:
             # Only broadcast the `n` first samples of local compressed signals
-            zLocalChunk = zLocalK[:n]
-            zLocalChunk_s = zLocalK_s[:n]
-            zLocalChunk_n = zLocalK_n[:n]
+            zLocalChunk = self.zLocal[k][:n]
+            zLocalChunk_s = self.zLocal_s[k][:n]
+            zLocalChunk_n = self.zLocal_n[k][:n]
         else:
             # No broadcasting
             zLocalChunk = np.array([])
             zLocalChunk_s = np.array([])
             zLocalChunk_n = np.array([])
         if self.computeCentralised:
-            yLocalCentrK = self.yLocalCentr[k]
-            yLocalCentrK_s = self.yLocalCentr_s[k]  # - speech-only for SNR computation
-            yLocalCentrK_n = self.yLocalCentr_n[k]  # - noise-only for SNR computation
             if n < 0:
                 # Only broadcast the `n` last samples of local signals
-                yLocalCentrChunk = yLocalCentrK[n:, :]
-                yLocalCentrChunk_s = yLocalCentrK_s[n:, :]
-                yLocalCentrChunk_n = yLocalCentrK_n[n:, :]
+                yLocalCentrChunk = self.yLocalCentr[k][n:, :]
+                yLocalCentrChunk_s = self.yLocalCentr_s[k][n:, :]
+                yLocalCentrChunk_n = self.yLocalCentr_n[k][n:, :]
             elif n > 0:
                 # Only broadcast the `n` first samples of local signals
-                yLocalCentrChunk = yLocalCentrK[:n, :]
-                yLocalCentrChunk_s = yLocalCentrK_s[:n, :]
-                yLocalCentrChunk_n = yLocalCentrK_n[:n, :]
+                yLocalCentrChunk = self.yLocalCentr[k][:n, :]
+                yLocalCentrChunk_s = self.yLocalCentr_s[k][:n, :]
+                yLocalCentrChunk_n = self.yLocalCentr_n[k][:n, :]
             else:
                 yLocalCentrChunk = np.array([])
                 yLocalCentrChunk_s = np.array([])
@@ -1253,7 +1246,8 @@ class DANSEvariables(base.DANSEparameters):
         for idxq in range(len(self.neighbors[k])):
             # Network-wide index of node `q` (one of node `k`'s neighbors)
             q = self.neighbors[k][idxq]
-            idxKforNeighborQ = [i for i, x in enumerate(self.neighbors[q]) if x == k]
+            idxKforNeighborQ = [i for i, x in enumerate(self.neighbors[q])\
+                                if x == k]
             # Node `k`'s "neighbor index", from node `q`'s perspective
             idxKforNeighborQ = idxKforNeighborQ[0]
             # Fill in buffers
@@ -1269,27 +1263,28 @@ class DANSEvariables(base.DANSEparameters):
                 (self.zBuffer_n[q][idxKforNeighborQ], zLocalChunk_n),
                 axis=0
             )
-            if self.computeCentralised:
-                for q in range(self.nNodes):
-                    if q != k:
-                        # Centralised indices
-                        if k < q:
-                            idxQforKcentr = k
-                        elif k > q:
-                            idxQforKcentr = k - 1
+        
+        if self.computeCentralised:
+            for q in range(self.nNodes):
+                if q != k:
+                    # Centralised indices
+                    if k < q:
+                        idxKforNeighborQ = k
+                    elif k > q:
+                        idxKforNeighborQ = k - 1
 
-                        self.yBufferCentr[q][idxQforKcentr] = np.concatenate(
-                            (self.yBufferCentr[q][idxQforKcentr], yLocalCentrChunk),
-                            axis=0
-                        )
-                        self.yBufferCentr_s[q][idxQforKcentr] = np.concatenate(
-                            (self.yBufferCentr_s[q][idxQforKcentr], yLocalCentrChunk_s),
-                            axis=0
-                        )
-                        self.yBufferCentr_n[q][idxQforKcentr] = np.concatenate(
-                            (self.yBufferCentr_n[q][idxQforKcentr], yLocalCentrChunk_n),
-                            axis=0
-                        )
+                    self.yBufferCentr[q][idxKforNeighborQ] = np.concatenate(
+                        (self.yBufferCentr[q][idxKforNeighborQ], yLocalCentrChunk),
+                        axis=0
+                    )
+                    self.yBufferCentr_s[q][idxKforNeighborQ] = np.concatenate(
+                        (self.yBufferCentr_s[q][idxKforNeighborQ], yLocalCentrChunk_s),
+                        axis=0
+                    )
+                    self.yBufferCentr_n[q][idxKforNeighborQ] = np.concatenate(
+                        (self.yBufferCentr_n[q][idxKforNeighborQ], yLocalCentrChunk_n),
+                        axis=0
+                    )
 
         if 0:
             fig, axes = plt.subplots(1,1)
@@ -1600,10 +1595,10 @@ class DANSEvariables(base.DANSEparameters):
         yCentrCurr_s = np.empty((self.DFTsize, 0))
         yCentrCurr_n = np.empty((self.DFTsize, 0))
         nSensorsNeighborsOfK = [self.nSensorPerNode[q] for q in range(self.nNodes) if q != k]
-        nNeighboursCovered = 0
-        for ii in range(self.nNodes):
-            if ii == k:
-                # Include local data chunk
+        nNeighboursCovered = 0  # number of neighbors of node `k` already covered
+        for q in range(self.nNodes):
+            if q == k:
+                # Include (possibly multichannel) local data chunk
                 yCentrCurr = np.concatenate(
                     (yCentrCurr, yLocalCurr), axis=1
                 )
@@ -1614,6 +1609,7 @@ class DANSEvariables(base.DANSEparameters):
                     (yCentrCurr_n, yLocalCurr_n), axis=1
                 )
             else:
+                # Include (possibly multichannel) data chunk from neighbor `q`
                 idxBeg = int(np.sum(nSensorsNeighborsOfK[:nNeighboursCovered]))
                 idxEnd = int(np.sum(nSensorsNeighborsOfK[:(nNeighboursCovered + 1)]))
                 yCentrCurr = np.concatenate(
