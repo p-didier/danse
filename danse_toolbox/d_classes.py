@@ -480,10 +480,13 @@ class DANSEvariables(base.DANSEparameters):
         Initialize `DANSEvariables` object based on `wasn`
         list of `Node` objects.
         """
-        nNodes = len(wasn)  # number of nodes in WASN
         # Sampling frequencies of all nodes
         self.fs = np.array([node.fs for node in wasn])
         nSensorsTotal = sum([node.nSensors for node in wasn])
+        self.neighborsCentr = [
+            [self.nSensorPerNode[q] for q in range(self.nNodes) if q != k]\
+                for k in range(self.nNodes)
+                ]
         self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
@@ -496,7 +499,7 @@ class DANSEvariables(base.DANSEparameters):
         avgProdResiduals = []   # average residuals product coming out of
                                 # filter-shift processing (SRO estimation).
         bufferFlags = []
-        dimYTilde = np.zeros(nNodes, dtype=int)   # dimension of \tilde{y}_k
+        dimYTilde = np.zeros(self.nNodes, dtype=int)   # dimension of \tilde{y}_k
         phaseShiftFactors = []
         Rnncentr = []   # autocorrelation matrix when VAD=0 [centralised]
         Ryycentr = []   # autocorrelation matrix when VAD=1 [centralised]
@@ -509,7 +512,7 @@ class DANSEvariables(base.DANSEparameters):
             Rzz = []    # autocorrelation matrix when VAD=1, only fused signals
         SROsEstimates = []  # SRO estimates per node (for each neighbor)
         SROsResiduals = []  # SRO residuals per node (for each neighbor)
-        t = np.zeros((len(wasn[0].timeStamps), nNodes))  # time stamps
+        t = np.zeros((len(wasn[0].timeStamps), self.nNodes))  # time stamps
         wIR = []
         wCentr = []
         wLocal = []
@@ -553,7 +556,7 @@ class DANSEvariables(base.DANSEparameters):
                     (self.nPosFreqs, nSensorsTotal, nSensorsTotal), rng, *args
                 )
 
-        for k in range(nNodes):
+        for k in range(self.nNodes):
             # Set number of received signal channels, on top of local signals
             if self.tidanseFlag:
                 nReceivedChannels = 1
@@ -709,7 +712,7 @@ class DANSEvariables(base.DANSEparameters):
             zBuffer.append([np.array([]) for _ in range(nReceivedChannels)])
             zLocal.append(np.array([]))
             yc.append(np.empty((self.DFTsize, 0), dtype=float))
-            allNodeIndices = [int(i) for i in np.arange(nNodes)]
+            allNodeIndices = [int(i) for i in np.arange(self.nNodes)]
             yBufferCentr.append([np.empty((0, wasn[q].nSensors)) for q in allNodeIndices if q != k])
             yLocalCentr.append(np.array([]))
 
@@ -717,7 +720,7 @@ class DANSEvariables(base.DANSEparameters):
         self.avgProdResiduals = avgProdResiduals
         self.bufferFlags = bufferFlags
         self.d = np.zeros(
-            (wasn[self.referenceSensor].data.shape[0], nNodes)
+            (wasn[self.referenceSensor].data.shape[0], self.nNodes)
         )
         self.d_s = np.zeros_like(self.d)
         self.d_n = np.zeros_like(self.d)
@@ -727,10 +730,10 @@ class DANSEvariables(base.DANSEparameters):
         self.dLocal = np.zeros_like(self.d)
         self.dLocal_s = np.zeros_like(self.d)
         self.dLocal_n = np.zeros_like(self.d)
-        self.i = np.zeros(nNodes, dtype=int)
+        self.i = np.zeros(self.nNodes, dtype=int)
         self.dimYTilde = dimYTilde
         self.dhat = np.zeros(
-            (self.nPosFreqs, self.nIter, nNodes), dtype=complex
+            (self.nPosFreqs, self.nIter, self.nNodes), dtype=complex
         )
         self.dhat_s = np.zeros_like(self.dhat)
         self.dhat_n = np.zeros_like(self.dhat)
@@ -745,25 +748,25 @@ class DANSEvariables(base.DANSEparameters):
         self.expAvgBeta = [node.beta for node in wasn]
         self.expAvgBetaWext = [node.betaWext for node in wasn]
         self.firstDANSEupdateRefSensor = None  # init
-        self.flagIterations = [[] for _ in range(nNodes)]
-        self.flagInstants = [[] for _ in range(nNodes)]
+        self.flagIterations = [[] for _ in range(self.nNodes)]
+        self.flagInstants = [[] for _ in range(self.nNodes)]
         self.fullVAD = [node.vadCombined for node in wasn]
         self.idxBegChunk = None
         self.idxEndChunk = None
-        self.lastExtFiltUp = np.zeros(nNodes)
-        self.nBroadcasts = np.zeros(nNodes)
-        self.nCentrFilterUps = np.zeros(nNodes)
-        self.nLocalFilterUps = np.zeros(nNodes)
-        self.nInternalFilterUps = np.zeros(nNodes)
+        self.lastExtFiltUp = np.zeros(self.nNodes)
+        self.nBroadcasts = np.zeros(self.nNodes)
+        self.nCentrFilterUps = np.zeros(self.nNodes)
+        self.nLocalFilterUps = np.zeros(self.nNodes)
+        self.nInternalFilterUps = np.zeros(self.nNodes)
         self.nLocalMic = [node.data.shape[-1] for node in wasn]
-        self.numUpdatesRyy = np.zeros(nNodes, dtype=int)
-        self.numUpdatesRnn = np.zeros(nNodes, dtype=int)
+        self.numUpdatesRyy = np.zeros(self.nNodes, dtype=int)
+        self.numUpdatesRnn = np.zeros(self.nNodes, dtype=int)
         self.phaseShiftFactors = phaseShiftFactors
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
-        # self.lastBroadcastInstant = np.full(nNodes, fill_value=-1, dtype=float)
-        self.lastBroadcastInstant = np.zeros(nNodes)
-        self.lastUpdateInstant = np.zeros(nNodes)
-        self.lastTDfilterUp = np.zeros(nNodes)
+        # self.lastBroadcastInstant = np.full(self.nNodes, fill_value=-1, dtype=float)
+        self.lastBroadcastInstant = np.zeros(self.nNodes)
+        self.lastUpdateInstant = np.zeros(self.nNodes)
+        self.lastTDfilterUp = np.zeros(self.nNodes)
         self.Rnncentr = Rnncentr
         self.Ryycentr = Ryycentr
         self.Rnnlocal = Rnnlocal
@@ -776,13 +779,13 @@ class DANSEvariables(base.DANSEparameters):
         self.SROsppm = np.array([node.sro for node in wasn])
         self.SROsEstimates = SROsEstimates
         self.SROsResiduals = SROsResiduals
-        self.startUpdates = np.full(shape=(nNodes,), fill_value=False)
-        self.startUpdatesCentr = np.full(shape=(nNodes,), fill_value=False)
-        self.startUpdatesLocal = np.full(shape=(nNodes,), fill_value=False)
+        self.startUpdates = np.full(shape=(self.nNodes,), fill_value=False)
+        self.startUpdatesCentr = np.full(shape=(self.nNodes,), fill_value=False)
+        self.startUpdatesLocal = np.full(shape=(self.nNodes,), fill_value=False)
         self.timeInstants = t
-        self.tStartForMetrics = np.full(shape=(nNodes,), fill_value=None)
-        self.tStartForMetricsCentr = np.full(shape=(nNodes,), fill_value=None)
-        self.tStartForMetricsLocal = np.full(shape=(nNodes,), fill_value=None)
+        self.tStartForMetrics = np.full(shape=(self.nNodes,), fill_value=None)
+        self.tStartForMetricsCentr = np.full(shape=(self.nNodes,), fill_value=None)
+        self.tStartForMetricsLocal = np.full(shape=(self.nNodes,), fill_value=None)
         self.upstreamNeighbors = [node.upstreamNeighborsIdx for node in wasn]
         self.yBufferCentr = yBufferCentr
         self.yBufferCentr_s = copy.deepcopy(yBufferCentr)
@@ -823,9 +826,9 @@ class DANSEvariables(base.DANSEparameters):
         self.z = z
         self.z_s = copy.deepcopy(z)
         self.z_n = copy.deepcopy(z)
-        self.zFullTD = [np.array([]) for _ in range(nNodes)]
-        self.zFullTD_s = [np.array([]) for _ in range(nNodes)]
-        self.zFullTD_n = [np.array([]) for _ in range(nNodes)]
+        self.zFullTD = [np.array([]) for _ in range(self.nNodes)]
+        self.zFullTD_s = [np.array([]) for _ in range(self.nNodes)]
+        self.zFullTD_n = [np.array([]) for _ in range(self.nNodes)]
         self.zBuffer = zBuffer
         self.zBuffer_s = copy.deepcopy(zBuffer)
         self.zBuffer_n = copy.deepcopy(zBuffer)
@@ -866,7 +869,7 @@ class DANSEvariables(base.DANSEparameters):
         self.yinSTFT = []
         self.yinSTFT_s = []  # clean speech
         self.yinSTFT_n = []  # clean noise
-        for k in range(nNodes):
+        for k in range(self.nNodes):
             kwargs = dict(
                 fs=wasn[k].fs,
                 win=self.winWOLAanalysis,
@@ -896,10 +899,10 @@ class DANSEvariables(base.DANSEparameters):
         if 'batch' in self.simType or self.covMatInitType == 'batch_estimates':
             # Compute batch spatial covariance matrices for local and
             # centralized processing
-            self.Ryylocal = [None for _ in range(nNodes)]
-            self.Rnnlocal = [None for _ in range(nNodes)]
-            self.Ryycentr = [None for _ in range(nNodes)]
-            self.Rnncentr = [None for _ in range(nNodes)]
+            self.Ryylocal = [None for _ in range(self.nNodes)]
+            self.Rnnlocal = [None for _ in range(self.nNodes)]
+            self.Ryycentr = [None for _ in range(self.nNodes)]
+            self.Rnncentr = [None for _ in range(self.nNodes)]
             for k in range(self.nNodes):
                 self.Ryylocal[k], self.Rnnlocal[k] = update_covmats_batch(
                     self.yinSTFT[k],  # use local pre-computed STFTs
@@ -927,8 +930,8 @@ class DANSEvariables(base.DANSEparameters):
             self.mseCostOnline_l = copy.deepcopy(self.mseCostOnline)
 
         # For debugging purposes
-        initCNlist = [np.empty((self.nPosFreqs, 0)) for _ in range(nNodes)]
-        initIterCNlist = [[] for _ in range(nNodes)]
+        initCNlist = [np.empty((self.nPosFreqs, 0)) for _ in range(self.nNodes)]
+        initIterCNlist = [[] for _ in range(self.nNodes)]
         self.condNumbers = ConditionNumbers(
             cn_RyyDANSE=copy.deepcopy(initCNlist),
             iter_cn_RyyDANSE=copy.deepcopy(initIterCNlist),
@@ -941,9 +944,9 @@ class DANSEvariables(base.DANSEparameters):
         # Inform about which condition numbers are to be computed
         self.condNumbers.init(self.computeLocal, self.computeCentralised)
         # Information about the last saved condition number
-        self.lastCondNumberSaveRyyTilde = [-1 for _ in range(nNodes)]
-        self.lastCondNumberSaveRyyLocal = [-1 for _ in range(nNodes)]
-        self.lastCondNumberSaveRyyCentr = [-1 for _ in range(nNodes)]
+        self.lastCondNumberSaveRyyTilde = [-1 for _ in range(self.nNodes)]
+        self.lastCondNumberSaveRyyLocal = [-1 for _ in range(self.nNodes)]
+        self.lastCondNumberSaveRyyCentr = [-1 for _ in range(self.nNodes)]
 
         return self
     
@@ -1085,9 +1088,26 @@ class DANSEvariables(base.DANSEparameters):
                 self.yLocalCentr_s[k] = ykFrame_s
                 self.yLocalCentr_n[k] = ykFrame_n
             elif self.broadcastType == 'fewSamples':
-                self.yLocalCentr[k] = ykFrame[:self.broadcastLength, :]
-                self.yLocalCentr_s[k] = ykFrame_s[:self.broadcastLength, :]
-                self.yLocalCentr_n[k] = ykFrame_n[:self.broadcastLength, :]
+                if self.efficientSpSBC:
+                    # Count samples recorded since the last broadcast at node
+                    # `k` and adapt the "broadcast length" variable
+                    # used in `danse_compression_few_samples` and
+                    # `fill_buffers`.
+                    nRecordedSamplesSinceLastBroadcast = np.sum(
+                        (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
+                        (self.timeInstants[:, k] <= tCurr)
+                    ) # NB: using `&` instead of `and` for element-wise logical AND
+                    currL = int(self.broadcastLength * np.floor(
+                        nRecordedSamplesSinceLastBroadcast / self.broadcastLength
+                    ))
+                    self.yLocalCentr[k] = ykFrame[-currL:, :]
+                    self.yLocalCentr_s[k] = ykFrame_s[-currL:, :]
+                    self.yLocalCentr_n[k] = ykFrame_n[-currL:, :]
+                else:
+                    raise NotImplementedError('[PD~20.09.2023-9AM] Not tested yet')
+                    self.yLocalCentr[k] = ykFrame[:self.broadcastLength, :]
+                    self.yLocalCentr_s[k] = ykFrame_s[:self.broadcastLength, :]
+                    self.yLocalCentr_n[k] = ykFrame_n[:self.broadcastLength, :]
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local signals samples.')
@@ -1150,8 +1170,8 @@ class DANSEvariables(base.DANSEparameters):
             # If "efficient" events for broadcast
             # (broadcast instants are aggregated when possible):
             if self.efficientSpSBC:
-                # Count samples recorded since the last broadcast at node `k`
-                # and adapt the "broadcast length" variable
+                # Count samples recorded since the last broadcast at node
+                # `k` and adapt the "broadcast length" variable
                 # used in `danse_compression_few_samples` and
                 # `fill_buffers`.
                 nRecordedSamplesSinceLastBroadcast = np.sum(
@@ -1594,7 +1614,6 @@ class DANSEvariables(base.DANSEparameters):
         yCentrCurr = np.empty((self.DFTsize, 0))
         yCentrCurr_s = np.empty((self.DFTsize, 0))
         yCentrCurr_n = np.empty((self.DFTsize, 0))
-        nSensorsNeighborsOfK = [self.nSensorPerNode[q] for q in range(self.nNodes) if q != k]
         nNeighboursCovered = 0  # number of neighbors of node `k` already covered
         for q in range(self.nNodes):
             if q == k:
@@ -1610,8 +1629,8 @@ class DANSEvariables(base.DANSEparameters):
                 )
             else:
                 # Include (possibly multichannel) data chunk from neighbor `q`
-                idxBeg = int(np.sum(nSensorsNeighborsOfK[:nNeighboursCovered]))
-                idxEnd = int(np.sum(nSensorsNeighborsOfK[:(nNeighboursCovered + 1)]))
+                idxBeg = int(np.sum(self.neighborsCentr[k][:nNeighboursCovered]))
+                idxEnd = int(np.sum(self.neighborsCentr[k][:(nNeighboursCovered + 1)]))
                 yCentrCurr = np.concatenate(
                     (yCentrCurr, self.yc[k][:, idxBeg:idxEnd]), axis=1
                 )
@@ -1622,6 +1641,19 @@ class DANSEvariables(base.DANSEparameters):
                     (yCentrCurr_n, self.yc_n[k][:, idxBeg:idxEnd]), axis=1
                 )
                 nNeighboursCovered += 1
+
+        # yCentrCurr, _, _ = base.local_chunk_for_update(
+        #     self.yinStacked,
+        #     **kwargs
+        # )
+        # yCentrCurr_s, _, _ = base.local_chunk_for_update(
+        #     self.yinStacked_s,
+        #     **kwargs
+        # )
+        # yCentrCurr_n, _, _ = base.local_chunk_for_update(
+        #     self.yinStacked_n,
+        #     **kwargs
+        # )
         
         self.yCentr[k][:, self.i[k], :] = yCentrCurr
         self.yCentr_s[k][:, self.i[k], :] = yCentrCurr_s

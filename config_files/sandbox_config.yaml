@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230919_tests/fewSamples_centr/wc_Mk123_test # folder to export outputs
+  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230920_tests/centrBC/Leq1_srosOn_baseline # folder to export outputs
   # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
@@ -47,8 +47,8 @@ danseParams:
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
-  broadcastType: wholeChunk
-  # broadcastType: fewSamples
+  # broadcastType: wholeChunk
+  broadcastType: fewSamples
   broadcastLength: 1   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
   # broadcastLength: 2
   efficientSpSBC: true
@@ -91,18 +91,18 @@ wasnParams:
   # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  # nSensorPerNode: '[1, 1]'
+  nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[2, 2]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
-  nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[1, 2, 3]'
   #
   snrBasis: at_mic_0
   snr: 5
   #
-  SROperNode: '[0]'  # [PPM]
+  # SROperNode: '[0]'  # [PPM]
   # SROperNode: '[0, 40]'  # [PPM]
-  # SROperNode: '[0, 200]'  # [PPM]
+  SROperNode: '[0, 200]'  # [PPM]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   #
   signalType: from_file
