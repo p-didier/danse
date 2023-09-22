@@ -232,6 +232,9 @@ class WASNparameters(AcousticScenarioParameters):
             >> # sensor(s) per node: {self.nSensorPerNode};
             >> Topology: ad-hoc.
             """)
+        # Basic checks
+        if self.minDistToWalls >= np.amin(self.rd) / 3:
+            raise ValueError('`minDistToWalls` must be smaller than the minimum room dimension divided by 3.')
 
         def _dim_check(var, nNodes, printoutRef):
             """Helper function -- checks the dimensionality of a variable."""

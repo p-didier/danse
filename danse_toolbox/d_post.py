@@ -2324,9 +2324,6 @@ def export_danse_outputs(
             fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.pdf')
             plt.close(fig)
         elif p.danseParams.simType == 'online' and p.exportParams.mseBatchPerfPlot:
-            # fig = out.plot_framewise_mse_online_cost(wasn=wasnObj.wasn)
-            # fig.savefig(f'{p.exportParams.exportFolder}/mse_cost.png', dpi=300)
-            # fig.savefig(f'{p.exportParams.exportFolder}/mse_cost.pdf')
             fig = out.plot_batch_cost_at_each_update()
             fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.png', dpi=300)
             fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.pdf')

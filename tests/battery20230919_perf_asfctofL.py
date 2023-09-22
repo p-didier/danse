@@ -23,6 +23,9 @@ L_TO_TEST = list(get_divisors(N * (1 - WOLA_OVLP)))
 # SROs to test
 SROS = [0, 200]  # [PPM]
 
+# Booleans
+SKIP_ALREADY_RUN_TESTS = True
+
 # General parameters
 EXPORT_FOLDER = './danse/out/battery20230919_perf_asfctofL'
 
@@ -39,6 +42,11 @@ def main():
         print('----------------------------------------')
         t = time.time()
         # blockPrint()
+        # Check if test has already been run
+        if SKIP_ALREADY_RUN_TESTS and\
+            os.path.exists(f"{EXPORT_FOLDER}/{test['ref']}/metrics.pkl"):
+            print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) already run. Skipping.")
+            continue
         launch(test)  # launch test
         # enablePrint()
         print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) completed in {time.time() - t} s.\n")

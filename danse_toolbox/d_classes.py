@@ -486,7 +486,7 @@ class DANSEvariables(base.DANSEparameters):
         self.neighborsCentr = [
             [self.nSensorPerNode[q] for q in range(self.nNodes) if q != k]\
                 for k in range(self.nNodes)
-                ]
+        ]  # number of sensors of neighbors of each node in the centralized case
         self.nPosFreqs = int(self.DFTsize // 2 + 1)  # number of >0 freqs.
         # Expected number of DANSE iterations (==  # of signal frames)
         self.nIter = int((wasn[0].data.shape[0] - self.DFTsize) / self.Ns) + 1
@@ -498,9 +498,12 @@ class DANSEvariables(base.DANSEparameters):
 
         avgProdResiduals = []   # average residuals product coming out of
                                 # filter-shift processing (SRO estimation).
+        avgProdResidualsCentr = []  # same for centralised processing
         bufferFlags = []
+        bufferFlagsCentr = []
         dimYTilde = np.zeros(self.nNodes, dtype=int)   # dimension of \tilde{y}_k
         phaseShiftFactors = []
+        phaseShiftFactorsCentr = []
         Rnncentr = []   # autocorrelation matrix when VAD=0 [centralised]
         Ryycentr = []   # autocorrelation matrix when VAD=1 [centralised]
         Rnnlocal = []   # autocorrelation matrix when VAD=0 [local]
@@ -510,8 +513,10 @@ class DANSEvariables(base.DANSEparameters):
         if not self.seqNUflag:  # simultaneous or asynchronous node-updating
             Rznzn = []    # autocorrelation matrix when VAD=0, only fused signals
             Rzz = []    # autocorrelation matrix when VAD=1, only fused signals
-        SROsEstimates = []  # SRO estimates per node (for each neighbor)
-        SROsResiduals = []  # SRO residuals per node (for each neighbor)
+        SROsEstimates = []  # SRO estimates per node (for each neighbor in DANSE)
+        SROsResiduals = []  # SRO residuals per node (for each neighbor in DANSE)
+        SROsEstimatesCentr = []  # SRO estimates per node (for the centralised case)
+        SROsResidualsCentr = []  # SRO residuals per node (for the centralised case)
         t = np.zeros((len(wasn[0].timeStamps), self.nNodes))  # time stamps
         wIR = []
         wCentr = []
@@ -520,9 +525,12 @@ class DANSEvariables(base.DANSEparameters):
         wTildeExt = []
         wTildeExtTarget = []
         yyH = []
+        yyHcentr = []
+        yyHcentrUncomp = []
         yyHuncomp = []
         yCentr = []
         yHatCentr = []
+        yHatCentrUncomp = []
         yHatLocal = []
         yLocal = []
         yTilde = []
@@ -569,14 +577,23 @@ class DANSEvariables(base.DANSEparameters):
             elif self.compensationStrategy == 'network-wide':
                 nSROestimates = 1
             avgProdResiduals.append(np.zeros(
-                (self.DFTsize, nSROestimates), dtype=complex
+                (self.DFTsize, nSROestimates),
+                dtype=complex
+            ))
+            avgProdResidualsCentr.append(np.zeros(
+                (self.DFTsize, self.nNodes),
+                dtype=complex
             ))
             # init all buffer flags at 0 (assuming no over- or under-flow)
             bufferFlags.append(np.zeros((self.nIter, len(wasn[k].neighborsIdx))))    
+            bufferFlagsCentr.append(np.zeros((self.nIter, self.nNodes)))    
             # initiate phase shift factors as 0's (no phase shift)
             phaseShiftFactors.append(np.zeros(dimYTilde[k]))
+            phaseShiftFactorsCentr.append(np.zeros(nSensorsTotal))
             SROsEstimates.append(np.zeros((self.nIter, nSROestimates)))
             SROsResiduals.append(np.zeros((self.nIter, nSROestimates)))
+            SROsEstimatesCentr.append(np.zeros((self.nIter, self.nNodes)))
+            SROsResidualsCentr.append(np.zeros((self.nIter, self.nNodes)))
             # ------- Covariance matrices initialization -------
             #
             if not self.covMatInitType == 'batch_estimates':
@@ -691,22 +708,50 @@ class DANSEvariables(base.DANSEparameters):
             ))
             #
             yCentr.append(np.zeros(
-                (self.DFTsize, self.nIter, nSensorsTotal)))
+                (self.DFTsize, self.nIter, nSensorsTotal)
+            ))
             yLocal.append(np.zeros(
-                (self.DFTsize, self.nIter, wasn[k].nSensors)))
+                (self.DFTsize, self.nIter, wasn[k].nSensors)
+            ))
             yHatCentr.append(np.zeros(
-                (self.nPosFreqs, self.nIter, nSensorsTotal), dtype=complex))
+                (self.nPosFreqs, self.nIter, nSensorsTotal),
+                dtype=complex
+            ))
+            yHatCentrUncomp.append(np.zeros(
+                (self.nPosFreqs, self.nIter, nSensorsTotal),
+                dtype=complex
+            ))
             yHatLocal.append(np.zeros(
-                (self.nPosFreqs, self.nIter, wasn[k].nSensors), dtype=complex))
-            yTilde.append(np.zeros((self.DFTsize, self.nIter, dimYTilde[k])))
+                (self.nPosFreqs, self.nIter, wasn[k].nSensors),
+                dtype=complex
+            ))
+            yTilde.append(np.zeros(
+                (self.DFTsize, self.nIter, dimYTilde[k])
+            ))
             yTildeHat.append(np.zeros(
-                (self.nPosFreqs, self.nIter, dimYTilde[k]), dtype=complex))
+                (self.nPosFreqs, self.nIter, dimYTilde[k]),
+                dtype=complex
+            ))
             yTildeHatUncomp.append(np.zeros(
-                (self.nPosFreqs, self.nIter, dimYTilde[k]), dtype=complex))
-            yyH.append(np.zeros((self.nIter, self.nPosFreqs, dimYTilde[k],
-                dimYTilde[k]), dtype=complex))
-            yyHuncomp.append(np.zeros((self.nIter, self.nPosFreqs,
-                dimYTilde[k], dimYTilde[k]), dtype=complex))
+                (self.nPosFreqs, self.nIter, dimYTilde[k]),
+                dtype=complex
+            ))
+            yyH.append(np.zeros(
+                (self.nIter, self.nPosFreqs, dimYTilde[k], dimYTilde[k]),
+                dtype=complex
+            ))
+            yyHcentr.append(np.zeros(
+                (self.nIter, self.nPosFreqs, nSensorsTotal, nSensorsTotal),
+                dtype=complex
+            ))
+            yyHcentrUncomp.append(np.zeros(
+                (self.nIter, self.nPosFreqs, nSensorsTotal, nSensorsTotal),
+                dtype=complex
+            ))
+            yyHuncomp.append(np.zeros(
+                (self.nIter, self.nPosFreqs, dimYTilde[k], dimYTilde[k]),
+                dtype=complex)
+            )
             #
             z.append(np.empty((self.DFTsize, 0), dtype=float))
             zBuffer.append([np.array([]) for _ in range(nReceivedChannels)])
@@ -718,7 +763,9 @@ class DANSEvariables(base.DANSEparameters):
 
         # Create fields
         self.avgProdResiduals = avgProdResiduals
+        self.avgProdResidualsCentr = avgProdResidualsCentr
         self.bufferFlags = bufferFlags
+        self.bufferFlagsCentr = bufferFlagsCentr
         self.d = np.zeros(
             (wasn[self.referenceSensor].data.shape[0], self.nNodes)
         )
@@ -762,6 +809,7 @@ class DANSEvariables(base.DANSEparameters):
         self.numUpdatesRyy = np.zeros(self.nNodes, dtype=int)
         self.numUpdatesRnn = np.zeros(self.nNodes, dtype=int)
         self.phaseShiftFactors = phaseShiftFactors
+        self.phaseShiftFactorsCentr = phaseShiftFactorsCentr
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
         # self.lastBroadcastInstant = np.full(self.nNodes, fill_value=-1, dtype=float)
         self.lastBroadcastInstant = np.zeros(self.nNodes)
@@ -778,7 +826,9 @@ class DANSEvariables(base.DANSEparameters):
             self.Rzz = Rzz
         self.SROsppm = np.array([node.sro for node in wasn])
         self.SROsEstimates = SROsEstimates
+        self.SROsEstimatesCentr = SROsEstimatesCentr
         self.SROsResiduals = SROsResiduals
+        self.SROsResidualsCentr = SROsResidualsCentr
         self.startUpdates = np.full(shape=(self.nNodes,), fill_value=False)
         self.startUpdatesCentr = np.full(shape=(self.nNodes,), fill_value=False)
         self.startUpdatesLocal = np.full(shape=(self.nNodes,), fill_value=False)
@@ -799,6 +849,7 @@ class DANSEvariables(base.DANSEparameters):
         self.yHatCentr = yHatCentr
         self.yHatCentr_s = copy.deepcopy(yHatCentr)
         self.yHatCentr_n = copy.deepcopy(yHatCentr)
+        self.yHatCentrUncomp = yHatCentrUncomp
         self.yLocal = yLocal
         self.yLocal_s = copy.deepcopy(yLocal)
         self.yLocal_n = copy.deepcopy(yLocal)
@@ -816,6 +867,8 @@ class DANSEvariables(base.DANSEparameters):
         self.yTildeHat_n = copy.deepcopy(yTildeHat)
         self.yTildeHatUncomp = yTildeHatUncomp
         self.yyH = yyH
+        self.yyHcentr = yyHcentr
+        self.yyHcentrUncomp = yyHcentrUncomp
         self.yyHuncomp = yyHuncomp
         self.wIR = wIR
         self.wTilde = wTilde
@@ -1338,62 +1391,37 @@ class DANSEvariables(base.DANSEparameters):
 
         # Process buffers
         self.process_incoming_signals_buffers(k, tCurr)
-        # Wipe _local_ buffers for next iteration
-        self.zBuffer[k] = [np.array([])\
-            for _ in range(len(self.neighbors[k]))]
-        self.zBuffer_s[k] = [np.array([])\
-            for _ in range(len(self.neighbors[k]))]  # - speech-only for SNR computation
-        self.zBuffer_n[k] = [np.array([])\
-            for _ in range(len(self.neighbors[k]))]  # - noise-only for SNR computation
-        if self.computeCentralised:
-            allNodeIndices = [int(i) for i in np.arange(self.nNodes)]
-            self.yBufferCentr[k] = [np.empty((0, self.nSensorPerNode[q]))\
-                for q in allNodeIndices if q != k]
-            self.yBufferCentr_s[k] = [np.empty((0, self.nSensorPerNode[q]))\
-                for q in allNodeIndices if q != k]
-            self.yBufferCentr_n[k] = [np.empty((0, self.nSensorPerNode[q]))\
-                for q in allNodeIndices if q != k]
+        self.wipe_local_buffers(k)  # wipe local buffers for next iteration
+
+        # Build observation vector
         self.build_ytilde(tCurr, fs, k)
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
             self.build_ycentr(tCurr, fs, k)
         if self.computeLocal:  # extract local info from `\tilde{y}_k`
-            self.yLocal[k][:, self.i[k], :] =\
-                self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yLocal_s[k][:, self.i[k], :] =\
-                self.yTilde_s[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yLocal_n[k][:, self.i[k], :] =\
-                self.yTilde_n[k][:, self.i[k], :self.nSensorPerNode[k]]
-            #
-            self.yHatLocal[k][:, self.i[k], :] =\
-                self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yHatLocal_s[k][:, self.i[k], :] =\
-                self.yTildeHat_s[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yHatLocal_n[k][:, self.i[k], :] =\
-                self.yTildeHat_n[k][:, self.i[k], :self.nSensorPerNode[k]]
+            self.build_ylocal(k)
         # Account for buffer flags
-        skipUpdate = self.compensate_sros(k, tCurr)
+        skipUpdate, skipUpdateCentr = self.compensate_sros(k, tCurr)
+
+        if tCurr > 9 and self.oVADframes[k][self.i[k]]:
+            stop = 1
 
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
-        
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)
 
-        if self.startUpdatesCentr[k]:
-            stop = 1
-
         if not skipUpdate and not bypassUpdateEventMat:
             # If covariance matrices estimates are full-rank, update filters
-            self.perform_update(k)
+            self.perform_update(k, skipUpdateCentr=skipUpdateCentr)
             # ^^^ depends on outcome of `check_covariance_matrices()`.
         else:
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
                 self.wTilde[k][:, self.i[k], :]
-            if self.computeCentralised:
-                self.wCentr[k][:, self.i[k] + 1, :] =\
-                    self.wCentr[k][:, self.i[k], :]
+            # if self.computeCentralised:   # <-- done within `perform_update()`
+            #     self.wCentr[k][:, self.i[k] + 1, :] =\
+            #         self.wCentr[k][:, self.i[k], :]
             if self.computeLocal:
                 self.wLocal[k][:, self.i[k] + 1, :] =\
                     self.wLocal[k][:, self.i[k], :]
@@ -1401,9 +1429,6 @@ class DANSEvariables(base.DANSEparameters):
                 print(f'Node {k+1}: {self.i[k]+1}-th update skipped.')
         if self.bypassUpdates:
             print('!! User-forced bypass of filter coefficients updates !!')
-
-        # if self.exportMSEBatchPerfPlot:
-        #     self.compute_batch_mse_cost(k)
 
         # Update external filters (for broadcasting)
         self.update_external_filters(k, tCurr)
@@ -1430,6 +1455,39 @@ class DANSEvariables(base.DANSEparameters):
                         axes[k].plot(self.yCentr[k][:showNsamples, self.i[k] - 1, m], '--', label=f'Centr: $y_{{k={k},m={m}}}$')
                     axes[k].legend()
                     axes[k].set_title(f'Node {k+1}, $i={self.i[0]}$ ({showNsamples} first samples)')
+
+    def build_ylocal(self, k):
+        """Build local vector based on `yTilde`."""
+        self.yLocal[k][:, self.i[k], :] =\
+            self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
+        self.yLocal_s[k][:, self.i[k], :] =\
+            self.yTilde_s[k][:, self.i[k], :self.nSensorPerNode[k]]
+        self.yLocal_n[k][:, self.i[k], :] =\
+            self.yTilde_n[k][:, self.i[k], :self.nSensorPerNode[k]]
+        #
+        self.yHatLocal[k][:, self.i[k], :] =\
+            self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
+        self.yHatLocal_s[k][:, self.i[k], :] =\
+            self.yTildeHat_s[k][:, self.i[k], :self.nSensorPerNode[k]]
+        self.yHatLocal_n[k][:, self.i[k], :] =\
+            self.yTildeHat_n[k][:, self.i[k], :self.nSensorPerNode[k]]
+
+    def wipe_local_buffers(self, k):
+        """Wipe buffers."""
+        self.zBuffer[k] = [np.array([])\
+            for _ in range(len(self.neighbors[k]))]
+        self.zBuffer_s[k] = [np.array([])\
+            for _ in range(len(self.neighbors[k]))]  # - speech-only for SNR computation
+        self.zBuffer_n[k] = [np.array([])\
+            for _ in range(len(self.neighbors[k]))]  # - noise-only for SNR computation
+        if self.computeCentralised:
+            allNodeIndices = [int(i) for i in np.arange(self.nNodes)]
+            self.yBufferCentr[k] = [np.empty((0, self.nSensorPerNode[q]))\
+                for q in allNodeIndices if q != k]
+            self.yBufferCentr_s[k] = [np.empty((0, self.nSensorPerNode[q]))\
+                for q in allNodeIndices if q != k]
+            self.yBufferCentr_n[k] = [np.empty((0, self.nSensorPerNode[q]))\
+                for q in allNodeIndices if q != k]
 
     def compute_batch_mse_cost(self, k):
         """
@@ -1869,6 +1927,7 @@ class DANSEvariables(base.DANSEparameters):
 
         # Centralised case
         if self.computeCentralised:
+            bufferFlagsCentr = np.zeros(self.nNodes)
             for q in range(self.nNodes):
                 if q != k:
                     # Centralised indices
@@ -1887,41 +1946,53 @@ class DANSEvariables(base.DANSEparameters):
                         
                         elif Bq < Ndft:
                             yCurrBufferCentr = np.concatenate(
-                                (
-                                    np.zeros((
-                                        Ndft - Bq,
-                                        self.yBufferCentr[k][idxQforKcentr].shape[-1]
-                                    )),
-                                    self.yBufferCentr[k][idxQforKcentr]
-                                ),
+                                (np.zeros((
+                                    Ndft - Bq,
+                                    self.yBufferCentr[k][idxQforKcentr].shape[-1]
+                                )), self.yBufferCentr[k][idxQforKcentr]),
                                 axis=0
                             )
                             yCurrBufferCentr_s = np.concatenate(
-                                (
-                                    np.zeros((
-                                        Ndft - Bq,
-                                        self.yBufferCentr_s[k][idxQforKcentr].shape[-1]
-                                    )),
-                                    self.yBufferCentr_s[k][idxQforKcentr]
-                                ),
+                                (np.zeros((
+                                    Ndft - Bq,
+                                    self.yBufferCentr_s[k][idxQforKcentr].shape[-1]
+                                )), self.yBufferCentr_s[k][idxQforKcentr]),
                                 axis=0
                             )
                             yCurrBufferCentr_n = np.concatenate(
-                                (
-                                    np.zeros((
-                                        Ndft - Bq,
-                                        self.yBufferCentr_n[k][idxQforKcentr].shape[-1]
-                                    )),
-                                    self.yBufferCentr_n[k][idxQforKcentr]
-                                ),
+                                (np.zeros((
+                                    Ndft - Bq,
+                                    self.yBufferCentr_n[k][idxQforKcentr].shape[-1]
+                                )), self.yBufferCentr_n[k][idxQforKcentr]),
                                 axis=0
                             )
+                            # Raise negative flag
+                            nMissingSamples = int(np.abs(Ndft - Bq))
+                            bufferFlagsCentr[q] = -1 * nMissingSamples
+                            print(f"[Cb- @ t={np.round(t, 3)}s] Centralized buffer underflow at node {k+1}'s B_{q} buffer | -{nMissingSamples} samples(s)")
+
                         elif Bq > Ndft:
                             yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr][-Ndft:, :]
                             yCurrBufferCentr_s = self.yBufferCentr_s[k][idxQforKcentr][-Ndft:, :]
                             yCurrBufferCentr_n = self.yBufferCentr_n[k][idxQforKcentr][-Ndft:, :]
-                    
+                            # Raise positive flag
+                            nExtraSamples = int(np.abs(Ndft - Bq))
+                            bufferFlagsCentr[q] = +1 * nExtraSamples
+                            print(f"[Cb+ @ t={np.round(t, 3)}s] Centralized buffer overflow at node {k+1}'s B_{q} buffer | +{nExtraSamples} samples(s)")
+
                     else:   # not the first iteration 
+                        
+                        if Bq < Ns:
+                            # Raise negative flag
+                            nMissingSamples = int(np.abs(Ns - Bq))
+                            bufferFlagsCentr[q] = -1 * nMissingSamples
+                            print(f"[Cb- @ t={np.round(t, 3)}s] Centralized buffer underflow at node {k+1}'s B_{q} buffer | -{nMissingSamples} samples(s)")
+                        elif Bq > Ns:
+                            # Raise positive flag
+                            nExtraSamples = int(np.abs(Ns - Bq))
+                            bufferFlagsCentr[q] = +1 * nExtraSamples
+                            print(f"[Cb+ @ t={np.round(t, 3)}s] Centralized buffer overflow at node {k+1}'s B_{q} buffer | +{nExtraSamples} samples(s)")
+                        
                         if Ndft - Bq > 0:
                             # Identify indices corresponding to the q-th node's
                             # channels in the centralized signal matrix
@@ -1931,7 +2002,7 @@ class DANSEvariables(base.DANSEparameters):
                                 idxStart = int(np.sum([
                                     self.nSensorPerNode[i] for i in range(self.nNodes)\
                                         if i != k and i < q
-                                    ])) - 1
+                                ])) - 1
                             idxEnd = idxStart + self.nSensorPerNode[q]
 
                             yCurrBufferCentr = np.concatenate(
@@ -1969,7 +2040,7 @@ class DANSEvariables(base.DANSEparameters):
             self.yc[k] = yk
             self.yc_s[k] = yk_s
             self.yc_n[k] = yk_n
-
+            self.bufferFlagsCentr[k][self.i[k], :] = bufferFlagsCentr
     
     def build_ytilde(self, tCurr, fs, k):
         """
@@ -2066,7 +2137,7 @@ class DANSEvariables(base.DANSEparameters):
         for q in range(len(self.neighbors[k])):
             if not np.isnan(self.bufferFlags[k][self.i[k], q]):
                 extraPhaseShiftFactor[self.nLocalMic[k] + q] =\
-                    self.bufferFlags[k][self.i[k], q] * self.broadcastLength
+                    self.bufferFlags[k][self.i[k], q] #* self.broadcastLength
                 # ↑↑↑ if `bufferFlags[k][i[k], q] == 0`,
                 # `extraPhaseShiftFactor = 0` and no additional phase shift.
                 if self.bufferFlags[k][self.i[k], q] != 0:
@@ -2079,9 +2150,8 @@ class DANSEvariables(base.DANSEparameters):
                 # "Not enough samples due to cumulated SROs effect, skip upd."
                 skipUpdate = True
         # Save uncompensated \tilde{y} for coherence-drift-based SRO estimation
-        self.yTildeHatUncomp[k][:, self.i[k], :] = copy.copy(
+        self.yTildeHatUncomp[k][:, self.i[k], :] =\
             self.yTildeHat[k][:, self.i[k], :]
-        )
         self.yyHuncomp[k][self.i[k], :, :, :] = np.einsum(
             'ij,ik->ijk',
             self.yTildeHatUncomp[k][:, self.i[k], :],
@@ -2097,17 +2167,61 @@ class DANSEvariables(base.DANSEparameters):
                 self.phaseShiftFactorThroughTime[self.i[k]:] =\
                     self.phaseShiftFactors[k][self.nLocalMic[k] + q]
             # Apply phase shift factors
-            psf = np.exp(
-                -1 * 1j * 2 * np.pi / self.DFTsize * np.outer(
-                    np.arange(self.nPosFreqs),
-                    self.phaseShiftFactors[k]
-                )
-            )
+            psf = np.exp(-1 * 1j * 2 * np.pi / self.DFTsize * np.outer(
+                np.arange(self.nPosFreqs),
+                self.phaseShiftFactors[k]
+            ))
             self.yTildeHat[k][:, self.i[k], :] *= psf
             self.yTildeHat_s[k][:, self.i[k], :] *= psf
             self.yTildeHat_n[k][:, self.i[k], :] *= psf
 
-        return skipUpdate
+        # Centralised case
+        if self.computeCentralised:
+            skipUpdateCentr = False
+            extraPhaseShiftFactorCentr = np.zeros(
+                int(np.sum(self.nSensorPerNode))
+            )
+            for q in range(self.nNodes):
+                if q != k:
+                    if not np.isnan(self.bufferFlagsCentr[k][self.i[k], q]):
+                        idxBeg = int(np.sum(self.neighborsCentr[k][:q]))
+                        idxEnd = int(np.sum(self.neighborsCentr[k][:(q + 1)]))
+                        if idxEnd == idxBeg:
+                            # Node `q` has only one sensor
+                            idxEnd += 1
+                        extraPhaseShiftFactorCentr[idxBeg:idxEnd] =\
+                            self.bufferFlagsCentr[k][self.i[k], q]
+                        # ↑↑↑ if `bufferFlags[k][i[k], q] == 0`,
+                        # `extraPhaseShiftFactor = 0` and no additional phase shift.
+                    else:
+                        skipUpdateCentr = True
+
+            # Save uncompensated centralised y for coherence-drift-based
+            # SRO estimation in the centralised case
+            self.yHatCentrUncomp[k][:, self.i[k], :] =\
+                self.yHatCentr[k][:, self.i[k], :]
+            self.yyHcentrUncomp[k][self.i[k], :, :, :] = np.einsum(
+                'ij,ik->ijk',
+                self.yHatCentrUncomp[k][:, self.i[k], :],
+                self.yHatCentrUncomp[k][:, self.i[k], :].conj()
+            )
+            # Compensate SROs
+            if self.compensateSROs:
+                # Complete phase shift factors
+                if self.includeFSDflags:
+                    self.phaseShiftFactorsCentr[k] += extraPhaseShiftFactorCentr
+                # Apply phase shift factors
+                psfCentr = np.exp(-1 * 1j * 2 * np.pi / self.DFTsize * np.outer(
+                    np.arange(self.nPosFreqs),
+                    self.phaseShiftFactorsCentr[k]
+                ))
+                self.yHatCentr[k][:, self.i[k], :] *= psfCentr
+                self.yHatCentr_s[k][:, self.i[k], :] *= psfCentr
+                self.yHatCentr_n[k][:, self.i[k], :] *= psfCentr
+        else:
+            skipUpdateCentr = None
+
+        return skipUpdate, skipUpdateCentr
 
     def spatial_covariance_matrix_update(self, k):
         """
@@ -2233,6 +2347,9 @@ class DANSEvariables(base.DANSEparameters):
                 y=self.yHatCentr[k][:, self.i[k], :],
                 vad=self.centrVADframes[self.i[k]]
             )
+            # Save
+            self.yyHcentr[k][self.i[k], :, :, :] = yyHcurr
+
             # Conditional updating of Ryy and Rnn
             self.conditional_scm_updating(
                 k, currVad, RyyCurr, RnnCurr, yyHcurr, 'centr'
@@ -2443,7 +2560,7 @@ class DANSEvariables(base.DANSEparameters):
         else:
             return yTildeBatch
 
-    def perform_update(self, k):
+    def perform_update(self, k, skipUpdateCentr=False):
         """
         Filter update for DANSE, `for`-loop free.
         GEVD or no GEVD, depending on `self.performGEVD`.
@@ -2452,6 +2569,8 @@ class DANSEvariables(base.DANSEparameters):
         ----------
         k : int
             Node index.
+        skipUpdateCentr : bool, optional
+            If True, skip centralised filter update. The default is False.
         """
 
         # Select appropriate update function
@@ -2475,17 +2594,21 @@ class DANSEvariables(base.DANSEparameters):
             # Update centralised filter
             if self.computeCentralised and self.startUpdatesCentr[k] and\
                 self.simType != 'batch':
-                # Do not update in "batch" mode --> this is done separately
-                # in the BatchDANSEvariables class.
-                self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
-                    self.Ryycentr[k],
-                    self.Rnncentr[k],
-                    refSensorIdx=int(
-                        np.sum(self.nSensorPerNode[:k]) + self.referenceSensor
-                    ),
-                    rank=rank
-                )
-                self.nCentrFilterUps[k] += 1  
+                if not skipUpdateCentr:
+                    # Do not update in "batch" mode --> this is done separately
+                    # in the BatchDANSEvariables class.
+                    self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
+                        self.Ryycentr[k],
+                        self.Rnncentr[k],
+                        refSensorIdx=int(
+                            np.sum(self.nSensorPerNode[:k]) + self.referenceSensor
+                        ),
+                        rank=rank
+                    )
+                    self.nCentrFilterUps[k] += 1
+                else:
+                    self.wCentr[k][:, self.i[k] + 1, :] =\
+                        self.wCentr[k][:, self.i[k], :]
             # Update local filter
             if self.computeLocal and self.startUpdatesLocal[k] and\
                 self.simType != 'batch':
@@ -2519,6 +2642,17 @@ class DANSEvariables(base.DANSEparameters):
             self.bufferFlags[k][:(self.i[k] - self.cohDrift.segLength + 1), :],
             axis=0
         )
+        if self.computeCentralised:
+            bufferFlagPos_c = self.broadcastLength * np.sum(
+                self.bufferFlagsCentr[k][:(self.i[k] + 1), :],
+                axis=0
+            )
+            bufferFlagPri_c = self.broadcastLength * np.sum(
+                self.bufferFlagsCentr[k][
+                    :(self.i[k] - self.cohDrift.segLength + 1), :
+                ],
+                axis=0
+            )
         
         # DANSE filter update indices corresponding to "Filter-shift"
         # SRO estimate updates.
@@ -2551,13 +2685,13 @@ class DANSEvariables(base.DANSEparameters):
                         # (closed-loop SRO est. + comp.).
 
                         # A posteriori coherence
-                        cohPosteriori = (self.yyH[k][self.i[k], :, 0, idxq]
-                            / np.sqrt(self.yyH[k][self.i[k], :, 0, 0] *\
-                                self.yyH[k][self.i[k], :, idxq, idxq]))
+                        cohPosteriori = self.yyH[k][self.i[k], :, 0, idxq] /\
+                            np.sqrt(self.yyH[k][self.i[k], :, 0, 0] *\
+                            self.yyH[k][self.i[k], :, idxq, idxq])
                         # A priori coherence
-                        cohPriori = (self.yyH[k][self.i[k] - ld, :, 0, idxq]
-                            / np.sqrt(self.yyH[k][self.i[k] - ld, :, 0, 0] *\
-                                self.yyH[k][self.i[k] - ld, :, idxq, idxq]))
+                        cohPriori = self.yyH[k][self.i[k] - ld, :, 0, idxq] /\
+                            np.sqrt(self.yyH[k][self.i[k] - ld, :, 0, 0] *\
+                            self.yyH[k][self.i[k] - ld, :, idxq, idxq])
                         
                         # Set buffer flags to 0
                         bufferFlagPri = np.zeros_like(bufferFlagPri)
@@ -2568,13 +2702,13 @@ class DANSEvariables(base.DANSEparameters):
                         # (open-loop SRO est. + comp.).
 
                         # A posteriori coherence
-                        cohPosteriori = (self.yyHuncomp[k][self.i[k], :, 0, idxq]
-                            / np.sqrt(self.yyHuncomp[k][self.i[k], :, 0, 0] *\
-                                self.yyHuncomp[k][self.i[k], :, idxq, idxq]))
+                        cohPosteriori = self.yyHuncomp[k][self.i[k], :, 0, idxq] /\
+                            np.sqrt(self.yyHuncomp[k][self.i[k], :, 0, 0] *\
+                            self.yyHuncomp[k][self.i[k], :, idxq, idxq])
                         # A priori coherence
-                        cohPriori = (self.yyHuncomp[k][self.i[k] - ld, :, 0, idxq]
-                            / np.sqrt(self.yyHuncomp[k][self.i[k] - ld, :, 0, 0] *\
-                                self.yyHuncomp[k][self.i[k] - ld, :, idxq, idxq]))
+                        cohPriori = self.yyHuncomp[k][self.i[k] - ld, :, 0, idxq] /\
+                            np.sqrt(self.yyHuncomp[k][self.i[k] - ld, :, 0, 0] *\
+                            self.yyHuncomp[k][self.i[k] - ld, :, idxq, idxq])
 
                     # Perform SRO estimation via coherence-drift method
                     sroRes, apr = sros.cohdrift_sro_estimation(
@@ -2594,7 +2728,7 @@ class DANSEvariables(base.DANSEparameters):
                     self.avgProdResiduals[k][:, q] = apr
 
         elif self.estimateSROs == 'DXCPPhaT':
-            # TODO: implement DXCP-PhaT-based SRO estimation
+            raise NotImplementedError('TODO: DXCP-PhaT-based SRO estimation')
 
             # DXCP-PhaT-based SRO estimation
             sroOut = sros.dxcpphat_sro_estimation(
@@ -2612,6 +2746,79 @@ class DANSEvariables(base.DANSEparameters):
 
         # Save SRO (residuals)
         self.SROsResiduals[k][self.i[k], :] = sroOut
+
+        # Centralised case
+        if self.computeCentralised:
+            # Init arrays
+            sroOutCentr = np.zeros(self.nNodes)
+            if self.estimateSROs == 'CohDrift':
+                if self.i[k] in cohDriftSROupdateIndices:
+                    # index of reference signal from node `k` inside `yyHcentr`
+                    idxk = int(np.sum(self.nSensorPerNode[:k]))
+                    for q in range(self.nNodes):
+                        if q != k:
+                            # index of reference signal from node `q` inside `yyHcentr`
+                            idxq = int(np.sum(self.nSensorPerNode[:q]))
+                            if self.cohDrift.loop == 'closed':
+                                # A posteriori coherence
+                                cohPosteriori_c = self.yyHcentr[k][self.i[k], :, idxk, idxq] /\
+                                    np.sqrt(self.yyHcentr[k][self.i[k], :, idxk, idxk] *\
+                                    self.yyHcentr[k][self.i[k], :, idxq, idxq])
+                                # A priori coherence
+                                cohPriori_c = self.yyHcentr[k][self.i[k] - ld, :, idxk, idxq] /\
+                                    np.sqrt(self.yyHcentr[k][self.i[k] - ld, :, idxk, idxk] *\
+                                    self.yyHcentr[k][self.i[k] - ld, :, idxq, idxq])
+                                
+                                # Set buffer flags to 0
+                                bufferFlagPri_c = np.zeros_like(bufferFlagPri_c)
+                                bufferFlagPos_c = np.zeros_like(bufferFlagPos_c)
+
+                            elif self.cohDrift.loop == 'open':
+                                # A posteriori coherence
+                                cohPosteriori_c = self.yyHcentrUncomp[k][self.i[k], :, idxk, idxq] /\
+                                    np.sqrt(self.yyHcentrUncomp[k][self.i[k], :, idxk, idxk] *\
+                                    self.yyHcentrUncomp[k][self.i[k], :, idxq, idxq])
+                                # A priori coherence
+                                cohPriori_c = self.yyHcentrUncomp[k][self.i[k] - ld, :, idxk, idxq] /\
+                                    np.sqrt(self.yyHcentrUncomp[k][self.i[k] - ld, :, idxk, idxk] *\
+                                    self.yyHcentrUncomp[k][self.i[k] - ld, :, idxq, idxq])
+
+                            # Perform SRO estimation via coherence-drift method
+                            sroRes_c, apr_c = sros.cohdrift_sro_estimation(
+                                wPos=cohPosteriori_c,
+                                wPri=cohPriori_c,
+                                avgResProd=self.avgProdResidualsCentr[k][:, q],
+                                Ns=self.Ns,
+                                ld=ld,
+                                method=self.cohDrift.estimationMethod,
+                                alpha=self.cohDrift.alpha,
+                                flagFirstSROEstimate=flagFirstSROEstimate,
+                                bufferFlagPri=bufferFlagPri_c[q],
+                                bufferFlagPos=bufferFlagPos_c[q]
+                            )
+                        
+                            sroOutCentr[q] = sroRes_c
+                            self.avgProdResidualsCentr[k][:, q] = apr_c
+
+            elif self.estimateSROs == 'DXCPPhaT':
+                raise NotImplementedError('TODO: DXCP-PhaT-based SRO estimation')
+
+                # DXCP-PhaT-based SRO estimation
+                sroOut = sros.dxcpphat_sro_estimation(
+                    fs=fs,
+                    fsref=16e3,  # FIXME: HARD-CODED!!
+                    N=self.DFTsize,
+                    localSig=self.yTilde[k][:, self.i[k], self.referenceSensor],
+                    neighboursSig=self.yTilde[k][:, self.i[k], self.nSensorPerNode[k]:],
+                    refSensorIdx=self.referenceSensor,
+                )
+
+            elif self.estimateSROs == 'Oracle':
+                # No data-based dynamic SRO estimation: use oracle knowledge
+                sroOutCentr = (self.SROsppm - self.SROsppm[k]) * 1e-6
+
+            # Save SRO (residuals)
+            self.SROsResidualsCentr[k][self.i[k], :] = sroOutCentr
 
     def build_phase_shifts_for_srocomp(self, k):
         """
@@ -2645,7 +2852,34 @@ class DANSEvariables(base.DANSEparameters):
             # Increment phase shift factor recursively.
             # (valid directly for oracle SRO "estimation")
             self.phaseShiftFactors[k][self.nLocalMic[k] + q] -=\
-                self.SROsEstimates[k][self.i[k], q] * self.Ns 
+                self.SROsEstimates[k][self.i[k], q] * self.Ns
+            
+        if self.computeCentralised:
+            for q in range(self.nNodes):
+                if self.estimateSROs == 'CohDrift':
+                    if self.cohDrift.loop == 'closed':
+                        # Increment estimate using SRO residual
+                        self.SROsEstimatesCentr[k][self.i[k], q] +=\
+                            self.SROsResidualsCentr[k][self.i[k], q] /\
+                            (1 + self.SROsResidualsCentr[k][self.i[k], q]) *\
+                            self.cohDrift.alphaEps
+                    elif self.cohDrift.loop == 'open':
+                        # Use SRO "residual" as estimates
+                        self.SROsEstimatesCentr[k][self.i[k], q] =\
+                            self.SROsResidualsCentr[k][self.i[k], q] /\
+                            (1 + self.SROsResidualsCentr[k][self.i[k], q])
+                elif self.estimateSROs == 'DXCPPhaT':
+                    raise NotImplementedError('TODO: DXCP-PhaT-based SRO estimation')
+                elif self.estimateSROs == 'Oracle':
+                    # No data-based dynamic SRO estimation: use oracle knowledge
+                    self.SROsEstimatesCentr[k][self.i[k], q] =\
+                        (self.SROsppm[q] - self.SROsppm[k]) * 1e-6
+                # Increment phase shift factor recursively.
+                # (valid directly for oracle SRO "estimation")
+                idxBeg = int(np.sum(self.nSensorPerNode[:q]))
+                idxEnd = int(np.sum(self.nSensorPerNode[:q + 1]))
+                self.phaseShiftFactorsCentr[k][idxBeg:idxEnd] -=\
+                    self.SROsEstimatesCentr[k][self.i[k], q] * self.Ns
 
     def get_desired_signal(self, k):
         """

@@ -161,32 +161,6 @@ def postprocess(
     out : `danse.danse_toolbox.d_post.DANSEoutputs` object
         DANSE outputs (signals, etc.), after post-processing.
     """
-
-    # # Default booleans
-    # runit = True   # by default, run
-    # if p.exportParams.bypassAllExports:
-    #     print('Not exporting figures and sounds export (`bypassExport` is True).')
-    # else:
-    #     # Check whether export folder exists
-    #     if Path(p.exportParams.exportFolder).is_dir():
-    #         # Check whether the folder contains something
-    #         if Path(p.exportParams.exportFolder).stat().st_size > 0:
-    #             inp = input(f'The folder\n"{p.exportParams.exportFolder}"\ncontains data. Overwrite? [y/n]:  ')
-    #             while inp not in ['y', 'n']:
-    #                 inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
-    #             if inp == 'n':
-    #                 runit = False   # don't run
-    #                 print('Aborting figures and sounds export.')
-    #             elif inp == 'y':
-    #                 print('Wiping folder before new figures and sounds exports.')
-    #                 wipe_folder(p.exportParams.exportFolder)
-    #     else:
-    #         print(f'Create export folder "{p.exportParams.exportFolder}".')
-    #         # Create dir. with missing parents directories.
-    #         # https://stackoverflow.com/a/50110841
-    #         Path(p.exportParams.exportFolder).mkdir(parents=True)
-
-    # if runit:
     if not bypassGlobalPickleExport:
         # Export all required data as global Pickle archive
         print('Exporting all data for further subsequent post-processing...')

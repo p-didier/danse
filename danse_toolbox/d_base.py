@@ -963,9 +963,9 @@ def build_events_matrix(
             ))
             eventInstants = np.zeros((nInstants, 3))
             for k in range(K):
-                idxStart = int(np.sum([len(t[q]) for q in range(k)]))
-                idxEnd = idxStart + len(t[k])
-                eventInstants[idxStart:idxEnd, 0] = t[k]
+                idxStart = int(np.sum([len(np.unique(t[q])) for q in range(k)]))
+                idxEnd = idxStart + len(np.unique(t[k]))
+                eventInstants[idxStart:idxEnd, 0] = np.unique(t[k])
                 eventInstants[idxStart:idxEnd, 1] = k
                 eventInstants[:, 2] = eventRef    # event reference
             return eventInstants
@@ -1551,7 +1551,7 @@ def events_parser(
     """
     if p.printoutsAndPlotting.printout_eventsParser:
         if 'up' in events.type or ('bc' in events.type and p.efficientSpSBC):
-            txt = f'[{p.simType}] [{p.nodeUpdating}] t={np.round(events.t, 3):.3f}s -- '
+            txt = f'[{p.simType}] [{p.nodeUpdating}] t={np.round(events.t, 9):.9f}s -- '
             updatesTxt = 'UP: '
             updatesFlag = False
             broadcastsFlag = False

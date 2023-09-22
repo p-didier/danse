@@ -62,21 +62,21 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
             k = nodes[jj]
             m = metrics[ii]
             currData = data[k][m]
-            sros = currData.index
-            bcLengths = currData.columns
-            for idxL, l in enumerate(bcLengths):
-                if np.isnan(currData[l][0]):
-                    currData[l][0] = currData[1][0]  # complete redundant data 
-                currAx.plot(
-                    sros,
-                    currData[l],
-                    f'C{idxL}.-',
-                    label=f'$L = {l}$'
+            bcLengths = currData.index
+            types = currData.columns
+            for idxType, ty in enumerate(types):
+                currAx.semilogx(
+                    bcLengths,
+                    currData[ty],
+                    f'C{idxType}.-',
+                    label=ty
                 )
             currAx.grid()
+            currAx.set_xticks(bcLengths)
+            currAx.set_xticklabels(bcLengths)
             if ii == jj == 0:
                 currAx.legend(loc='best')
-            currAx.set_xlabel('SRO $\\varepsilon_{{kq}}$ [PPM]')
+            currAx.set_xlabel('Broadcast size $L$ [samples]')
             if 'snr' in m:
                 currAx.set_ylabel('[dB]')
                 currAx.set_ylim([np.amin([0, np.amin(currAx.get_ylim())]), np.amax(currAx.get_ylim())])
@@ -85,6 +85,7 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
                 currAx.set_ylim([0, 1])
 
     plt.tight_layout()
+
     return fig, axes
 
 
@@ -94,6 +95,8 @@ def get_data(
         Ns=512
     ) -> dict[dict[pd.DataFrame]]:
     """Load and organize data from DANSE battery test output folder."""
+
+    # Load data
     data, params = load_data(dataFolder, Ns)
     
     # Create one dataframe for each node
@@ -105,13 +108,13 @@ def get_data(
     for k in range(params['nNodes']):
         for metric in METRICS_TO_PLOT:
             df = pd.DataFrame(
-                index=params['SRO'],
-                columns=params['L']
+                index=params['L'],
+                columns=params['type']
             )
             for subfolder in data.keys():
                 currData = data[subfolder]
-                df.loc[currData['SRO'], currData['L']] =\
-                    getattr(currData['metrics'], metric)[f'Node{k+1}'].after
+                df.loc[currData['L'], currData['type']] =\
+                    getattr(currData['metrics'], metric)[f'Node{k+1}'].afterCentr
                 
             dfs[f'Node{k+1}'][metric] = df
 
@@ -126,25 +129,22 @@ def load_data(dataFolder: str, Ns=512) -> dict:
     out = {}
     params = {}
     params['L'] = []
-    params['SRO'] = []
+    params['type'] = []
     for ii, subfolder in enumerate(subfolders):
         if subfolder.name[0] == '_':  # skip folders starting with '_'
             continue
         print(f'Loading simulation data from {subfolder.name} ({ii+1}/{len(subfolders)})...')
         subfolderName = subfolder.name
         out[subfolderName] = {}  # init
-        if 'wholeChunk' in subfolderName:
-            currL = Ns
-        else:
-            currL = int(subfolderName.split('_')[0][1:])
-        currSRO = int(subfolderName.split('_')[1][3:])
+        currL = int(subfolderName.split('_')[0][1:])
+        currType = subfolderName.split('_')[1]
 
         out[subfolderName]['L'] = currL
         if currL not in params['L']:
             params['L'].append(currL)
-        out[subfolderName]['SRO'] = currSRO
-        if currSRO not in params['SRO']:
-            params['SRO'].append(currSRO)
+        out[subfolderName]['type'] = currType
+        if currType not in params['type']:
+            params['type'].append(currType)
         
         if 'metrics.pkl' in [f.name for f in subfolder.iterdir()]:
             # Load metrics from pkl
@@ -159,7 +159,6 @@ def load_data(dataFolder: str, Ns=512) -> dict:
             params['nNodes'] = len(getattr(metrics, METRICS_TO_PLOT[0]))
         out[subfolderName]['metrics'] = metrics
     params['L'].sort()
-    params['SRO'].sort()
 
     return out, params
 
