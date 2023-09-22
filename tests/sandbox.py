@@ -107,14 +107,14 @@ def danse_it_up(
     if p.is_fully_connected_wasn():  # Fully connected WASN case
         print(f'Running {p.danseParams.simType} DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         if p.danseParams.simType == 'batch':  # true batch mode
+            raise NotImplementedError('Batch mode not implemented for fully connected WASNs.')
             danse_function = core.danse_batch
         else:
             danse_function = core.danse
     else:  # Ad-hoc WASN topology case
-        raise NotImplementedError('Ad-hoc WASN topology case not ready yet.')
         print(f'Running {p.danseParams.simType} TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
-        
         if p.danseParams.simType == 'batch':  # true batch mode
+            raise NotImplementedError('Batch mode not implemented for ad-hoc WASNs.')
             danse_function = core.tidanse_batch
         else:
             danse_function = core.tidanse

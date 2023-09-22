@@ -1346,7 +1346,7 @@ def plot_asc(
         nodeRadius=nodeRadius,
         nodeTypes=nodeTypes
     )
-    if usedAdjacencyMatrix != np.array([]):
+    if usedAdjacencyMatrix.size != 0:
         # Add topology lines
         _plot_connections(
             sensorCoords=asc.mic_array.R[:2, :],
@@ -1371,7 +1371,7 @@ def plot_asc(
         nodeRadius=nodeRadius,
         nodeTypes=nodeTypes
     )
-    if usedAdjacencyMatrix != np.array([]):
+    if usedAdjacencyMatrix.size != 0:
         # Add topology lines
         _plot_connections(
             sensorCoords=asc.mic_array.R[-2:, :],

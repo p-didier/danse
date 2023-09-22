@@ -1,6 +1,5 @@
 import numpy as np
 from danse_toolbox.d_classes import *
-from paderwasn.synchronization.time_shift_estimation import max_time_lag_search
 
 from pathlib import Path, PurePath
 import sys
@@ -11,6 +10,8 @@ pathToRoot = Path(__file__)
 while PurePath(pathToRoot).name != rootFolder:
     pathToRoot = pathToRoot.parent
 sys.path.append(f'{pathToRoot}/danse/dxcpphat')
+sys.path.append(f'{pathToRoot}/_third_parties')
+from paderwasn.paderwasn.synchronization.time_shift_estimation import max_time_lag_search
 import sro_estimation as dxcp
 
 

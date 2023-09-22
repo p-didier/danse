@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230922_tests/tidanse/test1 # folder to export outputs
+  exportFolder: .\danse\out/20230922_tests/tidanse/test1 # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -24,7 +24,9 @@ danseParams:
   computeCentralised: true
   # computeLocal: false
   # computeCentralised: false
-  filterInitType: selectFirstSensor
+  # filterInitType: selectFirstSensor
+  filterInitType: fixedValue
+  filterInitFixedValue: 1
   # covMatRandomInitScaling: 0  # <-- init SCMs as zeros
   use1stFrameAsBasis: true  # <-- init SCMs using first available frame
   #
@@ -54,8 +56,8 @@ danseParams:
   # efficientSpSBC: false
   upTDfilterEvery: 1.
   #
-  compensateSROs: true
-  # compensateSROs: false
+  # compensateSROs: true
+  compensateSROs: false
   includeFSDflags: false
   #
   estimateSROs: Oracle
@@ -86,13 +88,13 @@ wasnParams:
   # interSensorDist: 0.0
   interSensorDist: 0.05
   sigDur: 10  # [s]
-  selfnoiseSNR: 999999999  # [dB]
-  # selfnoiseSNR: 15  # [dB]
-  # layoutType: random
-  layoutType: all_nodes_in_center
+  # selfnoiseSNR: 999999999  # [dB]
+  selfnoiseSNR: 15  # [dB]
+  layoutType: random
+  # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  nSensorPerNode: '[1, 1]'
+  nSensorPerNode: '[1, 1, 1]'
   # nSensorPerNode: '[2, 3]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
@@ -101,16 +103,23 @@ wasnParams:
   snrBasis: at_mic_0
   snr: 5
   #
-  # SROperNode: '[0]'  # [PPM]
+  SROperNode: '[0]'  # [PPM]
   # SROperNode: '[0, 40]'  # [PPM]
-  SROperNode: '[0, 200]'  # [PPM]
+  # SROperNode: '[0, 200]'  # [PPM]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   #
   signalType: from_file
   desiredSignalFile:
-  - C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\tests\sigs\01_speech\speech2_16000Hz_vad1att0.wav
+  - .\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
-  nNoiseSources: 0
+  nNoiseSources: 1
   noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
-  vadFilesFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse\vad_files
+  vadFilesFolder: .\danse\vad_files
+  #
+  topologyParams:
+    topologyType: user-defined
+    commDistance: 4.0
+    plotTopo: false
+    seed: 12348
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

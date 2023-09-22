@@ -1,6 +1,7 @@
 import copy
 import shutil
 import random
+import typing
 import warnings
 import numpy as np
 from numba import jit
@@ -171,13 +172,13 @@ class ExportParameters:
                 # Check whether the folder contains something
                 # if Path(self.exportFolder).stat().st_size > 0:
                 if any(Path(self.exportFolder).iterdir()):
-                    inp = input(f'The folder\n"{self.exportFolder}"\ncontains data. Overwrite? [y/n]:  ')
-                    while inp not in ['y', 'n']:
+                    inp = input(f'The folder "{self.exportFolder}" contains data. Overwrite? [y/n]:  ')
+                    while inp not in ['y', 'Y', 'n', 'N']:
                         inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
-                    if inp == 'n':
+                    if inp in ['n', 'N']:
                         runit = False   # don't run
                         print('Aborting figures and sounds export.')
-                    elif inp == 'y':
+                    elif inp in ['y', 'Y']:
                         print('Wiping folder before new figures and sounds exports.')
                         wipe_folder(self.exportFolder)
             else:
@@ -216,11 +217,6 @@ class TestParameters:
         if self.danseParams.nodeUpdating == 'sim' and\
             any(self.wasnParams.SROperNode != 0):
             raise ValueError('Simultaneous node-updating impossible in the presence of SROs.')
-        if not self.is_fully_connected_wasn() and\
-            'topo-indep' not in self.danseParams.nodeUpdating:
-            # Switch to topology-independent node-update system
-            print(f'/!\ The WASN is not fully connected -- switching `danseParams.nodeUpdating` from "{self.danseParams.nodeUpdating}" to "topo-indep_{self.danseParams.nodeUpdating}".')
-            self.danseParams.nodeUpdating = f'topo-indep_{self.danseParams.nodeUpdating}'
         if not self.exportParams.conditionNumberPlot:
             # If condition number plot is not exported, don't compute it
             self.danseParams.saveConditionNumber = False
@@ -246,10 +242,6 @@ class TestParameters:
                 self.danseParams.compensationStrategy = 'node-specific'
             else:
                 raise ValueError('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Aborting.')
-        # Check that the filter initialization type is supported in ad-hoc WASNs.
-        if not self.is_fully_connected_wasn() and\
-            self.danseParams.filterInitType == 'selectFirstSensor':
-            raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs.')
         # Export checks
         if self.danseParams.simType == 'batch':
             self.exportParams.filters = False
@@ -263,6 +255,17 @@ class TestParameters:
             self.exportParams.waveformsAndSpectrograms = False  # no waveforms if no true room
             self.exportParams.metricsPlot = False  # no metrics plot if no true room
             self.exportParams.wavFiles = False  # no WAV files if no true room
+        # Topology-independent-specific checks
+        if not self.is_fully_connected_wasn():
+            if 'topo-indep' not in self.danseParams.nodeUpdating:
+                # Switch to topology-independent node-update system
+                print(f'/!\ The WASN is not fully connected -- switching `danseParams.nodeUpdating` from "{self.danseParams.nodeUpdating}" to "topo-indep_{self.danseParams.nodeUpdating}".')
+                self.danseParams.nodeUpdating = f'topo-indep_{self.danseParams.nodeUpdating}'
+            if self.danseParams.filterInitType == 'selectFirstSensor':
+                # Check that the filter initialization type is supported in ad-hoc WASNs.
+                raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs (because of division by `g_kq`).')
+            self.exportParams.filterNormsPlot = False  # no filter norms plot in ad-hoc WASNs
+            self.exportParams.filterNorms = False
         # Transfer useful export parameters to DANSE parameters
         self.danseParams.exportMSEBatchPerfPlot = self.exportParams.mseBatchPerfPlot
         # Check that the `startComputeMetricsAt` parameter is not after
@@ -3101,30 +3104,32 @@ class TIDANSEvariables(DANSEvariables):
         fs : float or int
             Current node's sampling frequency [Hz].
         """
+
+        # Common keyword arguments for `base.local_chunk_for_broadcast`
+        kwargs = {
+            't': tCurr,
+            'fs': fs,
+            'DFTsize': self.DFTsize
+        }
         
         # Extract correct frame of local signals
         ykFrame, _, _ = base.local_chunk_for_broadcast(
             self.yin[k],
-            tCurr,
-            fs,
-            self.DFTsize
+            **kwargs
         )
         ykFrame_s, _, _ = base.local_chunk_for_broadcast(
             self.cleanSpeechSignalsAtNodes[k],
-            tCurr,
-            fs,
-            self.DFTsize
-        )  # [useful for SNR computation]
+            **kwargs
+        )   # - speech-only for SNR computation
         ykFrame_n, _, _ = base.local_chunk_for_broadcast(
             self.cleanNoiseSignalsAtNodes[k],
-            tCurr,
-            fs,
-            self.DFTsize
-        )  # [useful for SNR computation]
+            **kwargs
+        )   # - noise-only for SNR computation
 
         # Account for SROs w.r.t. the root node if the compensation
         # strategy is 'network-wide'.
-        if self.compensationStrategy == 'network-wide' and self.compensateSROs:
+        if self.compensationStrategy == 'network-wide' and\
+            self.compensateSROs:
             if k != self.currentWasnTreeObj.rootIdx:  # only non-root updates
                 # Estimate local clock drift w.r.t. tree root
                 self.estimate_local_clock_drift(k, tCurr, fs)
@@ -3134,6 +3139,11 @@ class TIDANSEvariables(DANSEvariables):
             ykFrame = apply_phase_shift_to_td_frame(ykFrame, *args)
             ykFrame_s = apply_phase_shift_to_td_frame(ykFrame_s, *args)
             ykFrame_n = apply_phase_shift_to_td_frame(ykFrame_n, *args)
+
+        if self.computeCentralised:
+            pass  # TODO: copy / implement what is in DANSEvariables.broadcast()
+            # Ideally, we should have one function for both DANSE and TI-DANSE
+            # (they are just too similar)  [PD~22.09.2023]
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
@@ -3531,7 +3541,9 @@ class TIDANSEvariables(DANSEvariables):
 
         # Transfer local observations to frequency domain
         yqHat = np.fft.fft(
-            yq * self.winWOLAanalysis[:, np.newaxis], self.DFTsize, axis=0
+            yq * self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
         )
         # Keep only positive frequencies
         yqHat = yqHat[:int(self.DFTsize // 2 + 1), :]
@@ -3542,9 +3554,9 @@ class TIDANSEvariables(DANSEvariables):
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
-            #     self.wTildeExt[k][:, self.i[k], -1:]
-            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
+            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
+                self.wTildeExt[k][:, self.i[k], -1:]
+            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 

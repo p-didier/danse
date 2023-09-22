@@ -115,8 +115,8 @@ def danse(
 
 
 def tidanse(
-    wasnObj: WASN,
-    p: base.DANSEparameters
+        wasnObj: WASN,
+        p: base.DANSEparameters
     ) -> tuple[DANSEoutputs, WASN]:
     """
     Topology-independent online-implementation DANSE main function.
