@@ -1388,7 +1388,8 @@ class DANSEvariables(base.DANSEparameters):
             (but still compute the desired signal estimate!)
         """
 
-        if k == self.referenceSensor and self.nInternalFilterUps[k] == 0:
+        if k == self.referenceSensor and\
+            self.nInternalFilterUps[k] == 0:
             # Save first update instant (for, e.g., SRO plot)
             self.firstDANSEupdateRefSensor = tCurr
 
@@ -1405,9 +1406,6 @@ class DANSEvariables(base.DANSEparameters):
             self.build_ylocal(k)
         # Account for buffer flags
         skipUpdate, skipUpdateCentr = self.compensate_sros(k, tCurr)
-
-        if tCurr > 9 and self.oVADframes[k][self.i[k]]:
-            stop = 1
 
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
@@ -3279,61 +3277,36 @@ class TIDANSEvariables(DANSEvariables):
             # Save first update instant (for, e.g., SRO plot)
             self.firstDANSEupdateRefSensor = tCurr
 
+        # Process buffers
+        self.process_incoming_signals_buffers(k, tCurr)
+        self.wipe_local_buffers(k)  # wipe local buffers for next iteration
+
         # Construct `\tilde{y}_k` in frequency domain
-        self.ti_build_ytilde(k, tCurr, fs)
+        self.ti_build_ytilde(tCurr, fs, k)
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
             self.build_ycentr(tCurr, fs, k)
         if self.computeLocal:  # extract local info (most easily: from `\tilde{y}_k`)
-            self.yLocal[k][:, self.i[k], :] =\
-                self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yLocal_s[k][:, self.i[k], :] =\
-                self.yTilde_s[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yLocal_n[k][:, self.i[k], :] =\
-                self.yTilde_n[k][:, self.i[k], :self.nSensorPerNode[k]]
-            #
-            self.yHatLocal[k][:, self.i[k], :] =\
-                self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yHatLocal_s[k][:, self.i[k], :] =\
-                self.yTildeHat_s[k][:, self.i[k], :self.nSensorPerNode[k]]
-            self.yHatLocal_n[k][:, self.i[k], :] =\
-                self.yTildeHat_n[k][:, self.i[k], :self.nSensorPerNode[k]]
+            self.build_ylocal(k)
+            # self.yLocal[k][:, self.i[k], :] =\
+            #     self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
+            # self.yLocal_s[k][:, self.i[k], :] =\
+            #     self.yTilde_s[k][:, self.i[k], :self.nSensorPerNode[k]]
+            # self.yLocal_n[k][:, self.i[k], :] =\
+            #     self.yTilde_n[k][:, self.i[k], :self.nSensorPerNode[k]]
+            # #
+            # self.yHatLocal[k][:, self.i[k], :] =\
+            #     self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
+            # self.yHatLocal_s[k][:, self.i[k], :] =\
+            #     self.yTildeHat_s[k][:, self.i[k], :self.nSensorPerNode[k]]
+            # self.yHatLocal_n[k][:, self.i[k], :] =\
+            #     self.yTildeHat_n[k][:, self.i[k], :self.nSensorPerNode[k]]
 
         # Compensate for SROs
         # skipUpdate = self.ti_compensate_sros(k, tCurr)
         
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
-
-        # if k == 0 and self.i[k] % 10 == 0:
-        #     if len(self.figs) == 0:
-        #         fig, axes = plt.subplots(2, 1)
-        #         plt.ion()
-        #         plt.show(block=False)
-        #         self.figs.append((fig, axes))
-        #     else:
-        #         self.figs[0][1][0].cla()
-        #         self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 0]))
-        #         self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 0, 1]))
-        #         self.figs[0][1][0].semilogy(np.abs(self.Ryytilde[k][:, 1, 1]))
-        #         self.figs[0][1][0].legend(
-        #             ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
-        #         )
-        #         self.figs[0][1][0].set_title(f'|Ryytilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s - VAD = {self.oVADframes[k][self.i[k]]}')
-        #         #
-        #         self.figs[0][1][1].cla()
-        #         self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 0]))
-        #         self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 0, 1]))
-        #         self.figs[0][1][1].semilogy(np.abs(self.Rnntilde[k][:, 1, 1]))
-        #         self.figs[0][1][1].legend(
-        #             ['Ryytilde00', 'Ryytilde01', 'Ryytilde11']
-        #         )
-        #         self.figs[0][1][1].set_title(f'|Rnntilde| - Node {k + 1}, iter {self.i[k] + 1}, t = {tCurr:.2f} s - VAD = {self.oVADframes[k][self.i[k]]}')
-        #         #
-        #         self.figs[0][0].canvas.draw()
-        #         self.figs[0][0].canvas.flush_events()
-        #         time.sleep(0.001)
-        #         stop = 1
 
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)
@@ -3347,9 +3320,9 @@ class TIDANSEvariables(DANSEvariables):
             # Do not update the filter coefficients
             self.wTilde[k][:, self.i[k] + 1, :] =\
                 self.wTilde[k][:, self.i[k], :]
-            if self.computeCentralised:
-                self.wCentr[k][:, self.i[k] + 1, :] =\
-                    self.wCentr[k][:, self.i[k], :]
+            # if self.computeCentralised:   # <-- done within `perform_update()`
+            #     self.wCentr[k][:, self.i[k] + 1, :] =\
+            #         self.wCentr[k][:, self.i[k], :]
             if self.computeLocal:
                 self.wLocal[k][:, self.i[k] + 1, :] =\
                     self.wLocal[k][:, self.i[k], :]
@@ -3417,7 +3390,7 @@ class TIDANSEvariables(DANSEvariables):
         self.localSROwrtRoot[k] = sroOut
 
 
-    def ti_build_ytilde(self, k, tCurr, fs):        
+    def ti_build_ytilde(self, tCurr, fs, k):        
         """
         Builds the observation vector used for the TI-DANSE filter update.
         
@@ -3494,19 +3467,19 @@ class TIDANSEvariables(DANSEvariables):
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         yTildeHatCurr_s = np.fft.fft(
             self.yTilde_s[k][:, self.i[k], :] *\
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         yTildeHatCurr_n = np.fft.fft(
             self.yTilde_n[k][:, self.i[k], :] *\
                 self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
         self.yTildeHat_s[k][:, self.i[k], :] = yTildeHatCurr_s[:self.nPosFreqs, :]
@@ -3544,7 +3517,7 @@ class TIDANSEvariables(DANSEvariables):
             yq * self.winWOLAanalysis[:, np.newaxis],
             self.DFTsize,
             axis=0
-        )
+        ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         yqHat = yqHat[:int(self.DFTsize // 2 + 1), :]
         # Compute compression vector
@@ -3563,7 +3536,7 @@ class TIDANSEvariables(DANSEvariables):
         # WOLA synthesis stage
         if zForSynthesis is not None:
             # IDFT
-            zqCurr = base.back_to_time_domain(zqHat, self.DFTsize, axis=0)
+            zqCurr = np.sqrt(self.Ns) * base.back_to_time_domain(zqHat, self.DFTsize, axis=0)
             zqCurr = np.real_if_close(zqCurr)
             zqCurr *= self.winWOLAsynthesis    # multiply by synthesis window
 

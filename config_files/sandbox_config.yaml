@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20230922_tests/tidanse/test1 # folder to export outputs
+  exportFolder: .\danse\out/20230922_tests/tidanse/test3 # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -119,6 +119,7 @@ wasnParams:
   #
   topologyParams:
     topologyType: user-defined
+    # topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     seed: 12348
