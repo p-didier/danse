@@ -1390,7 +1390,8 @@ def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
     # Pad zeros at beginning if needed (occurs at algorithm's startup)
     if idxEnd - idxBeg < Ndft:
         chunk = np.concatenate((
-            np.zeros((Ndft - chunk.shape[0], chunk.shape[1])), chunk
+            np.zeros((Ndft - chunk.shape[0], chunk.shape[1])),
+            chunk
         ))
 
     return chunk, idxBeg, idxEnd
@@ -1595,7 +1596,6 @@ def events_parser(
             else:
                 # Print on the next line
                 print(fullTxt)
-
 
 
 def events_parser_ti_danse(
@@ -2003,10 +2003,10 @@ def get_desired_sig_chunk(
 
 
 def prune_wasn_to_tree(
-    wasnObj: WASN,
-    algorithm='prim',
-    plotit=False,
-    forcedRoot=None
+        wasnObj: WASN,
+        algorithm='prim',
+        plotit=False,
+        forcedRoot=None
     ) -> WASN:
     """
     Prunes a WASN to a tree topology.
@@ -2079,8 +2079,8 @@ def prune_wasn_to_tree(
 
 
 def update_wasn_object_from_nxgraph(
-    originalWASN: WASN,
-    Gnx: nx.Graph
+        originalWASN: WASN,
+        Gnx: nx.Graph
     ) -> WASN:
     """
     Updates connectivity parameters in a list of `Node` object instances
@@ -2172,7 +2172,6 @@ def generate_graph_for_wasn(wasn: list[Node]) -> nx.Graph:
                 if q in wasn[k].neighborsIdx:
                     adjMat[k, q] = 1
                     adjMat[q, k] = 1
-                    
 
     Gnx = nx.from_numpy_array(adjMat)
 
@@ -2243,7 +2242,6 @@ def get_istft(x, fs, win, ovlp, boundary='zeros'):
         x = x[:, :, np.newaxis]
 
     for channel in range(x.shape[-1]):
-
         t, tmp = sig.istft(
             x[:, :, channel],
             fs=fs,
@@ -2378,9 +2376,6 @@ def get_y_tilde_batch(
         neighbors=None,
         i=0,
         k=0,
-        yinSTFT_s=None,
-        yinSTFT_n=None,
-        computeSpeechAndNoiseOnly=False,
         useThisFilter=None
     ):
     """
@@ -2394,11 +2389,6 @@ def get_y_tilde_batch(
             yinSTFT[k].shape[0],
             yinSTFT[k].shape[1]
         ), dtype=complex)
-        if computeSpeechAndNoiseOnly:
-            etaMkBatch_s = copy.deepcopy(etaMkBatch)
-            etaMkBatch_n = copy.deepcopy(etaMkBatch)
-            # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
-            # as `yinSTFT`.
         for idxNode in range(nNodes):
             if idxNode != k:  # only sum over the other nodes
                 if useThisFilter is not None:
@@ -2416,31 +2406,11 @@ def get_y_tilde_batch(
                     p.conj(),
                     yinSTFT[idxNode]
                 )
-                if computeSpeechAndNoiseOnly:
-                    etaMkBatch_s += np.einsum(   # <-- `+=` is important
-                        'ij,ikj->ik',
-                        p.conj(),
-                        yinSTFT_s[idxNode]
-                    )
-                    etaMkBatch_n += np.einsum(   # <-- `+=` is important
-                        'ij,ikj->ik',
-                        p.conj(),
-                        yinSTFT_n[idxNode]
-                    )
         # Construct yTilde
         yTildeBatch = np.concatenate(
             (yinSTFT[k], etaMkBatch[:, :, np.newaxis]),
             axis=-1
         )
-        if computeSpeechAndNoiseOnly:
-            yTildeBatch_s = np.concatenate(
-                (yinSTFT_s[k], etaMkBatch_s[:, :, np.newaxis]),
-                axis=-1
-            )
-            yTildeBatch_n= np.concatenate(
-                (yinSTFT_n[k], etaMkBatch_n[:, :, np.newaxis]),
-                axis=-1
-            )
     else:
         # Compute batch fused signals using current (external) DANSE filters
         zBatch = np.zeros((
@@ -2448,11 +2418,6 @@ def get_y_tilde_batch(
             yinSTFT[k].shape[1],
             len(neighbors[k])
         ), dtype=complex)
-        if computeSpeechAndNoiseOnly:
-            zBatch_s = copy.deepcopy(zBatch)
-            zBatch_n = copy.deepcopy(zBatch)
-            # ^^^ ok because `yinSTFT_s` and `yinSTFT_n` have the same
-            # shape as `yinSTFT`.
         for ii, idxNode in enumerate(neighbors[k]):
             if useThisFilter is not None:
                 # Bypass `wTildeExt`
@@ -2465,37 +2430,13 @@ def get_y_tilde_batch(
                 fusionFilter.conj(),
                 yinSTFT[idxNode]
             )
-            if computeSpeechAndNoiseOnly:
-                zBatch_s[:, :, ii] = np.einsum(
-                    'ij,ikj->ik',
-                    fusionFilter.conj(),
-                    yinSTFT_s[idxNode]
-                )
-                zBatch_n[:, :, ii] = np.einsum(
-                    'ij,ikj->ik',
-                    fusionFilter.conj(),
-                    yinSTFT_n[idxNode]
-                )
         # Construct yTilde
         yTildeBatch = np.concatenate(
             (yinSTFT[k], zBatch),
             axis=-1
         )
-        if computeSpeechAndNoiseOnly:
-            yTildeBatch_s = np.concatenate(
-                (yinSTFT_s[k], zBatch_s),
-                axis=-1
-            )
-            yTildeBatch_n = np.concatenate(
-                (yinSTFT_n[k], zBatch_n),
-                axis=-1
-            )
     
-    # Conditional exports
-    if computeSpeechAndNoiseOnly:
-        return yTildeBatch, yTildeBatch_s, yTildeBatch_n
-    else:
-        return yTildeBatch
+    return yTildeBatch
 
 
 # ----------------------------------
