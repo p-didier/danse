@@ -19,6 +19,22 @@ from danse_toolbox.d_eval import DynamicMetricsParameters
 
 from itertools import cycle, islice
 
+@dataclass
+class PreComputedFilters():
+    active: bool = False  # only used if this is True
+    internalFilters: list = field(default_factory=list)
+    # ^^^ internal filters in WOLA-domain for each node at each
+    # DANSE iteration.
+    externalFilters: list = field(default_factory=list)
+    # ^^^ external filters in WOLA-domain for each node at each
+    # DANSE iteration.
+    filtersCentr: list = field(default_factory=list)
+    filtersLocal: list = field(default_factory=list)
+    purpose: str = 'noise-only' # Signal to be used in DANSE.
+    # ^^^ possible:
+    # - 'speech-only': speech-only signal
+    # - 'noise-only': noise-only signal
+
 
 @dataclass
 class DANSEeventInstant:
@@ -293,6 +309,7 @@ class DANSEparameters(Hyperparameters):
     endComputeMetricsAt: str = None    # When to stop computing the speech
         # enhancement metrics. Valid values: same as for
         # `startComputeMetricsAt`.
+    preGivenFilters: PreComputedFilters = PreComputedFilters()
     # ---- TI-DANSE specific
     treeFormationAlgorithm: str = 'prim'    # algorithm to prune ad-hoc WASN
         # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
@@ -2437,7 +2454,6 @@ def get_y_tilde_batch(
         )
     
     return yTildeBatch
-
 
 # ----------------------------------
 # 3 functions below:

@@ -70,26 +70,26 @@ class DANSEoutputs(DANSEparameters):
         # DANSE desired signal estimates
         self.TDdesiredSignals_est = dv.d
         self.STFTDdesiredSignals_est = dv.dhat
-        self.TDfiltSpeech = dv.d_s
-        self.STFTfiltSpeech = dv.dhat_s
-        self.TDfiltNoise = dv.d_n
-        self.STFTfiltNoise = dv.dhat_n
+        # self.TDfiltSpeech = dv.d_s
+        # self.STFTfiltSpeech = dv.dhat_s
+        # self.TDfiltNoise = dv.d_n
+        # self.STFTfiltNoise = dv.dhat_n
         if self.computeCentralised:
             # Centralised desired signal estimates
             self.TDdesiredSignals_est_c = dv.dCentr
             self.STFTDdesiredSignals_est_c = dv.dHatCentr
-            self.TDfiltSpeech_c = dv.dCentr_s
-            self.STFTfiltSpeech_c = dv.dHatCentr_s
-            self.TDfiltNoise_c = dv.dCentr_n
-            self.STFTfiltNoise_c = dv.dHatCentr_n
+            # self.TDfiltSpeech_c = dv.dCentr_s
+            # self.STFTfiltSpeech_c = dv.dHatCentr_s
+            # self.TDfiltNoise_c = dv.dCentr_n
+            # self.STFTfiltNoise_c = dv.dHatCentr_n
         if self.computeLocal:
             # Local desired signal estimates
             self.TDdesiredSignals_est_l = dv.dLocal
             self.STFTDdesiredSignals_est_l = dv.dHatLocal
-            self.TDfiltSpeech_l = dv.dLocal_s
-            self.STFTfiltSpeech_l = dv.dHatLocal_s
-            self.TDfiltNoise_l = dv.dLocal_n
-            self.STFTfiltNoise_l = dv.dHatLocal_n
+            # self.TDfiltSpeech_l = dv.dLocal_s
+            # self.STFTfiltSpeech_l = dv.dHatLocal_s
+            # self.TDfiltNoise_l = dv.dLocal_n
+            # self.STFTfiltNoise_l = dv.dHatLocal_n
         # DANSE fused signals
         self.TDfusedSignals = dv.zFullTD
         # SROs
@@ -130,6 +130,21 @@ class DANSEoutputs(DANSEparameters):
         # Show initialised status
         self.initialised = True
 
+        return self
+    
+    def from_snr_signals(self, snrSigs: dict):
+        """
+        Selects output values from `snrSigs` dict, for
+        subsequent SNR computation with filtered speech-only
+        and noise-only signals. The dictionary is created in
+        `d_classes.generate_signals_for_snr_computation`.
+        """
+        self.TDfiltSpeech = snrSigs['s']
+        self.TDfiltNoise = snrSigs['n']
+        self.TDfiltSpeec_c = snrSigs['s_c']
+        self.TDfiltNoise_c = snrSigs['n_c']
+        self.TDfiltSpeec_l = snrSigs['s_l']
+        self.TDfiltNoise_l = snrSigs['n_l']
         return self
     
     def include_best_perf_data(self, outBP: BatchDANSEvariables):

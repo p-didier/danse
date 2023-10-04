@@ -24,9 +24,9 @@ from danse_toolbox.d_post import DANSEoutputs
 from danse_toolbox.d_batch import BatchDANSEvariables, BatchTIDANSEvariables
 
 def danse(
-    wasnObj: WASN,
-    p: base.DANSEparameters
-    ) -> tuple[DANSEoutputs, WASN]:
+        wasnObj: WASN,
+        p: base.DANSEparameters
+    ) -> tuple[DANSEvariables, WASN]:
     """
     Fully connected online-implementation DANSE main function.
 
@@ -99,10 +99,21 @@ def danse(
     print(f'{np.amax(dv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
     print(f'(Real-time processing factor: {np.round(np.amax(dv.timeInstants) / dur, 4)})')
 
+    return dv, wasnObj 
+
+
+def format_output(
+        p: base.DANSEparameters,
+        dv: DANSEvariables,
+        wasnObj: WASN,
+        sigsSnr: dict = None
+    ):
     # Build output
     out = DANSEoutputs()
     out.import_params(p)
     out.from_variables(dv)
+    if sigsSnr is not None:
+        out.from_snr_signals(sigsSnr)
     # Update WASN object
     for k in range(len(wasnObj.wasn)):
         wasnObj.wasn[k].enhancedData = dv.d[:, k]
@@ -110,7 +121,7 @@ def danse(
             wasnObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
         if dv.computeLocal:
             wasnObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
-
+    
     return out, wasnObj
 
 

@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20230922_tests/tidanse/test3 # folder to export outputs
+  exportFolder: .\danse\out/20231004_tests/tidanse/sep_snr_sigs/test1 # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -14,8 +14,8 @@ danseParams:
   noFusionAtSingleSensorNodes: true
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
-  performGEVD: true
-  # performGEVD: false
+  # performGEVD: true
+  performGEVD: false
   simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
@@ -46,7 +46,7 @@ danseParams:
   startComputeMetricsAt: after_5s
   # startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
-  # startComputeMetricsAt: after_200ms
+  startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
   broadcastType: wholeChunk
   # broadcastType: fewSamples
@@ -87,7 +87,7 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 10  # [s]
+  sigDur: 5  # [s]
   # selfnoiseSNR: 999999999  # [dB]
   selfnoiseSNR: 15  # [dB]
   layoutType: random
@@ -118,8 +118,8 @@ wasnParams:
   vadFilesFolder: .\danse\vad_files
   #
   topologyParams:
-    topologyType: user-defined
-    # topologyType: fully-connected
+    # topologyType: user-defined
+    topologyType: fully-connected
     commDistance: 4.0
     plotTopo: false
     seed: 12348

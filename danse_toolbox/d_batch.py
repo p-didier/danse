@@ -12,7 +12,7 @@ class BatchDANSEvariables(DANSEvariables):
         self.mmseCost = np.full((self.maxBatchUpdates, self.nNodes), None)
         self.mmseCostInit = [np.mean(
             np.abs(self.cleanSpeechSignalsAtNodes[k][:, self.referenceSensor] -\
-                self.yin[k][:, self.referenceSensor])**2
+                self.yin[k][:, self.referenceSensor]) ** 2
         ) for k in range(self.nNodes)]  # <-- initial MMSE cost without DANSE
         self.yTildeBatch = [None for _ in range(self.nNodes)]
         self.yTildeBatch_s = [None for _ in range(self.nNodes)]

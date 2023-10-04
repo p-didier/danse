@@ -10,9 +10,9 @@ from siggen.classes import *
 from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
+from collections.abc import Callable
 from danse_toolbox.d_utils import wipe_folder
 import danse_toolbox.dataclass_methods as met
-
 
 @dataclass
 class ConditionNumbers:
@@ -404,7 +404,12 @@ class DANSEvariables(base.DANSEparameters):
         self.cleanNoiseSignalsAtNodes = [node.cleannoise_noSRO for node in wasn]
         self.oVADframes = [node.vadPerFrame for node in wasn]
         self.neighbors = [node.neighborsIdx for node in wasn]
-        self.yin = [node.data_noSRO for node in wasn]
+        if self.preGivenFilters.active and self.preGivenFilters.purpose == 'noise-only':
+            self.yin = [node.cleannoise_noSRO for node in wasn]
+        if self.preGivenFilters.active and self.preGivenFilters.purpose == 'speech-only':
+            self.yin = [node.cleanspeech_noSRO for node in wasn]
+        else:
+            self.yin = [node.data_noSRO for node in wasn]
         
         # Compute the centralized VAD per frame - average of all nodes
         # (active if at least 1 node is active)
@@ -445,7 +450,6 @@ class DANSEvariables(base.DANSEparameters):
         self.Ryytilde = [None for _ in range(self.nNodes)]
         self.Rnntilde = [None for _ in range(self.nNodes)]
 
-        
         self.d = np.zeros(
             (wasn[self.referenceSensor].data.shape[0], nNodes)
         )
@@ -837,7 +841,12 @@ class DANSEvariables(base.DANSEparameters):
         self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
         self.oVADframes = [node.vadPerFrame for node in wasn]
         self.neighbors = [node.neighborsIdx for node in wasn]
-        self.yin = [node.data for node in wasn]
+        if self.preGivenFilters.active and self.preGivenFilters.purpose == 'noise-only':
+            self.yin = [node.cleanspeech for node in wasn]
+        if self.preGivenFilters.active and self.preGivenFilters.purpose == 'speech-only':
+            self.yin = [node.cleannoise for node in wasn]
+        else:
+            self.yin = [node.data for node in wasn]
 
         # For centralised estimates
         self.yinStacked = np.concatenate(
@@ -1218,27 +1227,26 @@ class DANSEvariables(base.DANSEparameters):
         # Check quality of covariance matrix estimates 
         self.check_covariance_matrices(k, tCurr=tCurr)
 
-        if not skipUpdate and not bypassUpdateEventMat:
-            # If covariance matrices estimates are full-rank, update filters
-            self.perform_update(k, skipUpdateCentr=skipUpdateCentr)
-            # ^^^ depends on outcome of `check_covariance_matrices()`.
+        if self.preGivenFilters.active:  # use given filters
+            self.update_using_pregiven_filters(k)
         else:
-            # Do not update the filter coefficients
-            self.wTilde[k][:, self.i[k] + 1, :] =\
-                self.wTilde[k][:, self.i[k], :]
-            # if self.computeCentralised:   # <-- done within `perform_update()`
-            #     self.wCentr[k][:, self.i[k] + 1, :] =\
-            #         self.wCentr[k][:, self.i[k], :]
-            if self.computeLocal:
-                self.wLocal[k][:, self.i[k] + 1, :] =\
-                    self.wLocal[k][:, self.i[k], :]
-            if skipUpdate:
-                print(f'Node {k+1}: {self.i[k]+1}-th update skipped.')
-        if self.bypassUpdates:
-            print('!! User-forced bypass of filter coefficients updates !!')
+            if not skipUpdate and not bypassUpdateEventMat:
+                # If covariance matrices estimates are full-rank, update filters
+                self.perform_update(k, skipUpdateCentr=skipUpdateCentr)
+                # ^^^ depends on outcome of `check_covariance_matrices()`.
+            else:
+                # Do not update the filter coefficients
+                self.wTilde[k][:, self.i[k] + 1, :] = self.wTilde[k][:, self.i[k], :]
+                if self.computeLocal:
+                    self.wLocal[k][:, self.i[k] + 1, :] = self.wLocal[k][:, self.i[k], :]
+                if skipUpdate:
+                    print(f'Node {k+1}: {self.i[k]+1}-th update skipped.')
+            if self.bypassUpdates:
+                print('!! User-forced bypass of filter coefficients updates !!')
 
-        # Update external filters (for broadcasting)
-        self.update_external_filters(k, tCurr)
+            # Update external filters (for broadcasting)
+            self.update_external_filters(k, tCurr)
+        
         # Update SRO estimates
         self.update_sro_estimates(k, fs)
         # Update phase shifts for SRO compensation
@@ -1249,19 +1257,18 @@ class DANSEvariables(base.DANSEparameters):
         # Update iteration index
         self.i[k] += 1
 
-        if 0:
-            if all([self.i[k] == 100 for k in range(self.nNodes)]):  # DEBUG ONLY
-                stop = 1
-                
-                fig, axes = plt.subplots(self.nNodes, 1)
-                fig.set_size_inches(8.5, 3.5)
-                showNsamples = 100
-                for k in range(self.nNodes):
-                    for m in range(self.yTilde[k].shape[-1]):
-                        axes[k].plot(self.yTilde[k][:showNsamples, self.i[k] - 1, m], label=f'DANSE: $\\tilde{{y}}_{{k={k},m={m}}}$')
-                        axes[k].plot(self.yCentr[k][:showNsamples, self.i[k] - 1, m], '--', label=f'Centr: $y_{{k={k},m={m}}}$')
-                    axes[k].legend()
-                    axes[k].set_title(f'Node {k+1}, $i={self.i[0]}$ ({showNsamples} first samples)')
+    def update_using_pregiven_filters(self, k):
+        """Update filters using pre-given coefficients."""
+        self.wTilde[k][:, self.i[k] + 1, :] =\
+            self.preGivenFilters.internalFilters[k][:, self.i[k] + 1, :]
+        self.wTildeExt[k][:, self.i[k] + 1, :] =\
+            self.preGivenFilters.externalFilters[k][:, self.i[k] + 1, :]
+        if self.computeLocal:
+            self.wLocal[k][:, self.i[k] + 1, :] =\
+                self.preGivenFilters.filtersLocal[k][:, self.i[k] + 1, :]
+        if self.computeCentralised:
+            self.wCentr[k][:, self.i[k] + 1, :] =\
+                self.preGivenFilters.filtersCentr[k][:, self.i[k] + 1, :]
 
     def build_ylocal(self, k):
         """Build local vector based on `yTilde`."""
@@ -3101,6 +3108,45 @@ def update_w_gevd(
     
     return w
 
+
+def generate_signals_for_snr_computation(
+        pD: base.DANSEparameters, 
+        dv: DANSEvariables,
+        wasnObj: WASN,
+        danse_function: Callable[[WASN, base.DANSEparameters], tuple[DANSEvariables, WASN]]
+    ):
+    """Generate signals for SNR computation, i.e., the noise-only and
+    speech-only cases."""
+    
+    # Compute noise-only output
+    print('Computing noise-only output...')
+    pUpdated = copy.deepcopy(pD)
+    pUpdated.preGivenFilters = base.PreComputedFilters(
+        active=True,
+        internalFilters=dv.wTilde,
+        externalFilters=dv.wTildeExt,
+        filtersCentr=dv.wCentr,
+        filtersLocal=dv.wLocal,
+        purpose='noise-only'
+    )
+    pUpdated.printoutsAndPlotting.verbose = False  # no printouts
+    dv_n, _ = danse_function(wasnObj, pUpdated)
+    
+    # Compute speech-only output
+    print('Computing speech-only output...')
+    pUpdated.preGivenFilters.purpose = 'speech-only'
+    dv_s, _ = danse_function(wasnObj, pUpdated)
+
+    # Prepare output
+    sigsSnr = {}
+    sigsSnr['n'] = dv_n.d
+    sigsSnr['n_c'] = dv_n.dCentr
+    sigsSnr['n_l'] = dv_n.dLocal
+    sigsSnr['s'] = dv_s.d
+    sigsSnr['s_c'] = dv_s.dCentr
+    sigsSnr['s_l'] = dv_s.dLocal
+
+    return sigsSnr
 
 # --------------------------------------------------------------------------- #
 # Jitted functions
