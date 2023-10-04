@@ -120,8 +120,18 @@ def danse_it_up(
             danse_function = core.tidanse
     # Launch DANSE
     dv, wasnObj = danse_function(*args)
+    # If asked, compute best possible performance (centralized, no SROs, batch)
+    if p.exportParams.bestPerfReference:
+        outBP = core.get_best_perf(*args)
+
     # Compute signals for SNR computation
-    sigsSnr = cl.generate_signals_for_snr_computation(p.danseParams, dv, wasnObj, danse_function)
+    sigsSnr = core.generate_signals_for_snr_computation(
+        p.danseParams,
+        dv,
+        wasnObj,
+        danse_function,
+        p.exportParams.bestPerfReference
+    )
     
     # Format the output for post-processing
     out, wasnUpdated = core.format_output(
@@ -132,12 +142,9 @@ def danse_it_up(
     )
     print('DANSE run complete.')
 
-    # If asked, compute best possible performance (centralized, no SROs, batch)
+    # Add best possible performance data to output
     if p.exportParams.bestPerfReference:
-        print('Computing best possible performance...')
-        outBP = core.get_best_perf(*args)
-        out.include_best_perf_data(outBP)
-        print('Best possible performance computed.')
+        out.include_best_perf_data(outBP, sigsSnr)
 
     return out, wasnUpdated
 

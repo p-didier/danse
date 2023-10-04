@@ -15,11 +15,7 @@ class BatchDANSEvariables(DANSEvariables):
                 self.yin[k][:, self.referenceSensor]) ** 2
         ) for k in range(self.nNodes)]  # <-- initial MMSE cost without DANSE
         self.yTildeBatch = [None for _ in range(self.nNodes)]
-        self.yTildeBatch_s = [None for _ in range(self.nNodes)]
-        self.yTildeBatch_n = [None for _ in range(self.nNodes)]
         self.zBatch = [None for _ in range(self.nNodes)]
-        self.zBatch_s = [None for _ in range(self.nNodes)]
-        self.zBatch_n = [None for _ in range(self.nNodes)]
 
     def get_centralized_and_local_estimates(self):
         """
@@ -49,23 +45,9 @@ class BatchDANSEvariables(DANSEvariables):
                     'ik,ijk->ij',
                     self.wCentr[k][:, self.i[k] + 1, :].conj(), 
                     self.yCentrBatch[:, :-1, :]  # <-- exclude last frame FIXME: why?
-                )                
-                self.dHatCentr_s[:, :, k] = np.einsum(
-                    'ik,ijk->ij',
-                    self.wCentr[k][:, self.i[k] + 1, :].conj(), 
-                    self.yCentrBatch_s[:, :-1, :]  # <-- exclude last frame FIXME: why?
-                )
-                self.dHatCentr_n[:, :, k] = np.einsum(
-                    'ik,ijk->ij',
-                    self.wCentr[k][:, self.i[k] + 1, :].conj(), 
-                    self.yCentrBatch_n[:, :-1, :]  # <-- exclude last frame FIXME: why?
                 )
                 # Convert back to time domain
                 self.dCentr[:, k] = self.get_istft(self.dHatCentr[:, :, k], k)\
-                    / np.sum(self.winWOLAanalysis)
-                self.dCentr_s[:, k] = self.get_istft(self.dHatCentr_s[:, :, k], k)\
-                    / np.sum(self.winWOLAanalysis)
-                self.dCentr_n[:, k] = self.get_istft(self.dHatCentr_n[:, :, k], k)\
                     / np.sum(self.winWOLAanalysis)
 
         if self.computeLocal:
@@ -82,22 +64,8 @@ class BatchDANSEvariables(DANSEvariables):
                     self.wLocal[k][:, self.i[k] + 1, :].conj(), 
                     self.yinSTFT[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
                 )
-                self.dHatLocal_s[:, :, k] = np.einsum(
-                    'ik,ijk->ij',
-                    self.wLocal[k][:, self.i[k] + 1, :].conj(), 
-                    self.yinSTFT_s[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
-                )
-                self.dHatLocal_n[:, :, k] = np.einsum(
-                    'ik,ijk->ij',
-                    self.wLocal[k][:, self.i[k] + 1, :].conj(), 
-                    self.yinSTFT_n[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
-                )
                 # Convert back to time domain
                 self.dLocal[:, k] = self.get_istft(self.dHatLocal[:, :, k], k)\
-                    / np.sum(self.winWOLAanalysis)
-                self.dLocal_s[:, k] = self.get_istft(self.dHatLocal_s[:, :, k], k)\
-                    / np.sum(self.winWOLAanalysis)
-                self.dLocal_n[:, k] = self.get_istft(self.dHatLocal_n[:, :, k], k)\
                     / np.sum(self.winWOLAanalysis)
 
         # Get MMSE costs for centralised and local estimates
@@ -141,23 +109,9 @@ class BatchDANSEvariables(DANSEvariables):
                 'ik,ijk->ij',
                 self.wCentr[k][:, self.i[k] + 1, :].conj(), 
                 self.yCentrBatch[:, indicesFrame, :]
-            )                
-            self.dHatCentr_s[:, :, k] = np.einsum(
-                'ik,ijk->ij',
-                self.wCentr[k][:, self.i[k] + 1, :].conj(), 
-                self.yCentrBatch_s[:, indicesFrame, :]
-            )
-            self.dHatCentr_n[:, :, k] = np.einsum(
-                'ik,ijk->ij',
-                self.wCentr[k][:, self.i[k] + 1, :].conj(), 
-                self.yCentrBatch_n[:, indicesFrame, :]
             )
             # Convert back to time domain
             self.dCentr[:, k] = self.get_istft(self.dHatCentr[:, :, k], k)\
-                / np.sum(self.winWOLAanalysis)
-            self.dCentr_s[:, k] = self.get_istft(self.dHatCentr_s[:, :, k], k)\
-                / np.sum(self.winWOLAanalysis)
-            self.dCentr_n[:, k] = self.get_istft(self.dHatCentr_n[:, :, k], k)\
                 / np.sum(self.winWOLAanalysis)
 
         # Get MMSE costs for centralised estimate
@@ -171,8 +125,7 @@ class BatchDANSEvariables(DANSEvariables):
         Update the DANSE spatial covariance matrices in batch mode,
         using the latest filters.
         """
-        self.yTildeBatch[k], self.yTildeBatch_s[k], self.yTildeBatch_n[k] =\
-            self.get_y_tilde_batch(
+        self.yTildeBatch[k] = self.get_y_tilde_batch(
             k,
             computeSpeechAndNoiseOnly=True,
         )
@@ -193,24 +146,10 @@ class BatchDANSEvariables(DANSEvariables):
             currWtilde.conj(), 
             self.yTildeBatch[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
         )
-        self.dhat_s[:, :, k] = np.einsum(
-            'ik,ijk->ij',
-            currWtilde.conj(), 
-            self.yTildeBatch_s[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
-        )
-        self.dhat_n[:, :, k] = np.einsum(
-            'ik,ijk->ij',
-            currWtilde.conj(), 
-            self.yTildeBatch_n[k][:, :-1, :]  # <-- exclude last frame FIXME: why?
-        )
         # Convert back to time domain
         self.d[:, k] = self.get_istft(self.dhat[:, :, k], k)\
                     / np.sum(self.winWOLAanalysis)
-        self.d_s[:, k] = self.get_istft(self.dhat_s[:, :, k], k)\
-                    / np.sum(self.winWOLAanalysis)
-        self.d_n[:, k] = self.get_istft(self.dhat_n[:, :, k], k)\
-                    / np.sum(self.winWOLAanalysis)
-
+        
     def get_istft(self, xSTFT, k):
         """
         Convert a STFT signal to time domain.

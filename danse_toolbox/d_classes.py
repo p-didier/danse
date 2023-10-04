@@ -11,8 +11,9 @@ from dataclasses import dataclass
 import danse_toolbox.d_base as base
 import danse_toolbox.d_sros as sros
 from collections.abc import Callable
-from danse_toolbox.d_utils import wipe_folder
 import danse_toolbox.dataclass_methods as met
+from danse_toolbox.d_utils import wipe_folder
+
 
 @dataclass
 class ConditionNumbers:
@@ -841,10 +842,12 @@ class DANSEvariables(base.DANSEparameters):
         self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
         self.oVADframes = [node.vadPerFrame for node in wasn]
         self.neighbors = [node.neighborsIdx for node in wasn]
-        if self.preGivenFilters.active and self.preGivenFilters.purpose == 'noise-only':
-            self.yin = [node.cleanspeech for node in wasn]
-        if self.preGivenFilters.active and self.preGivenFilters.purpose == 'speech-only':
+        if self.preGivenFilters.active and\
+            self.preGivenFilters.purpose == 'noise-only':
             self.yin = [node.cleannoise for node in wasn]
+        elif self.preGivenFilters.active and\
+            self.preGivenFilters.purpose == 'speech-only':
+            self.yin = [node.cleanspeech for node in wasn]
         else:
             self.yin = [node.data for node in wasn]
 
@@ -3108,45 +3111,6 @@ def update_w_gevd(
     
     return w
 
-
-def generate_signals_for_snr_computation(
-        pD: base.DANSEparameters, 
-        dv: DANSEvariables,
-        wasnObj: WASN,
-        danse_function: Callable[[WASN, base.DANSEparameters], tuple[DANSEvariables, WASN]]
-    ):
-    """Generate signals for SNR computation, i.e., the noise-only and
-    speech-only cases."""
-    
-    # Compute noise-only output
-    print('Computing noise-only output...')
-    pUpdated = copy.deepcopy(pD)
-    pUpdated.preGivenFilters = base.PreComputedFilters(
-        active=True,
-        internalFilters=dv.wTilde,
-        externalFilters=dv.wTildeExt,
-        filtersCentr=dv.wCentr,
-        filtersLocal=dv.wLocal,
-        purpose='noise-only'
-    )
-    pUpdated.printoutsAndPlotting.verbose = False  # no printouts
-    dv_n, _ = danse_function(wasnObj, pUpdated)
-    
-    # Compute speech-only output
-    print('Computing speech-only output...')
-    pUpdated.preGivenFilters.purpose = 'speech-only'
-    dv_s, _ = danse_function(wasnObj, pUpdated)
-
-    # Prepare output
-    sigsSnr = {}
-    sigsSnr['n'] = dv_n.d
-    sigsSnr['n_c'] = dv_n.dCentr
-    sigsSnr['n_l'] = dv_n.dLocal
-    sigsSnr['s'] = dv_s.d
-    sigsSnr['s_c'] = dv_s.dCentr
-    sigsSnr['s_l'] = dv_s.dLocal
-
-    return sigsSnr
 
 # --------------------------------------------------------------------------- #
 # Jitted functions

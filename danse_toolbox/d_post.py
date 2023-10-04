@@ -141,24 +141,30 @@ class DANSEoutputs(DANSEparameters):
         """
         self.TDfiltSpeech = snrSigs['s']
         self.TDfiltNoise = snrSigs['n']
-        self.TDfiltSpeec_c = snrSigs['s_c']
+        self.TDfiltSpeech_c = snrSigs['s_c']
         self.TDfiltNoise_c = snrSigs['n_c']
-        self.TDfiltSpeec_l = snrSigs['s_l']
+        self.TDfiltSpeech_l = snrSigs['s_l']
         self.TDfiltNoise_l = snrSigs['n_l']
         return self
     
-    def include_best_perf_data(self, outBP: BatchDANSEvariables):
+    def include_best_perf_data(
+            self,
+            outBP: BatchDANSEvariables,
+            sigsSnr: dict
+        ):
         """
         Includes the "best performance" data (computed in centralized,
         no SROs, batch mode).
+        The `sigsSnr` dict is created in `d_classes.generate_signals_for_snr_computation`
+        and contains the signals used for SNR computation.
         """
         self.bestPerfData = {
             'dCentr': outBP.dCentr,
             'dHatCentr': outBP.dHatCentr,
-            'dCentr_s': outBP.dCentr_s,
-            'dHatCentr_s': outBP.dHatCentr_s,
-            'dCentr_n': outBP.dCentr_n,
-            'dHatCentr_n': outBP.dHatCentr_n,
+            'dCentr_s': sigsSnr['s_bp'],
+            # 'dHatCentr_s': outBP.dHatCentr_s,
+            'dCentr_n': sigsSnr['n_bp'],
+            # 'dHatCentr_n': outBP.dHatCentr_n,
             'mseCostCentr': outBP.mmseCostCentr,
             'wCentr': outBP.wCentr,
             'fs': outBP.baseFs,

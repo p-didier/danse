@@ -558,6 +558,54 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
     return p, wasnObj
 
 
+def generate_signals_for_snr_computation(
+        pD: base.DANSEparameters, 
+        dv: DANSEvariables,
+        wasnObj: WASN,
+        danse_function: Callable[[WASN, base.DANSEparameters], tuple[DANSEvariables, WASN]],
+        bestPerfRef: bool = False
+    ):
+    """Generate signals for SNR computation, i.e., the noise-only and
+    speech-only cases."""
+    
+    # Compute noise-only output
+    print('Computing noise-only output...')
+    pUpdated = copy.deepcopy(pD)
+    pUpdated.preGivenFilters = base.PreComputedFilters(
+        active=True,
+        internalFilters=dv.wTilde,
+        externalFilters=dv.wTildeExt,
+        filtersCentr=dv.wCentr,
+        filtersLocal=dv.wLocal,
+        purpose='noise-only'
+    )
+    pUpdated.printoutsAndPlotting.verbose = False  # no printouts
+    dv_n, _ = danse_function(wasnObj, pUpdated)
+    if bestPerfRef:
+        outBP_n = get_best_perf(wasnObj, pUpdated)
+    
+    # Compute speech-only output
+    print('Computing speech-only output...')
+    pUpdated.preGivenFilters.purpose = 'speech-only'
+    dv_s, _ = danse_function(wasnObj, pUpdated)
+    if bestPerfRef:
+        outBP_s = get_best_perf(wasnObj, pUpdated)
+
+    # Prepare output
+    sigsSnr = {}
+    sigsSnr['n'] = dv_n.d
+    sigsSnr['n_c'] = dv_n.dCentr
+    sigsSnr['n_l'] = dv_n.dLocal
+    sigsSnr['s'] = dv_s.d
+    sigsSnr['s_c'] = dv_s.dCentr
+    sigsSnr['s_l'] = dv_s.dLocal
+    if bestPerfRef:
+        sigsSnr['n_bp'] = outBP_n.dCentr
+        sigsSnr['s_bp'] = outBP_s.dCentr
+
+    return sigsSnr
+
+
 def get_best_perf(wasnObj: WASN, p: base.DANSEparameters):
     """
     Computes the best achievable performance for the given scenario, i.e.,

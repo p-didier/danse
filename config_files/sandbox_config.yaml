@@ -46,7 +46,7 @@ danseParams:
   startComputeMetricsAt: after_5s
   # startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
-  startComputeMetricsAt: after_200ms
+  # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
   broadcastType: wholeChunk
   # broadcastType: fewSamples
@@ -87,7 +87,7 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 5  # [s]
+  sigDur: 10  # [s]
   # selfnoiseSNR: 999999999  # [dB]
   selfnoiseSNR: 15  # [dB]
   layoutType: random
