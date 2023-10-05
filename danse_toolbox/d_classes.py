@@ -407,7 +407,7 @@ class DANSEvariables(base.DANSEparameters):
         self.neighbors = [node.neighborsIdx for node in wasn]
         if self.preGivenFilters.active and self.preGivenFilters.purpose == 'noise-only':
             self.yin = [node.cleannoise_noSRO for node in wasn]
-        if self.preGivenFilters.active and self.preGivenFilters.purpose == 'speech-only':
+        elif self.preGivenFilters.active and self.preGivenFilters.purpose == 'speech-only':
             self.yin = [node.cleanspeech_noSRO for node in wasn]
         else:
             self.yin = [node.data_noSRO for node in wasn]
@@ -1007,63 +1007,34 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
 
-        # Common keyword arguments for `base.local_chunk_for_broadcast`
-        kwargs = {
-            't': tCurr,
-            'fs': fs,
-            'DFTsize': self.DFTsize
-        }
-
         # Extract correct frame of local signals
         ykFrame, self.idxBegChunkBroadcast, self.idxEndChunkBroadcast =\
             base.local_chunk_for_broadcast(
             self.yin[k],
-            **kwargs
+            t=tCurr,
+            fs=fs,
+            DFTsize=self.DFTsize,
         )
 
         if self.computeCentralised:
-            # Directly fill in centralised processing buffers
-            if self.broadcastType == 'wholeChunk':
-                self.yLocalCentr[k] = ykFrame
-            elif self.broadcastType == 'fewSamples':
-                if self.efficientSpSBC:
-                    # Count samples recorded since the last broadcast at node
-                    # `k` and adapt the "broadcast length" variable
-                    # used in `danse_compression_few_samples` and
-                    # `fill_buffers`.
-                    nRecordedSamplesSinceLastBroadcast = np.sum(
-                        (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
-                        (self.timeInstants[:, k] <= tCurr)
-                    ) # NB: using `&` instead of `and` for element-wise logical AND
-                    currL = int(self.broadcastLength * np.floor(
-                        nRecordedSamplesSinceLastBroadcast / self.broadcastLength
-                    ))
-                    self.yLocalCentr[k] = ykFrame[-currL:, :]
-                else:
-                    raise NotImplementedError('[PD~20.09.2023-9AM] Not tested yet')
-                    self.yLocalCentr[k] = ykFrame[:self.broadcastLength, :]
+            # Directly fill in buffers for centralized processing
+            self.fill_buffers_centralised(k, ykFrame, tCurr)
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local signals samples.')
 
         elif self.broadcastType == 'wholeChunk':
-
-            # Common keyword arguments for `danse_compression_whole_chunk`
-            kwargs = {
-                'h': self.winWOLAanalysis,
-                'f': self.winWOLAsynthesis,
-                'Ns': self.Ns,
-                'wHat': self.wTildeExt[k][:, self.i[k], :]  # external DANSE filters
-            }
-
             # Time-domain chunk-wise broadcasting
             _, self.zLocal[k] = base.danse_compression_whole_chunk(
                 ykFrame,
                 zqPrevious=self.zLocal[k],
-                **kwargs
+                h=self.winWOLAanalysis,
+                f=self.winWOLAsynthesis,
+                Ns=self.Ns,
+                wHat=self.wTildeExt[k][:, self.i[k], :]  # external DANSE filters
             )  # local compressed signals (time-domain)
 
-            # Save full time-domain signals
+            # Save full time-domain signals for export / debugging
             self.zFullTD[k] = np.concatenate(
                 (self.zFullTD[k], self.zLocal[k][:self.Ns])
             )
@@ -1079,8 +1050,7 @@ class DANSEvariables(base.DANSEparameters):
             updateBroadcastFilter = False
             if np.abs(tCurr - self.lastTDfilterUp[k]) >= self.upTDfilterEvery:
                 if self.noFusionAtSingleSensorNodes and self.nSensorPerNode[k] == 1:
-                    # Do not update filter if there is only 1 sensor at node `k`
-                    pass
+                    pass  # Do not update filter if there is only 1 sensor at node `k`
                 else:
                     updateBroadcastFilter = True
                 self.lastTDfilterUp[k] = tCurr
@@ -1103,19 +1073,15 @@ class DANSEvariables(base.DANSEparameters):
             else:
                 currL = self.broadcastLength
 
-            kwargs = {
-                'wqqHat': self.wTildeExt[k][:, self.i[k], :],  # external DANSE filters
-                'L': currL,
-                'wIRprevious': self.wIR[k],
-                'winWOLAanalysis': self.winWOLAanalysis,
-                'winWOLAsynthesis': self.winWOLAsynthesis,
-                'Ns': self.Ns,
-                'updateBroadcastFilter': updateBroadcastFilter
-            }
-
             self.zLocal[k], self.wIR[k] = base.danse_compression_few_samples(
                 ykFrame,
-                **kwargs
+                wqqHat=self.wTildeExt[k][:, self.i[k], :],  # external DANSE filters
+                L=currL,
+                wIRprevious=self.wIR[k],
+                winWOLAanalysis=self.winWOLAanalysis,
+                winWOLAsynthesis=self.winWOLAsynthesis,
+                Ns=self.Ns,
+                updateBroadcastFilter=updateBroadcastFilter
             )  # local compressed signals
             
             # Prepare to fill buffers in
@@ -1126,6 +1092,40 @@ class DANSEvariables(base.DANSEparameters):
 
         self.nBroadcasts[k] += 1
 
+
+    def fill_buffers_centralised(self, k, ykFrame, tCurr):
+        """
+        Fill in buffers -- simulating broadcast of compressed signals
+        from one node (`k`) to all other nodes (centralized case).
+
+        Parameters
+        ----------
+        k : int
+            Current node index.
+        ykFrame : array_like
+            Current node's local signal frame.
+        tCurr : float
+            Current time instant [s].
+        """
+        if self.broadcastType == 'wholeChunk':
+            self.yLocalCentr[k] = ykFrame
+        elif self.broadcastType == 'fewSamples':
+            if self.efficientSpSBC:
+                # Count samples recorded since the last broadcast at node
+                # `k` and adapt the "broadcast length" variable
+                # used in `danse_compression_few_samples` and
+                # `fill_buffers`.
+                nRecordedSamplesSinceLastBroadcast = np.sum(
+                    (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
+                    (self.timeInstants[:, k] <= tCurr)
+                ) # NB: using `&` instead of `and` for element-wise logical AND
+                currL = int(self.broadcastLength * np.floor(
+                    nRecordedSamplesSinceLastBroadcast / self.broadcastLength
+                ))
+                self.yLocalCentr[k] = ykFrame[-currL:, :]
+            else:
+                raise NotImplementedError('[PD~20.09.2023-9AM] Not tested yet')
+                self.yLocalCentr[k] = ykFrame[:self.broadcastLength, :]
 
     def fill_buffers(self, k, n):
         """
@@ -1449,16 +1449,13 @@ class DANSEvariables(base.DANSEparameters):
     def build_ycentr(self, tCurr, fs, k):
         """Build STFT-domain centralised observation vector. """
         # Extract current local data chunk
-        kwargs = {
-            't': tCurr,
-            'fs': fs,
-            'bd': self.broadcastType,
-            'Ndft': self.DFTsize,
-            'Ns': self.Ns
-        }
         yLocalCurr, _, _ = base.local_chunk_for_update(
             self.yin[k],
-            **kwargs
+            t=tCurr,
+            fs=fs,
+            bd=self.broadcastType,
+            Ndft=self.DFTsize,
+            Ns=self.Ns
         )
         # Build full available observation vector
         yCentrCurr = np.empty((self.DFTsize, 0))
@@ -1543,7 +1540,7 @@ class DANSEvariables(base.DANSEparameters):
         in non-fully connected WASNs."""
         TIDANSEvariables.ti_update_external_filters(self, k, t)
 
-    def process_incoming_signals_buffers(self, k, t):
+    def process_incoming_signals_buffers(self, k, t, tiFlag=False):
         """
         Processes the incoming data from other nodes, as stored in local node {k}'s
         buffers. Called whenever a DANSE update can be performed
@@ -1555,6 +1552,8 @@ class DANSEvariables(base.DANSEparameters):
             Receiving node index.
         t : float
             Current time instant [s].
+        tiFlag : bool
+            If True, use TI-DANSE buffers.
         """
 
         # Shorter renaming
@@ -1570,8 +1569,13 @@ class DANSEvariables(base.DANSEparameters):
         # Initialise flags vector (overflow: >0; underflow: <0; or none: ==0)
         bufferFlags = np.zeros(len(self.neighbors[k]))
 
+        # if tiFlag:
+        #     buf = self.
+        # else:
+        #     buf = self.zBuffer[k]
+
         for idxq in range(len(self.neighbors[k])):
-            
+
             Bq = len(self.zBuffer[k][idxq])  # buffer size for neighbour `q`
 
             if self.i[k] == 0: # first DANSE iteration case 
@@ -2565,35 +2569,29 @@ class TIDANSEvariables(DANSEvariables):
             Current node's sampling frequency [Hz].
         """
 
-        # Common keyword arguments for `base.local_chunk_for_broadcast`
-        kwargs = {
-            't': tCurr,
-            'fs': fs,
-            'DFTsize': self.DFTsize
-        }
-        
         # Extract correct frame of local signals
         ykFrame, _, _ = base.local_chunk_for_broadcast(
             self.yin[k],
-            **kwargs
+            t=tCurr,
+            fs=fs,
+            DFTsize=self.DFTsize,
         )
 
-        # Account for SROs w.r.t. the root node if the compensation
-        # strategy is 'network-wide'.
-        if self.compensationStrategy == 'network-wide' and\
-            self.compensateSROs:
-            if k != self.currentWasnTreeObj.rootIdx:  # only non-root updates
-                # Estimate local clock drift w.r.t. tree root
-                self.estimate_local_clock_drift(k, tCurr, fs)
-            phaseShiftFactor = self.get_local_phase_shift(k)
-            # Apply phase shift to local signals in frequency domain
-            args = (phaseShiftFactor, self.DFTsize)
-            ykFrame = apply_phase_shift_to_td_frame(ykFrame, *args)
+        # # Account for SROs w.r.t. the root node if the compensation
+        # # strategy is 'network-wide'.
+        # if self.compensationStrategy == 'network-wide' and\
+        #     self.compensateSROs:
+        #     if k != self.currentWasnTreeObj.rootIdx:  # only non-root updates
+        #         # Estimate local clock drift w.r.t. tree root
+        #         self.estimate_local_clock_drift(k, tCurr, fs)
+        #     phaseShiftFactor = self.get_local_phase_shift(k)
+        #     # Apply phase shift to local signals in frequency domain
+        #     args = (phaseShiftFactor, self.DFTsize)
+        #     ykFrame = apply_phase_shift_to_td_frame(ykFrame, *args)
 
         if self.computeCentralised:
-            pass  # TODO: copy / implement what is in DANSEvariables.broadcast()
-            # Ideally, we should have one function for both DANSE and TI-DANSE
-            # (they are just too similar)  [PD~22.09.2023]
+            # Directly fill in buffers for centralized processing
+            self.fill_buffers_centralised(k, ykFrame, tCurr)
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
@@ -2605,9 +2603,38 @@ class TIDANSEvariables(DANSEvariables):
                 ykFrame,
                 zForSynthesis=self.zLocalPrimeBuffer[k]
             )
+            stop = 1
         else:
-            raise NotImplementedError  # TODO:
-        
+            # Only update filter every so often
+            updateBroadcastFilter = False
+            if np.abs(tCurr - self.lastTDfilterUp[k]) >= self.upTDfilterEvery:
+                if self.noFusionAtSingleSensorNodes and self.nSensorPerNode[k] == 1:
+                    pass  # Do not update filter if there is only 1 sensor at node `k`
+                else:
+                    updateBroadcastFilter = True
+                self.lastTDfilterUp[k] = tCurr
+            
+            if self.efficientSpSBC:
+                nRecordedSamplesSinceLastBroadcast = np.sum(
+                    (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
+                    (self.timeInstants[:, k] <= tCurr)
+                ) # NB: using `&` instead of `and` for element-wise logical AND
+                currL = int(self.broadcastLength * np.floor(
+                    nRecordedSamplesSinceLastBroadcast / self.broadcastLength
+                ))
+                self.lastBroadcastInstant[k] = tCurr  # update last broadcast instant
+            else:
+                currL = self.broadcastLength
+
+            self.zLocalPrimeBuffer[k], self.wIR[k] = self.ti_compression_few_samples(
+                k,
+                ykFrame,
+                nSamplesToBroadcast=currL,
+                updateBroadcastFilter=updateBroadcastFilter
+            )  # local compressed signals
+
+            stop = 1
+            
     def get_local_phase_shift(self, k):
         """
         Computes the phase shift for the current node w.r.t. the root node.
@@ -2640,7 +2667,7 @@ class TIDANSEvariables(DANSEvariables):
         # Process WOLA buffer: use the valid part of the overlap-added signal
         self.zLocalPrime[k] = np.concatenate((
             self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
-            self.zLocalPrimeBuffer[k][:self.Ns]
+            self.zLocalPrimeBuffer[k][:self.Ns]  # first `Ns` samples
         ))
 
         # Compute partial sum
@@ -2675,6 +2702,9 @@ class TIDANSEvariables(DANSEvariables):
             else:   # <-- case where $\eta$ has not yet been computed, e.g., due to SROs
                 self.etaMk[l] = np.array([])
 
+    def ti_process_incoming_signals_buffers(self, k, t):
+        self.process_incoming_signals_buffers(k, t)
+
     def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
         """
         Performs an update of the DANSE filter coefficients at node `k` and
@@ -2698,20 +2728,21 @@ class TIDANSEvariables(DANSEvariables):
             self.firstDANSEupdateRefSensor = tCurr
 
         # Process buffers
-        self.process_incoming_signals_buffers(k, tCurr)
-        self.wipe_local_buffers(k)  # wipe local buffers for next iteration
+        # self.ti_process_incoming_signals_buffers(k, tCurr)
+        # self.wipe_local_buffers(k)  # wipe local buffers for next iteration
 
         # Construct `\tilde{y}_k` in frequency domain
         self.ti_build_ytilde(tCurr, fs, k)
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
+            raise NotImplementedError('Currently relies on self.yc, which is not correctly initiated for TI-DANSE')
             self.build_ycentr(tCurr, fs, k)
         if self.computeLocal:  # extract local info (most easily: from `\tilde{y}_k`)
             self.build_ylocal(k)
 
         # Compensate for SROs
         # skipUpdate = self.ti_compensate_sros(k, tCurr)
-        
+
         # Ryy and Rnn updates (including centralised / local, if needed)
         self.spatial_covariance_matrix_update(k)
 
@@ -2796,7 +2827,6 @@ class TIDANSEvariables(DANSEvariables):
         # Store local clock drift estimate
         self.localSROwrtRoot[k] = sroOut
 
-
     def ti_build_ytilde(self, tCurr, fs, k):        
         """
         Builds the observation vector used for the TI-DANSE filter update.
@@ -2836,8 +2866,8 @@ class TIDANSEvariables(DANSEvariables):
             (yLocalCurr, self.etaMk[k][:, np.newaxis]),
             axis=1
         )
-
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
+
         # Go to frequency domain
         yTildeHatCurr = np.fft.fft(
             self.yTilde[k][:, self.i[k], :] *\
@@ -2917,6 +2947,67 @@ class TIDANSEvariables(DANSEvariables):
         
         return zqHat, zq
     
+    def ti_compression_few_samples(
+            self,
+            k: int,
+            yq: np.ndarray,
+            nSamplesToBroadcast: int,
+            updateBroadcastFilter: bool = False
+        ):
+        """
+        Performs local signals compression for TI-DANSE,
+        in the time-domain (to be able to broadcast the compressed
+        signal `L` samples at a time between nodes).
+        Approximate WOLA filtering process via linear convolution.
+
+        Parameters
+        ----------
+        k : int
+            Node index.
+        yq : [Ntotal x nSensors] np.ndarray (real)
+            Local sensor signals.
+        nSamplesToBroadcast : int
+            Broadcast length [samples].
+        updateBroadcastFilter : bool
+            If true, update the broadcast filter.
+
+        Returns
+        -------
+        zq : [N x 1] np.ndarray (real)
+            Compress local sensor signals (1-D).
+        wIR : [N x nSensors] np.ndarray (real)
+            Time-domain filter for broadcast.
+        """
+
+        if updateBroadcastFilter:
+            wIR = base.dist_fct_approx(
+                wHat=self.wTildeExt[k][:, self.i[k], :],
+                h=self.winWOLAanalysis,
+                f=self.winWOLAsynthesis,
+                R=self.Ns
+            )
+        else:
+            wIR = self.wIR[k]
+        
+        # Perform convolution
+        yfiltLastSamples = np.zeros((nSamplesToBroadcast, yq.shape[-1]))
+        for idxSensor in range(yq.shape[-1]):
+            # Indices required from convolution output
+            idDesired = np.arange(
+                start=len(wIR) - nSamplesToBroadcast + 1,
+                stop=len(wIR) + 1
+            )
+            tmp = base.extract_few_samples_from_convolution(
+                idDesired,
+                wIR[:, idxSensor],
+                yq[:, idxSensor]
+            )
+            yfiltLastSamples[:, idxSensor] = tmp
+
+        zq = np.sum(yfiltLastSamples, axis=1)
+
+        return zq, wIR
+
     def ti_update_external_filters(self, k, t):
         """
         Update external filters for relaxed filter update.
@@ -2933,6 +3024,8 @@ class TIDANSEvariables(DANSEvariables):
         t : float
             Current time instant [s].
         """
+        # TODO: find a way to combine this function with the DANSE one
+        # (`DANSEvariables.update_external_filters()`)
 
         if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
             # No relaxation (i.e., no "external" filters)
@@ -2940,9 +3033,16 @@ class TIDANSEvariables(DANSEvariables):
                 self.wTilde[k][:, self.i[k] + 1, :]
         else:   # Simultaneous or asynchronous node-updating
             # Relaxed external filter update
-            self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
-                (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
+            if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
+                # If node `k` has only one sensor, do not perform external
+                # filter update (i.e., no "single-sensor signal fusion", as
+                # there is already just one channel).
+                self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                    self.wTildeExt[k][:, self.i[k], :]
+            else:
+                self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                    self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
+                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
             
             if t is None:
                 updateFlag = True  # update regardless of time elapsed
@@ -2958,33 +3058,6 @@ class TIDANSEvariables(DANSEvariables):
                 self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
                     self.wTildeExtTarget[k] + self.alphaExternalFilters *\
                     self.wTilde[k][:, self.i[k] + 1, :]
-
-        # if self.noExternalFilterRelaxation:
-        #     # No relaxation (i.e., no "external" filters)
-        #     self.wTildeExt[k][:, self.i[k], :] =\
-        #         self.wTilde[k][:, self.i[k] + 1, :]
-        # else:
-        #     # Simultaneous or asynchronous node-updating
-        #     if 'seq' not in self.nodeUpdating:
-        #         # Relaxed external filter update
-        #         self.wTildeExt[k][:, self.i[k], :] =\
-        #             self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
-        #             (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
-        #         # Update targets
-        #         if t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates:
-        #             self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
-        #                 self.wTildeExtTarget[k] + self.alphaExternalFilters *\
-        #                 self.wTilde[k][:, self.i[k] + 1, :]
-        #             # Update last external filter update instant [s]
-        #             self.lastExtFiltUp[k] = t
-        #             # Inform user
-        #             if self.printoutsAndPlotting.verbose and\
-        #                 self.printoutsAndPlotting.printout_externalFilterUpdate:
-        #                 print(f't={np.round(t, 3)}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-        #     # Sequential node-updating
-        #     else:
-        #         self.wTildeExt[k][:, self.i[k], :] =\
-        #             self.wTilde[k][:, self.i[k] + 1, :]
 
     def ti_compensate_sros(self):
         pass  #  TODO:

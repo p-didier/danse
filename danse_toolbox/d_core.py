@@ -244,19 +244,19 @@ def tidanse(
     print(f'{np.amax(tidv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
     print(f'(Real-time processing factor: {np.round(np.amax(tidv.timeInstants) / dur, 4)})')
 
-    # Build output
-    out = DANSEoutputs()
-    out.import_params(p)
-    out.from_variables(tidv)
-    # Update WASN object
-    for k in range(len(wasnObj.wasn)):
-        wasnObj.wasn[k].enhancedData = tidv.d[:, k]
-        if tidv.computeCentralised:
-            wasnObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
-        if tidv.computeLocal:
-            wasnObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
+    # # Build output
+    # out = DANSEoutputs()
+    # out.import_params(p)
+    # out.from_variables(tidv)
+    # # Update WASN object
+    # for k in range(len(wasnObj.wasn)):
+    #     wasnObj.wasn[k].enhancedData = tidv.d[:, k]
+    #     if tidv.computeCentralised:
+    #         wasnObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
+    #     if tidv.computeLocal:
+    #         wasnObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
 
-    return out, wasnObj
+    return tidv, wasnObj
 
 
 def danse_batch(
@@ -614,12 +614,22 @@ def get_best_perf(wasnObj: WASN, p: base.DANSEparameters, wCentr=None):
     using batch estimates.
     If `wCentr` is given, use those filters instead of computing them.
     """
-    # Initialize variables
-    bdv = BatchDANSEvariables()  # batch
-    bdv.import_params(p)
-    bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
-    bdv.init()  # batch-mode-specific initialization
-    # Get centralized and local estimates
-    bdv.get_centralized_estimates(wCentr)
+    if wasnObj.adjacencyMatrix == np.array([]):  # fully connected topology
+        # Initialize variables
+        bdv = BatchDANSEvariables()  # batch
+        bdv.import_params(p)
+        bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
+        bdv.init()  # batch-mode-specific initialization
+        # Get centralized and local estimates
+        bdv.get_centralized_estimates(wCentr)
+    
+    else:  # ad-hoc topology
+        # Initialize variables
+        bdv = BatchTIDANSEvariables(p, wasnObj.wasn)
+        bdv.import_params(p)
+        bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
+        bdv.init_for_adhoc_topology()
+        # Get centralized and local estimates
+        bdv.get_centralized_estimates(wCentr)
 
     return bdv

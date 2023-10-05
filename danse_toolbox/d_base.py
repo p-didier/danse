@@ -713,40 +713,80 @@ def prep_evmat_build(
                 nNodes=nNodes,
                 wasnObj=wasnObj
             )
-
             bcInstants = copy.deepcopy(fuInstants)
             # ^ we differentiate fusion instants from broadcast instants to 
             # ensure fusion occurs in all nodes before broadcasting (necessary
             # to compute partial in-network sums).
-            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            # if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
             reInstants = copy.deepcopy(fuInstants)  # same relay instants
-                # raise ValueError('WRONG: the relay instants depend on which node is the root!!!')
-            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
-                # form new tree at every DANSE update
-                seqUpInstants, upNodeIndices = get_sequential_update_instants(
-                    upInstants=upInstants,
-                    startNodeIdx=p.seqUpdateStartNodeIdx
-                )
-                trInstants = copy.deepcopy(seqUpInstants)
-                trInstants[0] = 0  # the first tree formation happens at t=0 s.
+        elif 'fewSamples' in p.broadcastType:
+            # Expected TI-DANSE update instants
+            upInstants = generate_aligned_instants(
+                startIdx=np.ceil(p.DFTsize / p.Ns),  # we only start fusing when we have enough samples
+                eventSep=p.Ns,
+                nEventTotal=numUpInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
+            if p.efficientSpSBC:
+                bcInstants = []
+                # The broadcast instants at node `k` are the union of the
+                # update instants of all its neighbors.
+                for k in range(nNodes):
+                    combinedUpInstants = []
+                    # combinedUpInstants.append(p.DFTsize/fs[k])  # we start fusing as soon as we have enough samples
+                    for q in wasnObj.wasn[k].neighborsIdx:
+                        for ii in range(len(upInstants[q])):
+                            if upInstants[q][ii] not in combinedUpInstants:
+                                combinedUpInstants.append(upInstants[q][ii])
+                    bcInstants.append(np.sort(np.array(combinedUpInstants)))
+                # Align broadcast instants to actual possible broadcast instants
+                # bcInstantUntouched = copy.deepcopy(bcInstants)
+                for k in range(nNodes):
+                    instants = wasnObj.wasn[k].timeStamps
+                    possibleBcInstants = instants[p.broadcastLength::p.broadcastLength]
+                    for ii in range(len(bcInstants[k])):
+                        if bcInstants[k][ii] not in possibleBcInstants:
+                            # Replace by closest past sample instant
+                            possibleInstants = possibleBcInstants[
+                                possibleBcInstants < bcInstants[k][ii]
+                            ]
+                            if len(possibleInstants) > 0:
+                                bcInstants[k][ii] = possibleInstants[-1]
+                            else:
+                                bcInstants[k][ii] = possibleBcInstants[0]
             else:
-                # form tree at WASN initialization only
-                trInstants = np.array([0])
-                upNodeIndices = np.array([p.seqUpdateStartNodeIdx])
-            trInstantsArranged = [trInstants[upNodeIndices == k] for k in range(nNodes)]
-            # Keep only the relevant leaf-to-root orderings
-            leafToRootOrderings = list(
-                islice(orderingsCycled, None, len(trInstants))
-            )
-            # Keep only the relevant WASNs
-            wasnObjList = list(
-                islice(wasnObjListCycled, None, len(trInstants))
-            )
-        else:
-            raise ValueError('fewSamples - Not yet implemented for TI-DANSE.')
+                bcInstants = generate_aligned_instants(
+                    startIdx=1,
+                    eventSep=p.broadcastLength,
+                    nEventTotal=numBcInTtot,
+                    nNodes=nNodes,
+                    wasnObj=wasnObj
+                )
+            fuInstants = copy.deepcopy(bcInstants)
+            reInstants = copy.deepcopy(bcInstants)
 
+        # Tree formation instants and configurations
+        if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
+            # form new tree at every DANSE update
+            seqUpInstants, upNodeIndices = get_sequential_update_instants(
+                upInstants=upInstants,
+                startNodeIdx=p.seqUpdateStartNodeIdx
+            )
+            trInstants = copy.deepcopy(seqUpInstants)
+            trInstants[0] = 0  # the first tree formation happens at t=0 s.
+        else:
+            # form tree at WASN initialization only
+            trInstants = np.array([0])
+            upNodeIndices = np.array([p.seqUpdateStartNodeIdx])
+        trInstantsArranged = [trInstants[upNodeIndices == k] for k in range(nNodes)]
+        # Keep only the relevant leaf-to-root orderings
+        leafToRootOrderings = list(
+            islice(orderingsCycled, None, len(trInstants))
+        )
+        # Keep only the relevant WASNs
+        wasnObjList = list(
+            islice(wasnObjListCycled, None, len(trInstants))
+        )
     else:   # fully connected WASN
         fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
@@ -1799,8 +1839,8 @@ def danse_compression_few_samples(
     ):
     """
     Performs local signals compression according to DANSE theory [1],
-    in the time-domain (to be able to broadcast the compressed signal sample
-    per sample between nodes).
+    in the time-domain (to be able to broadcast the compressed
+    signal `L` samples at a time between nodes).
     Approximate WOLA filtering process via linear convolution.
     
     Parameters

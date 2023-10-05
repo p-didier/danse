@@ -588,29 +588,38 @@ class WASN:
         if 'root' not in [node.nodeType for node in self.wasn]:
             raise ValueError('The WASN cannot be orientated: missing root node.')
         
-        def identify_upstream_downstream(nodeIdx: int, wasn: list[Node], passedNodes):
+        def identify_upstream_downstream(
+                nodeIdx: int,
+                wasn: list[Node],
+                passedNodes: list[int]
+            ):
             """Recursive helper function to orientate WASN."""
             nextNodesIndices = []
-            for n in wasn[nodeIdx].neighborsIdx:
+            for q in wasn[nodeIdx].neighborsIdx:
                 # Identify downstream neighbors
-                if nodeIdx not in wasn[n].downstreamNeighborsIdx and\
-                    nodeIdx not in wasn[n].upstreamNeighborsIdx:
-                    wasn[n].downstreamNeighborsIdx.append(nodeIdx)
-                    if n not in passedNodes:
-                        nextNodesIndices.append(n)
-                        if n not in wasn[nodeIdx].upstreamNeighborsIdx:
-                            wasn[nodeIdx].upstreamNeighborsIdx.append(n)
+                if nodeIdx not in wasn[q].downstreamNeighborsIdx and\
+                    nodeIdx not in wasn[q].upstreamNeighborsIdx:
+                    wasn[q].downstreamNeighborsIdx.append(nodeIdx)
+                    if q not in passedNodes:
+                        nextNodesIndices.append(q)
+                        if q not in wasn[nodeIdx].upstreamNeighborsIdx:
+                            wasn[nodeIdx].upstreamNeighborsIdx.append(q)
                 # Identify upstream neighbors
-                for ii in wasn[n].neighborsIdx:
-                    if ii not in wasn[n].downstreamNeighborsIdx and\
-                        ii not in wasn[n].upstreamNeighborsIdx:
-                        wasn[n].upstreamNeighborsIdx.append(ii)
+                for ii in wasn[q].neighborsIdx:
+                    if ii not in wasn[q].downstreamNeighborsIdx and\
+                        ii not in wasn[q].upstreamNeighborsIdx:
+                        wasn[q].upstreamNeighborsIdx.append(ii)
             return nextNodesIndices, wasn
 
         nextRootIndices = [self.rootIdx]
         passedNodes = []
+        # Reset object before iteratively orientating the WASN
+        self.leafToRootOrdering = [self.rootIdx]
+        for k in range(len(self.wasn)):
+            self.wasn[k].upstreamNeighborsIdx = []
+            self.wasn[k].downstreamNeighborsIdx = []
+        
         # Iteratively orientate the WASN
-        self.leafToRootOrdering.append([self.rootIdx])
         while nextRootIndices != []:
             nextNextRootIndices = []
             for k in nextRootIndices:
