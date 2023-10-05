@@ -29,7 +29,10 @@ SKIP_ALREADY_RUN_TESTS = True
 # General parameters
 EXPORT_FOLDER = './danse/out/battery20230919_perf_asfctofL'
 
-def main():
+def main(
+        baseConfigFile: str=BASE_CONFIG_FILE,
+        exportFolder: str=EXPORT_FOLDER,
+    ):
     """Main function (called by default when running script)."""
     
     battery = prepare_test_battery()
@@ -44,10 +47,10 @@ def main():
         # blockPrint()
         # Check if test has already been run
         if SKIP_ALREADY_RUN_TESTS and\
-            os.path.exists(f"{EXPORT_FOLDER}/{test['ref']}/metrics.pkl"):
+            os.path.exists(f"{exportFolder}/{test['ref']}/metrics.pkl"):
             print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) already run. Skipping.")
             continue
-        launch(test)  # launch test
+        launch(test, baseConfigFile, exportFolder)  # launch test
         # enablePrint()
         print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) completed in {time.time() - t} s.\n")
 
@@ -85,10 +88,10 @@ def prepare_test_battery():
     return battery
 
 
-def launch(test: dict):
+def launch(test: dict, baseConfigFile: str, exportFolder: str=EXPORT_FOLDER):
     """Launch a test."""
     # Load base parameters from config file
-    p = TestParameters().load_from_yaml(BASE_CONFIG_FILE)
+    p = TestParameters().load_from_yaml(baseConfigFile)
     # Adapt parameters
     p.danseParams.DFTsize = N
     p.danseParams.WOLAovlp = WOLA_OVLP
@@ -99,7 +102,7 @@ def launch(test: dict):
     p.danseParams.includeFSDflags = test['flagsOn']
     p.wasnParams.nSensorPerNode = MK
     p.wasnParams.SROperNode = SROS
-    p.exportParams.exportFolder = f'{EXPORT_FOLDER}/{test["ref"]}'
+    p.exportParams.exportFolder = f'{exportFolder}/{test["ref"]}'
     p.exportParams.wavFiles = False
     p.exportParams.filterNorms = False
     p.exportParams.sroEstimPerfPlot = False

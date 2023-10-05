@@ -563,7 +563,8 @@ def generate_signals_for_snr_computation(
         dv: DANSEvariables,
         wasnObj: WASN,
         danse_function: Callable[[WASN, base.DANSEparameters], tuple[DANSEvariables, WASN]],
-        bestPerfRef: bool = False
+        bestPerfRef: bool = False,
+        wCentrBatch: np.ndarray = None
     ):
     """Generate signals for SNR computation, i.e., the noise-only and
     speech-only cases."""
@@ -582,14 +583,14 @@ def generate_signals_for_snr_computation(
     pUpdated.printoutsAndPlotting.verbose = False  # no printouts
     dv_n, _ = danse_function(wasnObj, pUpdated)
     if bestPerfRef:
-        outBP_n = get_best_perf(wasnObj, pUpdated)
+        outBP_n = get_best_perf(wasnObj, pUpdated, wCentr=wCentrBatch)
     
     # Compute speech-only output
     print('Computing speech-only output...')
     pUpdated.preGivenFilters.purpose = 'speech-only'
     dv_s, _ = danse_function(wasnObj, pUpdated)
     if bestPerfRef:
-        outBP_s = get_best_perf(wasnObj, pUpdated)
+        outBP_s = get_best_perf(wasnObj, pUpdated, wCentr=wCentrBatch)
 
     # Prepare output
     sigsSnr = {}
@@ -606,11 +607,12 @@ def generate_signals_for_snr_computation(
     return sigsSnr
 
 
-def get_best_perf(wasnObj: WASN, p: base.DANSEparameters):
+def get_best_perf(wasnObj: WASN, p: base.DANSEparameters, wCentr=None):
     """
     Computes the best achievable performance for the given scenario, i.e.,
     if all nodes could communicate in a centralized way, with no SROs, and
     using batch estimates.
+    If `wCentr` is given, use those filters instead of computing them.
     """
     # Initialize variables
     bdv = BatchDANSEvariables()  # batch
@@ -618,6 +620,6 @@ def get_best_perf(wasnObj: WASN, p: base.DANSEparameters):
     bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
     bdv.init()  # batch-mode-specific initialization
     # Get centralized and local estimates
-    bdv.get_centralized_estimates()
+    bdv.get_centralized_estimates(wCentr)
 
     return bdv

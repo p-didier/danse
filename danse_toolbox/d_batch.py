@@ -78,9 +78,10 @@ class BatchDANSEvariables(DANSEvariables):
                 self.dCentr[:, k])**2
         ) for k in range(self.nNodes)]
 
-    def get_centralized_estimates(self):
+    def get_centralized_estimates(self, wCentr=None):
         """
         Get the centralized estimates of the desired signal.
+        If `wCentr` is given, use those filters instead of computing them.
         """
 
         # Select appropriate update function
@@ -92,14 +93,17 @@ class BatchDANSEvariables(DANSEvariables):
             rank = 1  # <-- arbitrary, not used in this case
 
         for k in range(self.nNodes):
-            self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
-                self.Ryycentr[k],
-                self.Rnncentr[k],
-                refSensorIdx=int(
-                    np.sum(self.nSensorPerNode[:k]) + self.referenceSensor
-                ),
-                rank=rank
-            )
+            if wCentr is None:
+                self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
+                    self.Ryycentr[k],
+                    self.Rnncentr[k],
+                    refSensorIdx=int(
+                        np.sum(self.nSensorPerNode[:k]) + self.referenceSensor
+                    ),
+                    rank=rank
+                )
+            else:
+                self.wCentr[k][:, self.i[k] + 1, :] = wCentr[k][:, self.i[k] + 1, :]
             # Estimate the centralised desired signal via linear combination
             if self.yCentrBatch.shape[1] == self.dHatCentr.shape[1]:
                 indicesFrame = np.arange(self.yCentrBatch.shape[1])

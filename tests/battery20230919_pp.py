@@ -19,6 +19,9 @@ METRICS_TO_PLOT = [
 ]
 NS = 512  # TODO: improve handling of this -- could be inferred from results
 
+TO_PLOT = 'danse'
+# TO_PLOT = 'centr'
+
 def main(dataFolder: str=DATA_FOLDER):
     """Main function (called by default when running script)."""
     
@@ -28,8 +31,8 @@ def main(dataFolder: str=DATA_FOLDER):
     fig, _ = plot_data(data)
 
     # Export
-    fig.savefig(f'{dataFolder}/combined_metrics.pdf', bbox_inches='tight')
-    fig.savefig(f'{dataFolder}/combined_metrics.png', dpi=300, bbox_inches='tight')
+    fig.savefig(f'{dataFolder}/combined_metrics_{TO_PLOT}.pdf', bbox_inches='tight')
+    fig.savefig(f'{dataFolder}/combined_metrics_{TO_PLOT}.png', dpi=300, bbox_inches='tight')
 
     print('Done.')
 
@@ -38,6 +41,8 @@ def main(dataFolder: str=DATA_FOLDER):
 
 def plot_data(data: dict[dict[pd.DataFrame]]):
     """Plot data."""
+
+    markers = ['o', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X']
 
     nodes = list(data.keys())
     metrics = list(data[nodes[0]].keys())
@@ -68,7 +73,7 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
                 currAx.semilogx(
                     bcLengths,
                     currData[ty],
-                    f'C{idxType}.-',
+                    f'C{idxType}{markers[idxType]}-',
                     label=ty
                 )
             currAx.grid()
@@ -83,6 +88,7 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
             currAx.set_title(f'{k}, {m}')
             if 'stoi' in m:
                 currAx.set_ylim([0, 1])
+    fig.suptitle(TO_PLOT)
 
     plt.tight_layout()
 
@@ -113,8 +119,11 @@ def get_data(
             )
             for subfolder in data.keys():
                 currData = data[subfolder]
-                df.loc[currData['L'], currData['type']] =\
-                    getattr(currData['metrics'], metric)[f'Node{k+1}'].afterCentr
+                if TO_PLOT == 'danse':
+                    attr = getattr(currData['metrics'], metric)[f'Node{k+1}'].after
+                elif TO_PLOT == 'centr':
+                    attr = getattr(currData['metrics'], metric)[f'Node{k+1}'].afterCentr
+                df.loc[currData['L'], currData['type']] = attr
                 
             dfs[f'Node{k+1}'][metric] = df
 

@@ -130,7 +130,8 @@ def danse_it_up(
         dv,
         wasnObj,
         danse_function,
-        p.exportParams.bestPerfReference
+        p.exportParams.bestPerfReference,
+        wCentrBatch=outBP.wCentr if p.exportParams.bestPerfReference else None
     )
     
     # Format the output for post-processing
