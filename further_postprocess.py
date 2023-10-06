@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 import tests.postprocess_script as pp
 
-SUBFOLDER = '20230911_tests/test1_Mk_2_2_1'
 BASE_RESULTS_FOLDER = f'{Path(__file__).parent}/out/'
+SUBFOLDER = '20231006_tests/metrics_comp/test3_as2_selfnoise15dB'
 
 def main():
     """Main function (called by default when running script)."""
@@ -17,7 +17,12 @@ def main():
     foldername = f'{BASE_RESULTS_FOLDER}/{SUBFOLDER}'
 
     # Perform post-processing
-    pp.main(foldername)
+    pp.main(foldername, params={
+        'frameDur': None,  # [s] duration of metrics computation frame. If `None`, use entire signal, starting from the start time
+        'tmax': 20,
+        'frameShift': 1
+    })
+    pp.pp_20231006_combine_metrics(foldername, frameDur=None)
 
 if __name__ == '__main__':
     sys.exit(main())

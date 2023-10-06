@@ -1,8 +1,8 @@
 seed: 0
 #
 exportParams:
-  exportFolder: C:\Users\u0137935\Dropbox\PC\Documents\sounds-phd\danse/out/20230915_tests/wTildeExt_on/test3_Tz_every1s_Leq1 # folder to export outputs
-  # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
+  exportFolder: danse/out/20230915_tests/wTildeExt_on/test3_Tz_every1s_Leq1 # folder to export outputs
+  # exportFolder: danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -42,8 +42,8 @@ danseParams:
     printout_profiler: false
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
-  startComputeMetricsAt: after_5s
-  # startComputeMetricsAt: after_10s
+  # startComputeMetricsAt: after_5s
+  startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
@@ -82,7 +82,7 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 10  # [s]
+  sigDur: 20  # [s]
   # selfnoiseSNR: 999999999  # [dB]
   selfnoiseSNR: 15  # [dB]
   layoutType: random
@@ -105,9 +105,11 @@ wasnParams:
   #
   signalType: from_file
   desiredSignalFile:
-  - C:\Users\u0137935\Dropbox\PC\Documents\sounds-phd\danse\tests\sigs\01_speech\speech2_16000Hz.wav
+  - danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
   nNoiseSources: 1
-  noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
+  # noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
+  noiseSignalFile:
+  - danse\\tests\\sigs\\02_noise\\ssn\\ssn_3729-6852-0026.wav
   referenceSensor: 0
-  vadFilesFolder: C:\Users\u0137935\Dropbox\PC\Documents\sounds-phd\danse\vad_files
+  vadFilesFolder: danse\vad_files

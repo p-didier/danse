@@ -1154,7 +1154,8 @@ def build_wasn(
         p: classes.WASNparameters,
         startComputeMetricsAt: str,
         minNoSpeechDurEndUtterance: float,
-        setThoseSensorsToNoise: list=[]
+        setThoseSensorsToNoise: list=[],
+        endComputeMetricsAt: str=None,
     ):
     """
     Build WASN from parameters (including asynchronicities and topology).
@@ -1186,6 +1187,11 @@ def build_wasn(
             1st utterance.
     minNoSpeechDurEndUtterance : float
         Minimum duration of silence at the end of an utterance [s].
+    setThoseSensorsToNoise : list
+        List of sensors to set to noise (e.g., for debugging purposes).
+    endComputeMetricsAt : str
+        Time at which to end computing metrics. If `None`, compute metrics
+        until the end of the simulation.
 
     Returns
     -------
@@ -1332,12 +1338,18 @@ def build_wasn(
     # Include adjacency matrix
     myWASN.adjacencyMatrix = adjacencyMatrix
     
-    # Infer a good start time for the computation of speech enhancement
+    # Establish start/end times for the computation of speech enhancement
     # metrics based on the speech signal used (after 1 speech utterance -->
     # whenever the VAD has gone up and down).
-    myWASN.get_metrics_start_time(
-        startComputeMetricsAt=startComputeMetricsAt,
+    myWASN.get_metrics_key_time(
+        ref=startComputeMetricsAt,
         minNoSpeechDurEndUtterance=minNoSpeechDurEndUtterance,
+        timeType='start'
+    )
+    myWASN.get_metrics_key_time(
+        ref=endComputeMetricsAt,
+        minNoSpeechDurEndUtterance=minNoSpeechDurEndUtterance,
+        timeType='end'
     )
 
     # Render specific sensors useless by replacing their signal

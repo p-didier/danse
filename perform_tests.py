@@ -26,7 +26,7 @@ def main(configFilesFolder: str=CONFIG_FILES_FOLDER):
 
     # tests.battery20230915_sros_asfctofL.main(
     #     baseConfigFile=f'{configFilesFolder}/sandbox_config_battery20230915.yaml',
-    #     exportFolder='./danse/out/battery20230915_sros_asfctofL_v2',
+    #     exportFolder='./danse/out/battery20230915_sros_asfctofL_v3',
     # )
     # tests.battery20230915_pp.main(dataFolder='./danse/out/battery20230915_sros_asfctofL_v2')
 

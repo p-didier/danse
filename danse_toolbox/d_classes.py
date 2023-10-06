@@ -146,6 +146,7 @@ class ExportParameters:
     bestPerfReference: bool = True  # if True, best performance reference (centralized, no SROs, batch) is added to all relevant plots
     # vvv Files (not plots)
     danseOutputsFile: bool = True  # if True, DANSE outputs are exported as a pickle file
+    metricsFile: bool = True  # if True, metrics are exported as a pickle file
     parametersFile: bool = True  # if True, parameters are exported as a pickle file or a YAML file
     filterNorms: bool = True  # if True, filter norms are exported as a pickle file
     filters: bool = False  # if True, (complex) filters are exported as a pickle file
@@ -340,10 +341,16 @@ class OutputsForPostProcessing:
         further post-processing tests."""
         # Ensure that the WASN object's inner parameters are consistent
         # with the test parameters
-        self.wasnObj.get_metrics_start_time(
+        self.wasnObj.get_metrics_key_time(
             self.testParams.danseParams.startComputeMetricsAt,
-            self.testParams.danseParams.minNoSpeechDurEndUtterance
-        ) 
+            self.testParams.danseParams.minNoSpeechDurEndUtterance,
+            timeType='start'
+        )
+        self.wasnObj.get_metrics_key_time(
+            self.testParams.danseParams.endComputeMetricsAt,
+            self.testParams.danseParams.minNoSpeechDurEndUtterance,
+            timeType='end'
+        )
 
 def check_if_fully_connected(wasn: list[Node]):
     """
@@ -1018,7 +1025,7 @@ class DANSEvariables(base.DANSEparameters):
 
         if self.computeCentralised:
             # Directly fill in buffers for centralized processing
-            self.fill_buffers_centralised(k, ykFrame, tCurr)
+            self.pre_fill_buffers_centralised(k, ykFrame, tCurr)
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local signals samples.')
@@ -1058,17 +1065,7 @@ class DANSEvariables(base.DANSEparameters):
             # If "efficient" events for broadcast
             # (broadcast instants are aggregated when possible):
             if self.efficientSpSBC:
-                # Count samples recorded since the last broadcast at node
-                # `k` and adapt the "broadcast length" variable
-                # used in `danse_compression_few_samples` and
-                # `fill_buffers`.
-                nRecordedSamplesSinceLastBroadcast = np.sum(
-                    (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
-                    (self.timeInstants[:, k] <= tCurr)
-                ) # NB: using `&` instead of `and` for element-wise logical AND
-                currL = int(self.broadcastLength * np.floor(
-                    nRecordedSamplesSinceLastBroadcast / self.broadcastLength
-                ))
+                self.get_buffer_size_for_efficient_bc(k, tCurr)
                 self.lastBroadcastInstant[k] = tCurr  # update last broadcast instant
             else:
                 currL = self.broadcastLength
@@ -1092,11 +1089,41 @@ class DANSEvariables(base.DANSEparameters):
 
         self.nBroadcasts[k] += 1
 
-
-    def fill_buffers_centralised(self, k, ykFrame, tCurr):
+    def get_buffer_size_for_efficient_bc(self, k, tCurr):
         """
-        Fill in buffers -- simulating broadcast of compressed signals
-        from one node (`k`) to all other nodes (centralized case).
+        Computes the appropriate number of samples to use to 
+        fill in the buffers -- for efficient broadcasting
+        of type `fewSamples`.
+
+        Parameters
+        ----------
+        k : int
+            Current node index.
+        tCurr : float
+            Current time instant [s].
+
+        Returns
+        -------
+        currL : int
+            Current effective number of samples to use to fill
+            buffers in.
+        """
+        # Count samples recorded since the last broadcast at node
+        # `k` and adapt the "broadcast length" variable
+        # used in `danse_compression_few_samples` and
+        # `fill_buffers`.
+        nRecordedSamplesSinceLastBroadcast = np.sum(
+            (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
+            (self.timeInstants[:, k] <= tCurr)
+        )  # NB: using `&` instead of `and` for element-wise logical AND
+        currL = int(self.broadcastLength * np.floor(
+            nRecordedSamplesSinceLastBroadcast / self.broadcastLength
+        ))
+        return currL
+    
+    def pre_fill_buffers_centralised(self, k, ykFrame, tCurr):
+        """
+        Prepare filling-in of centralised processing buffers.
 
         Parameters
         ----------
@@ -1111,17 +1138,7 @@ class DANSEvariables(base.DANSEparameters):
             self.yLocalCentr[k] = ykFrame
         elif self.broadcastType == 'fewSamples':
             if self.efficientSpSBC:
-                # Count samples recorded since the last broadcast at node
-                # `k` and adapt the "broadcast length" variable
-                # used in `danse_compression_few_samples` and
-                # `fill_buffers`.
-                nRecordedSamplesSinceLastBroadcast = np.sum(
-                    (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
-                    (self.timeInstants[:, k] <= tCurr)
-                ) # NB: using `&` instead of `and` for element-wise logical AND
-                currL = int(self.broadcastLength * np.floor(
-                    nRecordedSamplesSinceLastBroadcast / self.broadcastLength
-                ))
+                currL = self.get_buffer_size_for_efficient_bc(k, tCurr)
                 self.yLocalCentr[k] = ykFrame[-currL:, :]
             else:
                 raise NotImplementedError('[PD~20.09.2023-9AM] Not tested yet')
@@ -1150,15 +1167,6 @@ class DANSEvariables(base.DANSEparameters):
         else:
             # No broadcasting
             zLocalChunk = np.array([])
-        if self.computeCentralised:
-            if n < 0:
-                # Only broadcast the `n` last samples of local signals
-                yLocalCentrChunk = self.yLocalCentr[k][n:, :]
-            elif n > 0:
-                # Only broadcast the `n` first samples of local signals
-                yLocalCentrChunk = self.yLocalCentr[k][:n, :]
-            else:
-                yLocalCentrChunk = np.array([])
         
         # Loop over neighbors of node `k`
         for idxq in range(len(self.neighbors[k])):
@@ -1175,18 +1183,33 @@ class DANSEvariables(base.DANSEparameters):
             )
         
         if self.computeCentralised:
-            for q in range(self.nNodes):
-                if q != k:
-                    # Centralised indices
-                    if k < q:
-                        idxKforNeighborQ = k
-                    elif k > q:
-                        idxKforNeighborQ = k - 1
+            self.fill_buffers_centr(k, n)
 
-                    self.yBufferCentr[q][idxKforNeighborQ] = np.concatenate(
-                        (self.yBufferCentr[q][idxKforNeighborQ], yLocalCentrChunk),
-                        axis=0
-                    )
+    def fill_buffers_centr(self, k, n):
+        """
+        Fill in buffers for online centralized processing.
+        """
+        if n < 0:
+            # Only broadcast the `n` last samples of local signals
+            yLocalCentrChunk = self.yLocalCentr[k][n:, :]
+        elif n > 0:
+            # Only broadcast the `n` first samples of local signals
+            yLocalCentrChunk = self.yLocalCentr[k][:n, :]
+        else:
+            yLocalCentrChunk = np.array([])
+
+        for q in range(self.nNodes):
+            if q != k:
+                # Centralised indices
+                if k < q:
+                    idxKforNeighborQ = k
+                elif k > q:
+                    idxKforNeighborQ = k - 1
+
+                self.yBufferCentr[q][idxKforNeighborQ] = np.concatenate(
+                    (self.yBufferCentr[q][idxKforNeighborQ], yLocalCentrChunk),
+                    axis=0
+                )
 
     def update_and_estimate(self, tCurr, fs, k, bypassUpdateEventMat=False):
         """
@@ -1213,7 +1236,7 @@ class DANSEvariables(base.DANSEparameters):
 
         # Process buffers
         self.process_incoming_signals_buffers(k, tCurr)
-        self.wipe_local_buffers(k)  # wipe local buffers for next iteration
+        self.wipe_buffers(k)  # wipe local buffers for next iteration
 
         # Build observation vector
         self.build_ytilde(tCurr, fs, k)
@@ -1280,14 +1303,17 @@ class DANSEvariables(base.DANSEparameters):
         self.yHatLocal[k][:, self.i[k], :] =\
             self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
 
-    def wipe_local_buffers(self, k):
+    def wipe_buffers(self, k):
         """Wipe buffers."""
         self.zBuffer[k] = [np.array([])\
             for _ in range(len(self.neighbors[k]))]
         if self.computeCentralised:
-            allNodeIndices = [int(i) for i in np.arange(self.nNodes)]
-            self.yBufferCentr[k] = [np.empty((0, self.nSensorPerNode[q]))\
-                for q in allNodeIndices if q != k]
+            self.wipe_buffers_centr(k)
+            
+    def wipe_buffers_centr(self, k):
+        allNodeIndices = [int(i) for i in np.arange(self.nNodes)]
+        self.yBufferCentr[k] = [np.empty((0, self.nSensorPerNode[q]))\
+            for q in allNodeIndices if q != k]
 
     def compute_batch_mse_cost(self, k):
         """
@@ -1540,7 +1566,7 @@ class DANSEvariables(base.DANSEparameters):
         in non-fully connected WASNs."""
         TIDANSEvariables.ti_update_external_filters(self, k, t)
 
-    def process_incoming_signals_buffers(self, k, t, tiFlag=False):
+    def process_incoming_signals_buffers(self, k, t):
         """
         Processes the incoming data from other nodes, as stored in local node {k}'s
         buffers. Called whenever a DANSE update can be performed
@@ -1563,8 +1589,6 @@ class DANSEvariables(base.DANSEparameters):
         # Initialize compressed signal matrix
         # ($\mathbf{z}_{-k}$ in [1]'s notation)
         zk = np.empty((Ndft, 0), dtype=float)
-        if self.computeCentralised:
-            yk = np.empty((Ndft, 0), dtype=float)
 
         # Initialise flags vector (overflow: >0; underflow: <0; or none: ==0)
         bufferFlags = np.zeros(len(self.neighbors[k]))
@@ -1648,83 +1672,92 @@ class DANSEvariables(base.DANSEparameters):
 
         # Centralised case
         if self.computeCentralised:
-            bufferFlagsCentr = np.zeros(self.nNodes)
-            for q in range(self.nNodes):
-                if q != k:
-                    # Centralised indices
-                    if q > k:
-                        idxQforKcentr = q - 1
-                    elif q < k:
-                        idxQforKcentr = q
-                    
-                    Bq = len(self.yBufferCentr[k][idxQforKcentr])  # buffer size for neighbour `q`
-                    
-                    if self.i[k] == 0: # first iteration case 
-                        if Bq == Ndft: 
-                            yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr]
-                        
-                        elif Bq < Ndft:
-                            yCurrBufferCentr = np.concatenate(
-                                (np.zeros((
-                                    Ndft - Bq,
-                                    self.yBufferCentr[k][idxQforKcentr].shape[-1]
-                                )), self.yBufferCentr[k][idxQforKcentr]),
-                                axis=0
-                            )
-                            # Raise negative flag
-                            nMissingSamples = int(np.abs(Ndft - Bq))
-                            bufferFlagsCentr[q] = -1 * nMissingSamples
-                            print(f"[Cb- @ t={np.round(t, 3)}s] Centralized buffer underflow at node {k+1}'s B_{q} buffer | -{nMissingSamples} samples(s)")
-
-                        elif Bq > Ndft:
-                            yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr][-Ndft:, :]
-                            # Raise positive flag
-                            nExtraSamples = int(np.abs(Ndft - Bq))
-                            bufferFlagsCentr[q] = +1 * nExtraSamples
-                            print(f"[Cb+ @ t={np.round(t, 3)}s] Centralized buffer overflow at node {k+1}'s B_{q} buffer | +{nExtraSamples} samples(s)")
-
-                    else:   # not the first iteration 
-                        
-                        if Bq < Ns:
-                            # Raise negative flag
-                            nMissingSamples = int(np.abs(Ns - Bq))
-                            bufferFlagsCentr[q] = -1 * nMissingSamples
-                            print(f"[Cb- @ t={np.round(t, 3)}s] Centralized buffer underflow at node {k+1}'s B_{q} buffer | -{nMissingSamples} samples(s)")
-                        elif Bq > Ns:
-                            # Raise positive flag
-                            nExtraSamples = int(np.abs(Ns - Bq))
-                            bufferFlagsCentr[q] = +1 * nExtraSamples
-                            print(f"[Cb+ @ t={np.round(t, 3)}s] Centralized buffer overflow at node {k+1}'s B_{q} buffer | +{nExtraSamples} samples(s)")
-                        
-                        if Ndft - Bq > 0:
-                            # Identify indices corresponding to the q-th node's
-                            # channels in the centralized signal matrix
-                            if idxQforKcentr == 0:
-                                idxStart = 0
-                            else:
-                                idxStart = int(np.sum([
-                                    self.nSensorPerNode[i] for i in range(self.nNodes)\
-                                        if i != k and i < q
-                                ])) - 1
-                            idxEnd = idxStart + self.nSensorPerNode[q]
-
-                            yCurrBufferCentr = np.concatenate(
-                                (
-                                    self.yc[k][-(Ndft - Bq):, idxStart:idxEnd],
-                                    self.yBufferCentr[k][idxQforKcentr]
-                                ),
-                                axis=0
-                            )
-                        else:   # edge case: no overlap between consecutive frames
-                            yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr]
-
-                    # Stack compressed signals
-                    yk = np.concatenate((yk, yCurrBufferCentr), axis=1)
-
-            # Update centralised variables
-            self.yc[k] = yk
-            self.bufferFlagsCentr[k][self.i[k], :] = bufferFlagsCentr
+            self.process_incoming_signals_buffers_centr(k, t)
     
+    def process_incoming_signals_buffers_centr(self, k, t):
+        """
+        Same as `process_incoming_signals_buffers()`, but for the centralized
+        case. Called whenever a DANSE update can be performed
+        (`N` new local samples were captured since last update).
+        """
+        yk = np.empty((self.DFTsize, 0), dtype=float)
+        bufferFlagsCentr = np.zeros(self.nNodes)
+        for q in range(self.nNodes):
+            if q != k:
+                # Centralised indices
+                if q > k:
+                    idxQforKcentr = q - 1
+                elif q < k:
+                    idxQforKcentr = q
+                
+                Bq = len(self.yBufferCentr[k][idxQforKcentr])  # buffer size for neighbour `q`
+                
+                if self.i[k] == 0: # first iteration case 
+                    if Bq == self.DFTsize: 
+                        yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr]
+                    
+                    elif Bq < self.DFTsize:
+                        yCurrBufferCentr = np.concatenate(
+                            (np.zeros((
+                                self.DFTsize - Bq,
+                                self.yBufferCentr[k][idxQforKcentr].shape[-1]
+                            )), self.yBufferCentr[k][idxQforKcentr]),
+                            axis=0
+                        )
+                        # Raise negative flag
+                        nMissingSamples = int(np.abs(self.DFTsize - Bq))
+                        bufferFlagsCentr[q] = -1 * nMissingSamples
+                        print(f"[Cb- @ t={np.round(t, 3)}s] Centralized buffer underflow at node {k+1}'s B_{q} buffer | -{nMissingSamples} samples(s)")
+
+                    elif Bq > self.DFTsize:
+                        yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr][-self.DFTsize:, :]
+                        # Raise positive flag
+                        nExtraSamples = int(np.abs(self.DFTsize - Bq))
+                        bufferFlagsCentr[q] = +1 * nExtraSamples
+                        print(f"[Cb+ @ t={np.round(t, 3)}s] Centralized buffer overflow at node {k+1}'s B_{q} buffer | +{nExtraSamples} samples(s)")
+
+                else:   # not the first iteration 
+                    
+                    if Bq < self.Ns:
+                        # Raise negative flag
+                        nMissingSamples = int(np.abs(self.Ns - Bq))
+                        bufferFlagsCentr[q] = -1 * nMissingSamples
+                        print(f"[Cb- @ t={np.round(t, 3)}s] Centralized buffer underflow at node {k+1}'s B_{q} buffer | -{nMissingSamples} samples(s)")
+                    elif Bq > self.Ns:
+                        # Raise positive flag
+                        nExtraSamples = int(np.abs(self.Ns - Bq))
+                        bufferFlagsCentr[q] = +1 * nExtraSamples
+                        print(f"[Cb+ @ t={np.round(t, 3)}s] Centralized buffer overflow at node {k+1}'s B_{q} buffer | +{nExtraSamples} samples(s)")
+                    
+                    if self.DFTsize - Bq > 0:
+                        # Identify indices corresponding to the q-th node's
+                        # channels in the centralized signal matrix
+                        if idxQforKcentr == 0:
+                            idxStart = 0
+                        else:
+                            idxStart = int(np.sum([
+                                self.nSensorPerNode[i] for i in range(self.nNodes)\
+                                    if i != k and i < q
+                            ])) - 1
+                        idxEnd = idxStart + self.nSensorPerNode[q]
+
+                        yCurrBufferCentr = np.concatenate(
+                            (
+                                self.yc[k][-(self.DFTsize - Bq):, idxStart:idxEnd],
+                                self.yBufferCentr[k][idxQforKcentr]
+                            ),
+                            axis=0
+                        )
+                    else:   # edge case: no overlap between consecutive frames
+                        yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr]
+
+                # Stack compressed signals
+                yk = np.concatenate((yk, yCurrBufferCentr), axis=1)
+
+        # Update centralised variables
+        self.yc[k] = yk
+        self.bufferFlagsCentr[k][self.i[k], :] = bufferFlagsCentr
+
     def build_ytilde(self, tCurr, fs, k):
         """
         Builds the full observation vector used in the DANSE filter update.
@@ -2101,7 +2134,7 @@ class DANSEvariables(base.DANSEparameters):
 
     def perform_update(self, k, skipUpdateCentr=False):
         """
-        Filter update for DANSE, `for`-loop free.
+        Filter update for DANSE.
         GEVD or no GEVD, depending on `self.performGEVD`.
         
         Parameters
@@ -2554,7 +2587,6 @@ class TIDANSEvariables(DANSEvariables):
             ax.clear()
             newWasnObj.plot_me(ax, scatterSize=scatterSize)
 
-
     def ti_fusion(self, k, tCurr, fs):
         """
         Fuses local sensor observations into a signal $z'_k$.
@@ -2590,8 +2622,16 @@ class TIDANSEvariables(DANSEvariables):
         #     ykFrame = apply_phase_shift_to_td_frame(ykFrame, *args)
 
         if self.computeCentralised:
-            # Directly fill in buffers for centralized processing
-            self.fill_buffers_centralised(k, ykFrame, tCurr)
+            # Fully fill in buffers for centralized processing
+            self.pre_fill_buffers_centralised(k, ykFrame, tCurr)
+            if self.broadcastType == 'wholeChunk':
+                self.fill_buffers_centr(k, n=self.Ns)
+            elif self.broadcastType == 'fewSamples':
+                if self.efficientSpSBC:
+                    currL = self.get_buffer_size_for_efficient_bc(k, tCurr)
+                    self.fill_buffers_centr(k, n=-1 * currL)
+                else:
+                    self.fill_buffers_centr(k, n=-1 * self.broadcastLength)
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
@@ -2603,7 +2643,6 @@ class TIDANSEvariables(DANSEvariables):
                 ykFrame,
                 zForSynthesis=self.zLocalPrimeBuffer[k]
             )
-            stop = 1
         else:
             # Only update filter every so often
             updateBroadcastFilter = False
@@ -2615,13 +2654,7 @@ class TIDANSEvariables(DANSEvariables):
                 self.lastTDfilterUp[k] = tCurr
             
             if self.efficientSpSBC:
-                nRecordedSamplesSinceLastBroadcast = np.sum(
-                    (self.timeInstants[:, k] > self.lastBroadcastInstant[k]) &\
-                    (self.timeInstants[:, k] <= tCurr)
-                ) # NB: using `&` instead of `and` for element-wise logical AND
-                currL = int(self.broadcastLength * np.floor(
-                    nRecordedSamplesSinceLastBroadcast / self.broadcastLength
-                ))
+                currL = self.get_buffer_size_for_efficient_bc(k, tCurr)
                 self.lastBroadcastInstant[k] = tCurr  # update last broadcast instant
             else:
                 currL = self.broadcastLength
@@ -2631,9 +2664,7 @@ class TIDANSEvariables(DANSEvariables):
                 ykFrame,
                 nSamplesToBroadcast=currL,
                 updateBroadcastFilter=updateBroadcastFilter
-            )  # local compressed signals
-
-            stop = 1
+            )  # local compressed 
             
     def get_local_phase_shift(self, k):
         """
@@ -2669,7 +2700,6 @@ class TIDANSEvariables(DANSEvariables):
             self.zLocalPrime[k][-(self.DFTsize - self.Ns):],
             self.zLocalPrimeBuffer[k][:self.Ns]  # first `Ns` samples
         ))
-
         # Compute partial sum
         self.zLocal[k] = copy.deepcopy(self.zLocalPrime[k])
         for l in self.upstreamNeighbors[k]:
@@ -2702,8 +2732,8 @@ class TIDANSEvariables(DANSEvariables):
             else:   # <-- case where $\eta$ has not yet been computed, e.g., due to SROs
                 self.etaMk[l] = np.array([])
 
-    def ti_process_incoming_signals_buffers(self, k, t):
-        self.process_incoming_signals_buffers(k, t)
+    # def ti_process_incoming_signals_buffers(self, k, t):
+    #     self.process_incoming_signals_buffers(k, t)
 
     def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
         """
@@ -2729,14 +2759,14 @@ class TIDANSEvariables(DANSEvariables):
 
         # Process buffers
         # self.ti_process_incoming_signals_buffers(k, tCurr)
-        # self.wipe_local_buffers(k)  # wipe local buffers for next iteration
 
         # Construct `\tilde{y}_k` in frequency domain
         self.ti_build_ytilde(tCurr, fs, k)
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
-            raise NotImplementedError('Currently relies on self.yc, which is not correctly initiated for TI-DANSE')
+            self.process_incoming_signals_buffers_centr(k, tCurr)
             self.build_ycentr(tCurr, fs, k)
+            self.wipe_buffers_centr(k)  # wipe buffers for next iteration
         if self.computeLocal:  # extract local info (most easily: from `\tilde{y}_k`)
             self.build_ylocal(k)
 

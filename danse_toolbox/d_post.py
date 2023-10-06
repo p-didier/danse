@@ -784,7 +784,8 @@ def compute_metrics(
     for k in range(out.nNodes):
         # Derive starting/ending samples for metrics computations
         startIdx[k] = int(np.floor(wasn[k].metricStartTime * wasn[k].fs))
-        print(f"Node {k+1}: computing metrics from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s --> discard early filters updates)...")
+        endIdx[k] = int(np.floor(wasn[k].metricEndTime * wasn[k].fs))
+        print(f"Node {k+1}: computing metrics from {startIdx[k] + 1}th sample (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
         print(f'Computing metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
         # Compute starting indices for centralised and local estimates
@@ -795,19 +796,19 @@ def compute_metrics(
             TDdesiredSignals_est_c = out.TDdesiredSignals_est_c[:, k]
             TDfilteredSpeech_c = out.TDfiltSpeech_c[:, k]
             TDfilteredNoise_c = out.TDfiltNoise_c[:, k]
-            print(f"Node {k+1}: computing metrics for CENTRALISED PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
+            print(f"Node {k+1}: computing metrics for CENTRALISED PROCESSING from {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
         if out.computeLocal:
             TDdesiredSignals_est_l = out.TDdesiredSignals_est_l[:, k]
             TDfilteredSpeech_l = out.TDfiltSpeech_l[:, k]
             TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
-            print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
+            print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
         
-        if out.simType == 'batch':
+        if out.simType == 'batch' and\
+            endIdx[k] > wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize:
             # Discard the very end of the signal due to STFT/ISTFT artefacts
-            endIdx[k] = int(wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize)
-        else:
-            # Use all signal until the end
-            endIdx[k] = int(wasn[k].cleanspeechRefSensor.shape[0])
+            endIdx[k] = int(
+                wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize
+            )
         
         metricsDict = get_metrics(
             # Clean speech mixture (desired signal)
@@ -1753,7 +1754,7 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
             'C2-',
             label='Enhanced (centr.)'
         )
-    # Plot start of enhancement metrics computations
+    # Plot start/end of enhancement metrics computations
     ymin, ymax = np.amin(ax.get_ylim()), np.amax(ax.get_ylim())
     ax.vlines(
         x=node.metricStartTime,
@@ -1761,15 +1762,21 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
         ymax=ymax,
         colors='0.75',
     )
-    if batchMode:
-        # Plot end of enhancement metrics computations
-        ax.vlines(
-            x=(node.cleannoise.shape[0] - len(win)) / node.fs,
-            # ^^^ discard last window in batch mode due to STFT/ISTFT transforms artefacts
-            ymin=ymin,
-            ymax=ymax,
-            colors='0.75',
-        )
+    ax.vlines(
+        x=node.metricEndTime,
+        ymin=ymin,
+        ymax=ymax,
+        colors='0.75',
+    )
+    # if batchMode:
+    #     # Plot end of enhancement metrics computations
+    #     ax.vlines(
+    #         x=(node.cleannoise.shape[0] - len(win)) / node.fs,
+    #         # ^^^ discard last window in batch mode due to STFT/ISTFT transforms artefacts
+    #         ymin=ymin,
+    #         ymax=ymax,
+    #         colors='0.75',
+    #     )
 
     ax.set_yticklabels([])
     ax.set(xlabel='$t$ [s]')
@@ -2428,6 +2435,7 @@ def export_danse_outputs(
         # Save `DANSEoutputs` object after metrics computation
         if p.exportParams.danseOutputsFile:
             out.save(foldername=p.exportParams.exportFolder, light=True)
+        if p.exportParams.metricsFile:
             # Save just metrics (for faster loading in post-processing scripts)
             out.save_metrics(foldername=p.exportParams.exportFolder)
         # Save `TestParameters` object
