@@ -19,6 +19,22 @@ from danse_toolbox.d_eval import DynamicMetricsParameters
 
 from itertools import cycle, islice
 
+@dataclass
+class PreComputedFilters():
+    active: bool = False  # only used if this is True
+    internalFilters: list = field(default_factory=list)
+    # ^^^ internal filters in WOLA-domain for each node at each
+    # DANSE iteration.
+    externalFilters: list = field(default_factory=list)
+    # ^^^ external filters in WOLA-domain for each node at each
+    # DANSE iteration.
+    filtersCentr: list = field(default_factory=list)
+    filtersLocal: list = field(default_factory=list)
+    purpose: str = 'noise-only' # Signal to be used in DANSE.
+    # ^^^ possible:
+    # - 'speech-only': speech-only signal
+    # - 'noise-only': noise-only signal
+
 
 @dataclass
 class DANSEeventInstant:
@@ -293,6 +309,7 @@ class DANSEparameters(Hyperparameters):
     endComputeMetricsAt: str = None    # When to stop computing the speech
         # enhancement metrics. Valid values: same as for
         # `startComputeMetricsAt`.
+    preGivenFilters: PreComputedFilters = PreComputedFilters()
     # ---- TI-DANSE specific
     treeFormationAlgorithm: str = 'prim'    # algorithm to prune ad-hoc WASN
         # Valid values (from NetworkX toolbox): 'kruskal', 'prim', 'boruvka'.
@@ -529,11 +546,13 @@ def initialize_events(
     Ttot = timeInstants[-1, :]
 
     # Prepare events matrix building
-    print('Preparing events matrix building...')
+    if p.printoutsAndPlotting.verbose:
+        print('Preparing events matrix building...')
     prepOutput = prep_evmat_build(p, nNodes, wasnObj, fs, Ttot)
 
     # Build event matrix
-    print('Building events matrix...')
+    if p.printoutsAndPlotting.verbose:
+        print('Building events matrix...')
     outputEvents = build_events_matrix(
         up_t=prepOutput['upInstants'],
         bc_t=prepOutput['bcInstants'],
@@ -696,40 +715,80 @@ def prep_evmat_build(
                 nNodes=nNodes,
                 wasnObj=wasnObj
             )
-
             bcInstants = copy.deepcopy(fuInstants)
             # ^ we differentiate fusion instants from broadcast instants to 
             # ensure fusion occurs in all nodes before broadcasting (necessary
             # to compute partial in-network sums).
-            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            # if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
             reInstants = copy.deepcopy(fuInstants)  # same relay instants
-                # raise ValueError('WRONG: the relay instants depend on which node is the root!!!')
-            # ^ /!\ /!\ assuming no computational/communication delays /!\ /!\
-            if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
-                # form new tree at every DANSE update
-                seqUpInstants, upNodeIndices = get_sequential_update_instants(
-                    upInstants=upInstants,
-                    startNodeIdx=p.seqUpdateStartNodeIdx
-                )
-                trInstants = copy.deepcopy(seqUpInstants)
-                trInstants[0] = 0  # the first tree formation happens at t=0 s.
+        elif 'fewSamples' in p.broadcastType:
+            # Expected TI-DANSE update instants
+            upInstants = generate_aligned_instants(
+                startIdx=np.ceil(p.DFTsize / p.Ns),  # we only start fusing when we have enough samples
+                eventSep=p.Ns,
+                nEventTotal=numUpInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
+            if p.efficientSpSBC:
+                bcInstants = []
+                # The broadcast instants at node `k` are the union of the
+                # update instants of all its neighbors.
+                for k in range(nNodes):
+                    combinedUpInstants = []
+                    # combinedUpInstants.append(p.DFTsize/fs[k])  # we start fusing as soon as we have enough samples
+                    for q in wasnObj.wasn[k].neighborsIdx:
+                        for ii in range(len(upInstants[q])):
+                            if upInstants[q][ii] not in combinedUpInstants:
+                                combinedUpInstants.append(upInstants[q][ii])
+                    bcInstants.append(np.sort(np.array(combinedUpInstants)))
+                # Align broadcast instants to actual possible broadcast instants
+                # bcInstantUntouched = copy.deepcopy(bcInstants)
+                for k in range(nNodes):
+                    instants = wasnObj.wasn[k].timeStamps
+                    possibleBcInstants = instants[p.broadcastLength::p.broadcastLength]
+                    for ii in range(len(bcInstants[k])):
+                        if bcInstants[k][ii] not in possibleBcInstants:
+                            # Replace by closest past sample instant
+                            possibleInstants = possibleBcInstants[
+                                possibleBcInstants < bcInstants[k][ii]
+                            ]
+                            if len(possibleInstants) > 0:
+                                bcInstants[k][ii] = possibleInstants[-1]
+                            else:
+                                bcInstants[k][ii] = possibleBcInstants[0]
             else:
-                # form tree at WASN initialization only
-                trInstants = np.array([0])
-                upNodeIndices = np.array([p.seqUpdateStartNodeIdx])
-            trInstantsArranged = [trInstants[upNodeIndices == k] for k in range(nNodes)]
-            # Keep only the relevant leaf-to-root orderings
-            leafToRootOrderings = list(
-                islice(orderingsCycled, None, len(trInstants))
-            )
-            # Keep only the relevant WASNs
-            wasnObjList = list(
-                islice(wasnObjListCycled, None, len(trInstants))
-            )
-        else:
-            raise ValueError('fewSamples - Not yet implemented for TI-DANSE.')
+                bcInstants = generate_aligned_instants(
+                    startIdx=1,
+                    eventSep=p.broadcastLength,
+                    nEventTotal=numBcInTtot,
+                    nNodes=nNodes,
+                    wasnObj=wasnObj
+                )
+            fuInstants = copy.deepcopy(bcInstants)
+            reInstants = copy.deepcopy(bcInstants)
 
+        # Tree formation instants and configurations
+        if 'seq' in p.nodeUpdating and not p.keepOriginalTree:
+            # form new tree at every DANSE update
+            seqUpInstants, upNodeIndices = get_sequential_update_instants(
+                upInstants=upInstants,
+                startNodeIdx=p.seqUpdateStartNodeIdx
+            )
+            trInstants = copy.deepcopy(seqUpInstants)
+            trInstants[0] = 0  # the first tree formation happens at t=0 s.
+        else:
+            # form tree at WASN initialization only
+            trInstants = np.array([0])
+            upNodeIndices = np.array([p.seqUpdateStartNodeIdx])
+        trInstantsArranged = [trInstants[upNodeIndices == k] for k in range(nNodes)]
+        # Keep only the relevant leaf-to-root orderings
+        leafToRootOrderings = list(
+            islice(orderingsCycled, None, len(trInstants))
+        )
+        # Keep only the relevant WASNs
+        wasnObjList = list(
+            islice(wasnObjListCycled, None, len(trInstants))
+        )
     else:   # fully connected WASN
         fuInstants = [np.array([]) for _ in range(nNodes)]  # no fusion instants
         reInstants = [np.array([]) for _ in range(nNodes)]  # no relay instants
@@ -1390,7 +1449,8 @@ def local_chunk_for_update(y, t, fs, bd, Ndft, Ns):
     # Pad zeros at beginning if needed (occurs at algorithm's startup)
     if idxEnd - idxBeg < Ndft:
         chunk = np.concatenate((
-            np.zeros((Ndft - chunk.shape[0], chunk.shape[1])), chunk
+            np.zeros((Ndft - chunk.shape[0], chunk.shape[1])),
+            chunk
         ))
 
     return chunk, idxBeg, idxEnd
@@ -1597,7 +1657,6 @@ def events_parser(
                 print(fullTxt)
 
 
-
 def events_parser_ti_danse(
         events: DANSEeventInstant,
         startUpdates,
@@ -1782,8 +1841,8 @@ def danse_compression_few_samples(
     ):
     """
     Performs local signals compression according to DANSE theory [1],
-    in the time-domain (to be able to broadcast the compressed signal sample
-    per sample between nodes).
+    in the time-domain (to be able to broadcast the compressed
+    signal `L` samples at a time between nodes).
     Approximate WOLA filtering process via linear convolution.
     
     Parameters
@@ -2003,10 +2062,10 @@ def get_desired_sig_chunk(
 
 
 def prune_wasn_to_tree(
-    wasnObj: WASN,
-    algorithm='prim',
-    plotit=False,
-    forcedRoot=None
+        wasnObj: WASN,
+        algorithm='prim',
+        plotit=False,
+        forcedRoot=None
     ) -> WASN:
     """
     Prunes a WASN to a tree topology.
@@ -2079,8 +2138,8 @@ def prune_wasn_to_tree(
 
 
 def update_wasn_object_from_nxgraph(
-    originalWASN: WASN,
-    Gnx: nx.Graph
+        originalWASN: WASN,
+        Gnx: nx.Graph
     ) -> WASN:
     """
     Updates connectivity parameters in a list of `Node` object instances
@@ -2172,7 +2231,6 @@ def generate_graph_for_wasn(wasn: list[Node]) -> nx.Graph:
                 if q in wasn[k].neighborsIdx:
                     adjMat[k, q] = 1
                     adjMat[q, k] = 1
-                    
 
     Gnx = nx.from_numpy_array(adjMat)
 
@@ -2243,7 +2301,6 @@ def get_istft(x, fs, win, ovlp, boundary='zeros'):
         x = x[:, :, np.newaxis]
 
     for channel in range(x.shape[-1]):
-
         t, tmp = sig.istft(
             x[:, :, channel],
             fs=fs,
@@ -2378,9 +2435,6 @@ def get_y_tilde_batch(
         neighbors=None,
         i=0,
         k=0,
-        yinSTFT_s=None,
-        yinSTFT_n=None,
-        computeSpeechAndNoiseOnly=False,
         useThisFilter=None
     ):
     """
@@ -2394,11 +2448,6 @@ def get_y_tilde_batch(
             yinSTFT[k].shape[0],
             yinSTFT[k].shape[1]
         ), dtype=complex)
-        if computeSpeechAndNoiseOnly:
-            etaMkBatch_s = copy.deepcopy(etaMkBatch)
-            etaMkBatch_n = copy.deepcopy(etaMkBatch)
-            # ^^^ `yinSTFT_s` and `yinSTFT_n` have the same shape
-            # as `yinSTFT`.
         for idxNode in range(nNodes):
             if idxNode != k:  # only sum over the other nodes
                 if useThisFilter is not None:
@@ -2416,31 +2465,11 @@ def get_y_tilde_batch(
                     p.conj(),
                     yinSTFT[idxNode]
                 )
-                if computeSpeechAndNoiseOnly:
-                    etaMkBatch_s += np.einsum(   # <-- `+=` is important
-                        'ij,ikj->ik',
-                        p.conj(),
-                        yinSTFT_s[idxNode]
-                    )
-                    etaMkBatch_n += np.einsum(   # <-- `+=` is important
-                        'ij,ikj->ik',
-                        p.conj(),
-                        yinSTFT_n[idxNode]
-                    )
         # Construct yTilde
         yTildeBatch = np.concatenate(
             (yinSTFT[k], etaMkBatch[:, :, np.newaxis]),
             axis=-1
         )
-        if computeSpeechAndNoiseOnly:
-            yTildeBatch_s = np.concatenate(
-                (yinSTFT_s[k], etaMkBatch_s[:, :, np.newaxis]),
-                axis=-1
-            )
-            yTildeBatch_n= np.concatenate(
-                (yinSTFT_n[k], etaMkBatch_n[:, :, np.newaxis]),
-                axis=-1
-            )
     else:
         # Compute batch fused signals using current (external) DANSE filters
         zBatch = np.zeros((
@@ -2448,11 +2477,6 @@ def get_y_tilde_batch(
             yinSTFT[k].shape[1],
             len(neighbors[k])
         ), dtype=complex)
-        if computeSpeechAndNoiseOnly:
-            zBatch_s = copy.deepcopy(zBatch)
-            zBatch_n = copy.deepcopy(zBatch)
-            # ^^^ ok because `yinSTFT_s` and `yinSTFT_n` have the same
-            # shape as `yinSTFT`.
         for ii, idxNode in enumerate(neighbors[k]):
             if useThisFilter is not None:
                 # Bypass `wTildeExt`
@@ -2465,38 +2489,13 @@ def get_y_tilde_batch(
                 fusionFilter.conj(),
                 yinSTFT[idxNode]
             )
-            if computeSpeechAndNoiseOnly:
-                zBatch_s[:, :, ii] = np.einsum(
-                    'ij,ikj->ik',
-                    fusionFilter.conj(),
-                    yinSTFT_s[idxNode]
-                )
-                zBatch_n[:, :, ii] = np.einsum(
-                    'ij,ikj->ik',
-                    fusionFilter.conj(),
-                    yinSTFT_n[idxNode]
-                )
         # Construct yTilde
         yTildeBatch = np.concatenate(
             (yinSTFT[k], zBatch),
             axis=-1
         )
-        if computeSpeechAndNoiseOnly:
-            yTildeBatch_s = np.concatenate(
-                (yinSTFT_s[k], zBatch_s),
-                axis=-1
-            )
-            yTildeBatch_n = np.concatenate(
-                (yinSTFT_n[k], zBatch_n),
-                axis=-1
-            )
     
-    # Conditional exports
-    if computeSpeechAndNoiseOnly:
-        return yTildeBatch, yTildeBatch_s, yTildeBatch_n
-    else:
-        return yTildeBatch
-
+    return yTildeBatch
 
 # ----------------------------------
 # 3 functions below:

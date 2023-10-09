@@ -29,7 +29,7 @@ SROS = np.linspace(start=0, stop=400, num=5, dtype=int)
 EXPORT_FOLDER = './danse/out/battery20230915_sros_asfctofL'
 # EXPORT_FOLDER = './danse/out/battery20230915_sros_asfctofL/_quicktest'
 
-def main():
+def main(baseConfigFile: str=BASE_CONFIG_FILE, exportFolder: str=EXPORT_FOLDER):
     """Main function (called by default when running script)."""
     
     battery = prepare_test_battery()
@@ -40,7 +40,7 @@ def main():
         print('----------------------------------------')
         t0 = time.time()
         # blockPrint()
-        launch(test)  # launch test
+        launch(test, baseConfigFile, exportFolder)  # launch test
         # enablePrint()
         print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) completed in {time.time() - t0} s.\n")
 
@@ -77,10 +77,10 @@ def prepare_test_battery():
     return battery
 
 
-def launch(test: dict):
+def launch(test: dict, baseConfigFile: str, exportFolder: str):
     """Launch a test."""
     # Load base parameters from config file
-    p = TestParameters().load_from_yaml(BASE_CONFIG_FILE)
+    p = TestParameters().load_from_yaml(baseConfigFile)
     # Adapt parameters
     p.danseParams.DFTsize = N
     p.danseParams.WOLAovlp = WOLA_OVLP
@@ -88,7 +88,7 @@ def launch(test: dict):
     p.danseParams.broadcastLength = test['L']
     p.wasnParams.nSensorPerNode = MK
     p.wasnParams.SROperNode = test['SRO']
-    p.exportParams.exportFolder = f'{EXPORT_FOLDER}/{test["ref"]}'
+    p.exportParams.exportFolder = f'{exportFolder}/{test["ref"]}'
     p.exportParams.wavFiles = False
     p.exportParams.filterNorms = False
     p.exportParams.sroEstimPerfPlot = False

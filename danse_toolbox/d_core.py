@@ -24,9 +24,9 @@ from danse_toolbox.d_post import DANSEoutputs
 from danse_toolbox.d_batch import BatchDANSEvariables, BatchTIDANSEvariables
 
 def danse(
-    wasnObj: WASN,
-    p: base.DANSEparameters
-    ) -> tuple[DANSEoutputs, WASN]:
+        wasnObj: WASN,
+        p: base.DANSEparameters
+    ) -> tuple[DANSEvariables, WASN]:
     """
     Fully connected online-implementation DANSE main function.
 
@@ -99,10 +99,21 @@ def danse(
     print(f'{np.amax(dv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
     print(f'(Real-time processing factor: {np.round(np.amax(dv.timeInstants) / dur, 4)})')
 
+    return dv, wasnObj 
+
+
+def format_output(
+        p: base.DANSEparameters,
+        dv: DANSEvariables,
+        wasnObj: WASN,
+        sigsSnr: dict = None
+    ):
     # Build output
     out = DANSEoutputs()
     out.import_params(p)
     out.from_variables(dv)
+    if sigsSnr is not None:
+        out.from_snr_signals(sigsSnr)
     # Update WASN object
     for k in range(len(wasnObj.wasn)):
         wasnObj.wasn[k].enhancedData = dv.d[:, k]
@@ -110,7 +121,7 @@ def danse(
             wasnObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
         if dv.computeLocal:
             wasnObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
-
+    
     return out, wasnObj
 
 
@@ -143,7 +154,7 @@ def tidanse(
     eventInstants, fs, wasnObjList = base.initialize_events(
         timeInstants=tidv.timeInstants,
         p=p,
-        wasnObj=wasnObj
+        wasnObj=wasnObj,
     )
     # Update WASN object as the one at the start of the simulation
     wasnObj = wasnObjList[0]
@@ -233,19 +244,19 @@ def tidanse(
     print(f'{np.amax(tidv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
     print(f'(Real-time processing factor: {np.round(np.amax(tidv.timeInstants) / dur, 4)})')
 
-    # Build output
-    out = DANSEoutputs()
-    out.import_params(p)
-    out.from_variables(tidv)
-    # Update WASN object
-    for k in range(len(wasnObj.wasn)):
-        wasnObj.wasn[k].enhancedData = tidv.d[:, k]
-        if tidv.computeCentralised:
-            wasnObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
-        if tidv.computeLocal:
-            wasnObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
+    # # Build output
+    # out = DANSEoutputs()
+    # out.import_params(p)
+    # out.from_variables(tidv)
+    # # Update WASN object
+    # for k in range(len(wasnObj.wasn)):
+    #     wasnObj.wasn[k].enhancedData = tidv.d[:, k]
+    #     if tidv.computeCentralised:
+    #         wasnObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
+    #     if tidv.computeLocal:
+    #         wasnObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
 
-    return out, wasnObj
+    return tidv, wasnObj
 
 
 def danse_batch(
@@ -547,18 +558,78 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
     return p, wasnObj
 
 
-def get_best_perf(wasnObj: WASN, p: base.DANSEparameters):
+def generate_signals_for_snr_computation(
+        pD: base.DANSEparameters, 
+        dv: DANSEvariables,
+        wasnObj: WASN,
+        danse_function: Callable[[WASN, base.DANSEparameters], tuple[DANSEvariables, WASN]],
+        bestPerfRef: bool = False,
+        wCentrBatch: np.ndarray = None
+    ):
+    """Generate signals for SNR computation, i.e., the noise-only and
+    speech-only cases."""
+    
+    # Compute noise-only output
+    print('Computing noise-only output...')
+    pUpdated = copy.deepcopy(pD)
+    pUpdated.preGivenFilters = base.PreComputedFilters(
+        active=True,
+        internalFilters=dv.wTilde,
+        externalFilters=dv.wTildeExt,
+        filtersCentr=dv.wCentr,
+        filtersLocal=dv.wLocal,
+        purpose='noise-only'
+    )
+    pUpdated.printoutsAndPlotting.verbose = False  # no printouts
+    dv_n, _ = danse_function(wasnObj, pUpdated)
+    if bestPerfRef:
+        outBP_n = get_best_perf(wasnObj, pUpdated, wCentr=wCentrBatch)
+    
+    # Compute speech-only output
+    print('Computing speech-only output...')
+    pUpdated.preGivenFilters.purpose = 'speech-only'
+    dv_s, _ = danse_function(wasnObj, pUpdated)
+    if bestPerfRef:
+        outBP_s = get_best_perf(wasnObj, pUpdated, wCentr=wCentrBatch)
+
+    # Prepare output
+    sigsSnr = {}
+    sigsSnr['n'] = dv_n.d
+    sigsSnr['n_c'] = dv_n.dCentr
+    sigsSnr['n_l'] = dv_n.dLocal
+    sigsSnr['s'] = dv_s.d
+    sigsSnr['s_c'] = dv_s.dCentr
+    sigsSnr['s_l'] = dv_s.dLocal
+    if bestPerfRef:
+        sigsSnr['n_bp'] = outBP_n.dCentr
+        sigsSnr['s_bp'] = outBP_s.dCentr
+
+    return sigsSnr
+
+
+def get_best_perf(wasnObj: WASN, p: base.DANSEparameters, wCentr=None):
     """
     Computes the best achievable performance for the given scenario, i.e.,
     if all nodes could communicate in a centralized way, with no SROs, and
     using batch estimates.
+    If `wCentr` is given, use those filters instead of computing them.
     """
-    # Initialize variables
-    bdv = BatchDANSEvariables()  # batch
-    bdv.import_params(p)
-    bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
-    bdv.init()  # batch-mode-specific initialization
-    # Get centralized and local estimates
-    bdv.get_centralized_estimates()
+    if wasnObj.adjacencyMatrix == np.array([]):  # fully connected topology
+        # Initialize variables
+        bdv = BatchDANSEvariables()  # batch
+        bdv.import_params(p)
+        bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
+        bdv.init()  # batch-mode-specific initialization
+        # Get centralized and local estimates
+        bdv.get_centralized_estimates(wCentr)
+    
+    else:  # ad-hoc topology
+        # Initialize variables
+        bdv = BatchTIDANSEvariables(p, wasnObj.wasn)
+        bdv.import_params(p)
+        bdv.init_from_wasn_for_best_perf(wasnObj.wasn)
+        bdv.init_for_adhoc_topology()
+        # Get centralized and local estimates
+        bdv.get_centralized_estimates(wCentr)
 
     return bdv

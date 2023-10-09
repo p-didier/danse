@@ -70,26 +70,26 @@ class DANSEoutputs(DANSEparameters):
         # DANSE desired signal estimates
         self.TDdesiredSignals_est = dv.d
         self.STFTDdesiredSignals_est = dv.dhat
-        self.TDfiltSpeech = dv.d_s
-        self.STFTfiltSpeech = dv.dhat_s
-        self.TDfiltNoise = dv.d_n
-        self.STFTfiltNoise = dv.dhat_n
+        # self.TDfiltSpeech = dv.d_s
+        # self.STFTfiltSpeech = dv.dhat_s
+        # self.TDfiltNoise = dv.d_n
+        # self.STFTfiltNoise = dv.dhat_n
         if self.computeCentralised:
             # Centralised desired signal estimates
             self.TDdesiredSignals_est_c = dv.dCentr
             self.STFTDdesiredSignals_est_c = dv.dHatCentr
-            self.TDfiltSpeech_c = dv.dCentr_s
-            self.STFTfiltSpeech_c = dv.dHatCentr_s
-            self.TDfiltNoise_c = dv.dCentr_n
-            self.STFTfiltNoise_c = dv.dHatCentr_n
+            # self.TDfiltSpeech_c = dv.dCentr_s
+            # self.STFTfiltSpeech_c = dv.dHatCentr_s
+            # self.TDfiltNoise_c = dv.dCentr_n
+            # self.STFTfiltNoise_c = dv.dHatCentr_n
         if self.computeLocal:
             # Local desired signal estimates
             self.TDdesiredSignals_est_l = dv.dLocal
             self.STFTDdesiredSignals_est_l = dv.dHatLocal
-            self.TDfiltSpeech_l = dv.dLocal_s
-            self.STFTfiltSpeech_l = dv.dHatLocal_s
-            self.TDfiltNoise_l = dv.dLocal_n
-            self.STFTfiltNoise_l = dv.dHatLocal_n
+            # self.TDfiltSpeech_l = dv.dLocal_s
+            # self.STFTfiltSpeech_l = dv.dHatLocal_s
+            # self.TDfiltNoise_l = dv.dLocal_n
+            # self.STFTfiltNoise_l = dv.dHatLocal_n
         # DANSE fused signals
         self.TDfusedSignals = dv.zFullTD
         # SROs
@@ -132,18 +132,39 @@ class DANSEoutputs(DANSEparameters):
 
         return self
     
-    def include_best_perf_data(self, outBP: BatchDANSEvariables):
+    def from_snr_signals(self, snrSigs: dict):
+        """
+        Selects output values from `snrSigs` dict, for
+        subsequent SNR computation with filtered speech-only
+        and noise-only signals. The dictionary is created in
+        `d_classes.generate_signals_for_snr_computation`.
+        """
+        self.TDfiltSpeech = snrSigs['s']
+        self.TDfiltNoise = snrSigs['n']
+        self.TDfiltSpeech_c = snrSigs['s_c']
+        self.TDfiltNoise_c = snrSigs['n_c']
+        self.TDfiltSpeech_l = snrSigs['s_l']
+        self.TDfiltNoise_l = snrSigs['n_l']
+        return self
+    
+    def include_best_perf_data(
+            self,
+            outBP: BatchDANSEvariables,
+            sigsSnr: dict
+        ):
         """
         Includes the "best performance" data (computed in centralized,
         no SROs, batch mode).
+        The `sigsSnr` dict is created in `d_classes.generate_signals_for_snr_computation`
+        and contains the signals used for SNR computation.
         """
         self.bestPerfData = {
             'dCentr': outBP.dCentr,
             'dHatCentr': outBP.dHatCentr,
-            'dCentr_s': outBP.dCentr_s,
-            'dHatCentr_s': outBP.dHatCentr_s,
-            'dCentr_n': outBP.dCentr_n,
-            'dHatCentr_n': outBP.dHatCentr_n,
+            'dCentr_s': sigsSnr['s_bp'],
+            # 'dHatCentr_s': outBP.dHatCentr_s,
+            'dCentr_n': sigsSnr['n_bp'],
+            # 'dHatCentr_n': outBP.dHatCentr_n,
             'mseCostCentr': outBP.mmseCostCentr,
             'wCentr': outBP.wCentr,
             'fs': outBP.baseFs,
@@ -763,7 +784,8 @@ def compute_metrics(
     for k in range(out.nNodes):
         # Derive starting/ending samples for metrics computations
         startIdx[k] = int(np.floor(wasn[k].metricStartTime * wasn[k].fs))
-        print(f"Node {k+1}: computing metrics from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s --> discard early filters updates)...")
+        endIdx[k] = int(np.floor(wasn[k].metricEndTime * wasn[k].fs))
+        print(f"Node {k+1}: computing metrics from {startIdx[k] + 1}th sample (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
         print(f'Computing metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
         # Compute starting indices for centralised and local estimates
@@ -774,19 +796,19 @@ def compute_metrics(
             TDdesiredSignals_est_c = out.TDdesiredSignals_est_c[:, k]
             TDfilteredSpeech_c = out.TDfiltSpeech_c[:, k]
             TDfilteredNoise_c = out.TDfiltNoise_c[:, k]
-            print(f"Node {k+1}: computing metrics for CENTRALISED PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
+            print(f"Node {k+1}: computing metrics for CENTRALISED PROCESSING from {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
         if out.computeLocal:
             TDdesiredSignals_est_l = out.TDdesiredSignals_est_l[:, k]
             TDfilteredSpeech_l = out.TDfiltSpeech_l[:, k]
             TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
-            print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from the {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s).")
+            print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
         
-        if out.simType == 'batch':
+        if out.simType == 'batch' and\
+            endIdx[k] > wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize:
             # Discard the very end of the signal due to STFT/ISTFT artefacts
-            endIdx[k] = int(wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize)
-        else:
-            # Use all signal until the end
-            endIdx[k] = int(wasn[k].cleanspeechRefSensor.shape[0])
+            endIdx[k] = int(
+                wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize
+            )
         
         metricsDict = get_metrics(
             # Clean speech mixture (desired signal)
@@ -1732,7 +1754,7 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
             'C2-',
             label='Enhanced (centr.)'
         )
-    # Plot start of enhancement metrics computations
+    # Plot start/end of enhancement metrics computations
     ymin, ymax = np.amin(ax.get_ylim()), np.amax(ax.get_ylim())
     ax.vlines(
         x=node.metricStartTime,
@@ -1740,15 +1762,21 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
         ymax=ymax,
         colors='0.75',
     )
-    if batchMode:
-        # Plot end of enhancement metrics computations
-        ax.vlines(
-            x=(node.cleannoise.shape[0] - len(win)) / node.fs,
-            # ^^^ discard last window in batch mode due to STFT/ISTFT transforms artefacts
-            ymin=ymin,
-            ymax=ymax,
-            colors='0.75',
-        )
+    ax.vlines(
+        x=node.metricEndTime,
+        ymin=ymin,
+        ymax=ymax,
+        colors='0.75',
+    )
+    # if batchMode:
+    #     # Plot end of enhancement metrics computations
+    #     ax.vlines(
+    #         x=(node.cleannoise.shape[0] - len(win)) / node.fs,
+    #         # ^^^ discard last window in batch mode due to STFT/ISTFT transforms artefacts
+    #         ymin=ymin,
+    #         ymax=ymax,
+    #         colors='0.75',
+    #     )
 
     ax.set_yticklabels([])
     ax.set(xlabel='$t$ [s]')
@@ -2259,28 +2287,28 @@ def plot_filters(
             plt.close(fig=fig)
             dataFigs.append(dataFig)  # Save data for later use
 
-        # Plot difference between centralized filters
-        # and network-wide DANSE filters
-        for k in range(nNodes):
-            fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-            for m in range(filtersCentr[k].shape[2]):   
-                mse1 = np.abs(
-                    np.mean(filtersCentr[k][:, :, m], axis=0) -\
-                    netwideDANSEfilts_allNodes[k][:, m].T
-                ) ** 2
-                # Plot
-                ax.plot(
-                    mse1.T,
-                    label=labelsCentr[k][m]
-                )
-                # Set title
-                ti = f'$\\mathrm{{MSE}}_1$ at node $k={k + 1}$'
-                # Format axes
-                _format_axes(ax, ti)
-                ax.set_ylabel('$\\log_{{10}}||\\hat{{\\mathbf{{w}}}}_k - \\mathbf{{w}}_k||^2$ (avg. over $\\nu$)')
-                fig.tight_layout()
-                plt.close(fig=fig)
-                figs.append((f'{fignamePrefix}_c{k + 1}_net_mse1', fig))
+        # # Plot difference between centralized filters
+        # # and network-wide DANSE filters
+        # for k in range(nNodes):
+        #     fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+        #     for m in range(filtersCentr[k].shape[2]):   
+        #         mse1 = np.abs(
+        #             np.mean(filtersCentr[k][:, :, m], axis=0) -\
+        #             netwideDANSEfilts_allNodes[k][:, m].T
+        #         ) ** 2
+        #         # Plot
+        #         ax.plot(
+        #             mse1.T,
+        #             label=labelsCentr[k][m]
+        #         )
+        #         # Set title
+        #         ti = f'$\\mathrm{{MSE}}_1$ at node $k={k + 1}$'
+        #         # Format axes
+        #         _format_axes(ax, ti)
+        #         ax.set_ylabel('$\\log_{{10}}||\\hat{{\\mathbf{{w}}}}_k - \\mathbf{{w}}_k||^2$ (avg. over $\\nu$)')
+        #         fig.tight_layout()
+        #         plt.close(fig=fig)
+        #         figs.append((f'{fignamePrefix}_c{k + 1}_net_mse1', fig))
     
 
     # Transform to dict
@@ -2407,6 +2435,7 @@ def export_danse_outputs(
         # Save `DANSEoutputs` object after metrics computation
         if p.exportParams.danseOutputsFile:
             out.save(foldername=p.exportParams.exportFolder, light=True)
+        if p.exportParams.metricsFile:
             # Save just metrics (for faster loading in post-processing scripts)
             out.save_metrics(foldername=p.exportParams.exportFolder)
         # Save `TestParameters` object

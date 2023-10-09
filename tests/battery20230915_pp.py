@@ -19,6 +19,16 @@ METRICS_TO_PLOT = [
 ]
 NS = 512  # TODO: improve handling of this -- could be inferred from results
 
+# TO_PLOT = ['danse']
+TO_PLOT = ['centr']
+# TO_PLOT = [
+#     'danse',
+#     'centr'
+# ]
+
+FORCED_YLIMITS_SNR = None
+FORCED_YLIMITS_SNR = [0, 17.5]
+
 def main(dataFolder: str=DATA_FOLDER):
     """Main function (called by default when running script)."""
     
@@ -28,8 +38,8 @@ def main(dataFolder: str=DATA_FOLDER):
     fig, _ = plot_data(data)
 
     # Export
-    fig.savefig(f'{dataFolder}/combined_metrics.pdf', bbox_inches='tight')
-    fig.savefig(f'{dataFolder}/combined_metrics.png', dpi=300, bbox_inches='tight')
+    fig.savefig(f'{dataFolder}/combined_metrics_{"_".join(TO_PLOT)}.pdf', bbox_inches='tight')
+    fig.savefig(f'{dataFolder}/combined_metrics_{"_".join(TO_PLOT)}.png', dpi=300, bbox_inches='tight')
 
     print('Done.')
 
@@ -38,9 +48,10 @@ def main(dataFolder: str=DATA_FOLDER):
 
 def plot_data(data: dict[dict[pd.DataFrame]]):
     """Plot data."""
+    lineStyles = ['-', '--', '-.', ':']
 
     nodes = list(data.keys())
-    metrics = list(data[nodes[0]].keys())
+    metrics = list(data[nodes[0]].keys())  # `== METRICS_TO_PLOT`
 
     nRows = len(metrics)
     nCols = len(nodes)
@@ -62,28 +73,38 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
             k = nodes[jj]
             m = metrics[ii]
             currData = data[k][m]
-            sros = currData.index
-            bcLengths = currData.columns
-            for idxL, l in enumerate(bcLengths):
-                if np.isnan(currData[l][0]):
-                    currData[l][0] = currData[1][0]  # complete redundant data 
-                currAx.plot(
-                    sros,
-                    currData[l],
-                    f'C{idxL}.-',
-                    label=f'$L = {l}$'
-                )
+            for idxTyp, typ in enumerate(list(currData.keys())):
+                sros = currData[typ].index
+                bcLengths = currData[typ].columns
+                # Cycle through line styles
+                currLineStyle = lineStyles[idxTyp % len(lineStyles)]
+                for idxL, l in enumerate(bcLengths):
+                    if np.isnan(currData[typ][l][0]):
+                        currData[typ][l][0] = currData[typ][1][0]  # complete redundant data 
+                    currAx.plot(
+                        sros,
+                        currData[typ][l],
+                        f'C{idxL}.{currLineStyle}',
+                        label=f'$L = {l}$ ({typ})' if len(list(currData.keys())) > 1 else f'$L = {l}$'
+                    )
             currAx.grid()
             if ii == jj == 0:
-                currAx.legend(loc='best')
+                currAx.legend(loc='lower left')
             currAx.set_xlabel('SRO $\\varepsilon_{{kq}}$ [PPM]')
             if 'snr' in m:
                 currAx.set_ylabel('[dB]')
-                currAx.set_ylim([np.amin([0, np.amin(currAx.get_ylim())]), np.amax(currAx.get_ylim())])
+                if FORCED_YLIMITS_SNR is not None:
+                    currAx.set_ylim(FORCED_YLIMITS_SNR)
+                else:
+                    currAx.set_ylim([
+                        np.amin([0, np.amin(currAx.get_ylim())]),
+                        np.amax(currAx.get_ylim())
+                    ])
             currAx.set_title(f'{k}, {m}')
             if 'stoi' in m:
                 currAx.set_ylim([0, 1])
 
+    fig.suptitle(' and '.join(TO_PLOT))
     plt.tight_layout()
     return fig, axes
 
@@ -98,22 +119,31 @@ def get_data(
     
     # Create one dataframe for each node
     dfs = dict([
-        (f'Node{k+1}', dict([
-            (metric, None) for metric in METRICS_TO_PLOT
-        ])) for k in range(params['nNodes'])
+        (
+            f'Node{k+1}',
+            dict([
+                (metric, dict([
+                    (typ, None) for typ in TO_PLOT
+                ])) for metric in METRICS_TO_PLOT
+            ])
+        ) for k in range(params['nNodes'])
     ])
     for k in range(params['nNodes']):
         for metric in METRICS_TO_PLOT:
-            df = pd.DataFrame(
-                index=params['SRO'],
-                columns=params['L']
-            )
-            for subfolder in data.keys():
-                currData = data[subfolder]
-                df.loc[currData['SRO'], currData['L']] =\
-                    getattr(currData['metrics'], metric)[f'Node{k+1}'].after
-                
-            dfs[f'Node{k+1}'][metric] = df
+            for typ in TO_PLOT:
+                df = pd.DataFrame(
+                    index=params['SRO'],
+                    columns=params['L']
+                )
+                for subfolder in data.keys():
+                    currData = data[subfolder]
+                    if typ == 'danse':
+                        attr = getattr(currData['metrics'], metric)[f'Node{k+1}'].after
+                    elif typ == 'centr':
+                        attr = getattr(currData['metrics'], metric)[f'Node{k+1}'].afterCentr
+                    df.loc[currData['SRO'], currData['L']] = attr
+                    
+                dfs[f'Node{k+1}'][metric][typ] = df
 
     return dfs
 

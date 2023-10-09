@@ -6,13 +6,13 @@ import siggen.utils as sig_ut
 import pyroomacoustics as pra
 import danse_toolbox.d_post as pp
 import danse_toolbox.d_core as core
-from danse_toolbox.d_classes import *
+import danse_toolbox.d_classes as cl
 
 PATH_TO_CONFIG_FILE = f'{Path(__file__).parent.parent}/config_files/sandbox_config.yaml'
 BYPASS_DYNAMIC_PLOTS = True  # if True, bypass all runtime (dynamic) plotting 
 
 def main(
-        p: TestParameters=None,
+        p: cl.TestParameters=None,
         cfgFilename: str=''
     ) -> pp.DANSEoutputs:
     """Main function.
@@ -36,7 +36,7 @@ def main(
         # Load parameters from config file
         print('Loading parameters...')
         pathToCfg = cfgFilename if cfgFilename else PATH_TO_CONFIG_FILE
-        p = TestParameters().load_from_yaml(pathToCfg)
+        p = cl.TestParameters().load_from_yaml(pathToCfg)
         p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
         print('Parameters loaded.')
     else:
@@ -98,7 +98,7 @@ def main(
 
 def danse_it_up(
         wasnObj: WASN,
-        p: TestParameters
+        p: cl.TestParameters
     ) -> tuple[pp.DANSEoutputs, WASN]:
     """Container function for launching the- correct version of
     the DANSE algorithm."""
@@ -107,35 +107,52 @@ def danse_it_up(
     if p.is_fully_connected_wasn():  # Fully connected WASN case
         print(f'Running {p.danseParams.simType} DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         if p.danseParams.simType == 'batch':  # true batch mode
-            raise NotImplementedError('Batch mode not implemented for fully connected WASNs.')
+            raise NotImplementedError('Batch mode not implemented / tested yet.')
             danse_function = core.danse_batch
         else:
             danse_function = core.danse
     else:  # Ad-hoc WASN topology case
         print(f'Running {p.danseParams.simType} TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         if p.danseParams.simType == 'batch':  # true batch mode
-            raise NotImplementedError('Batch mode not implemented for ad-hoc WASNs.')
+            raise NotImplementedError('Batch mode not implemented / tested yet.')
             danse_function = core.tidanse_batch
         else:
             danse_function = core.tidanse
     # Launch DANSE
-    out, wasnUpdated = danse_function(*args)
-    print('DANSE run complete.')
-
+    dv, wasnObj = danse_function(*args)
     # If asked, compute best possible performance (centralized, no SROs, batch)
     if p.exportParams.bestPerfReference:
-        print('Computing best possible performance...')
         outBP = core.get_best_perf(*args)
-        out.include_best_perf_data(outBP)
-        print('Best possible performance computed.')
+
+    # Compute signals for SNR computation
+    sigsSnr = core.generate_signals_for_snr_computation(
+        p.danseParams,
+        dv,
+        wasnObj,
+        danse_function,
+        p.exportParams.bestPerfReference,
+        wCentrBatch=outBP.wCentr if p.exportParams.bestPerfReference else None
+    )
+    
+    # Format the output for post-processing
+    out, wasnUpdated = core.format_output(
+        p.danseParams,
+        dv,
+        wasnObj,
+        sigsSnr=sigsSnr
+    )
+    print('DANSE run complete.')
+
+    # Add best possible performance data to output
+    if p.exportParams.bestPerfReference:
+        out.include_best_perf_data(outBP, sigsSnr)
 
     return out, wasnUpdated
-
 
 def postprocess(
         out: pp.DANSEoutputs,
         wasnObj: WASN,
-        p: TestParameters,
+        p: cl.TestParameters,
         room: pra.room.ShoeBox=None,
         bypassGlobalPickleExport: bool=False
     ) -> pp.DANSEoutputs:
@@ -164,7 +181,7 @@ def postprocess(
     if not bypassGlobalPickleExport:
         # Export all required data as global Pickle archive
         print('Exporting all data for further subsequent post-processing...')
-        forPP = OutputsForPostProcessing(out, wasnObj, p)
+        forPP = cl.OutputsForPostProcessing(out, wasnObj, p)
         forPP.save(p.exportParams.exportFolder)
     pp.export_danse_outputs(out, wasnObj, p, room)
 

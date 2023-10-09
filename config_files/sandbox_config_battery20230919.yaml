@@ -1,7 +1,8 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231006_tests/tidanse/test1_ssNodes_WCBC
+  exportFolder: C:\Users\u0137935\Dropbox\PC\Documents\sounds-phd\danse/out/20230920_tests/centrBC/Leq1_srosOn_baseline # folder to export outputs
+  # exportFolder: C:\Users\pdidier\Dropbox\PC\Documents\sounds-phd\danse/out/20230911_tests/_quick/test1_baseSNR # folder to export outputs
   metricsInPlots:
   - snr
   - sisnr
@@ -12,7 +13,6 @@ exportParams:
   mseBatchPerfPlot: false
 danseParams:
   noFusionAtSingleSensorNodes: true
-  # noFusionAtSingleSensorNodes: false
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
   performGEVD: true
@@ -26,8 +26,6 @@ danseParams:
   # computeLocal: false
   # computeCentralised: false
   filterInitType: selectFirstSensor
-  # filterInitType: fixedValue
-  # filterInitFixedValue: 1
   # covMatRandomInitScaling: 0  # <-- init SCMs as zeros
   use1stFrameAsBasis: true  # <-- init SCMs using first available frame
   #
@@ -49,8 +47,8 @@ danseParams:
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
-  broadcastType: wholeChunk
-  # broadcastType: fewSamples
+  # broadcastType: wholeChunk
+  broadcastType: fewSamples
   broadcastLength: 1   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
   # broadcastLength: 2
   efficientSpSBC: true
@@ -59,8 +57,6 @@ danseParams:
   #
   # compensateSROs: true
   compensateSROs: false
-  includeFSDflags: false
-  #
   estimateSROs: Oracle
   # estimateSROs: CohDrift
   compensationStrategy: node-specific
@@ -95,8 +91,8 @@ wasnParams:
   # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  nSensorPerNode: '[1, 1, 1]'
-  # nSensorPerNode: '[2, 3]'
+  nSensorPerNode: '[1, 1]'
+  # nSensorPerNode: '[2, 2]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
   # nSensorPerNode: '[1, 2, 3]'
@@ -104,26 +100,16 @@ wasnParams:
   snrBasis: at_mic_0
   snr: 5
   #
-  SROperNode: '[0]'  # [PPM]
+  # SROperNode: '[0]'  # [PPM]
   # SROperNode: '[0, 40]'  # [PPM]
-  # SROperNode: '[0, 200]'  # [PPM]
+  SROperNode: '[0, 200]'  # [PPM]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   #
   signalType: from_file
   desiredSignalFile:
-  - .\danse\tests\sigs\01_speech\speech2_16000Hz.wav
+  - C:\Users\u0137935\Dropbox\PC\Documents\sounds-phd\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
   nNoiseSources: 1
-  # noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
-  noiseSignalFile:
-  - .\\danse\\tests\\sigs\\02_noise\\ssn\\ssn_3729-6852-0026.wav
+  noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   referenceSensor: 0
-  vadFilesFolder: .\danse\vad_files
-  #
-  topologyParams:
-    # topologyType: user-defined
-    topologyType: fully-connected
-    commDistance: 4.0
-    plotTopo: false
-    seed: 12348
-    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists
+  vadFilesFolder: C:\Users\u0137935\Dropbox\PC\Documents\sounds-phd\danse\vad_files

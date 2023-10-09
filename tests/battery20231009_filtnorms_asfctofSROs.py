@@ -1,33 +1,28 @@
 # Purpose of script:
-# Test effect of broadcast length on DANSE performance, in the presence of SROs.
+# Test effect of SROs on GEVD-DANSE vs. GEVD-MWF performance, and link to
+# filter coefficients norms evolution.s 
 #
 # (c) Paul Didier, SOUNDS ETN, KU Leuven ESAT STADIUS
-# Created on 2023.09.19 - 10:57.
+# Created on 2023.10.09 - 11:30.
 
 import time
 import sys, os
+import numpy as np
+from pathlib import Path
 import matplotlib.pyplot as plt
 from .sandbox import main as sandbox_main
-from danse_toolbox.d_base import get_divisors
 from danse_toolbox.d_classes import TestParameters
 
-N = 1024            # DFT size
-WOLA_OVLP = 0.5     # WOLA overlap factor
-# MK = [1, 1]         # number of sensors per node (`len(MK) = nNodes`)
-MK = [2, 3]         # number of sensors per node (`len(MK) = nNodes`)
+# General parameters
+EXPORT_FOLDER = f'./danse/out/{Path(__file__).stem}'
+MK = [2, 3]  # number of sensors per node
 BASE_CONFIG_FILE = './danse/config_files/sandbox_config.yaml'
 
-# Broadcast lengths to test
-L_TO_TEST = list(get_divisors(N * (1 - WOLA_OVLP)))
-# L_TO_TEST = [1, 2, 4, 8, 16, 32]
 # SROs to test
-SROS = [0, 200]  # [PPM]
+SROS_TO_TEST = np.linspace(start=0, stop=400, num=11)  # [PPM]
 
 # Booleans
 SKIP_ALREADY_RUN_TESTS = True
-
-# General parameters
-EXPORT_FOLDER = './danse/out/battery20230919_perf_asfctofL'
 
 def main(
         baseConfigFile: str=BASE_CONFIG_FILE,
@@ -44,14 +39,12 @@ def main(
         print(f"Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) in progress...")
         print('----------------------------------------')
         t = time.time()
-        # blockPrint()
         # Check if test has already been run
         if SKIP_ALREADY_RUN_TESTS and\
             os.path.exists(f"{exportFolder}/{test['ref']}/metrics.pkl"):
             print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) already run. Skipping.")
             continue
         launch(test, baseConfigFile, exportFolder)  # launch test
-        # enablePrint()
         print(f">>>>>>> Test {battery.index(test) + 1}/{len(battery)} (ref: {test['ref']}) completed in {time.time() - t} s.\n")
 
     print(f"\n\nTest battery completed in {time.time() - t0} s.")
@@ -62,49 +55,32 @@ def prepare_test_battery():
     
     battery = []
     
-    for l in L_TO_TEST:
+    for sroNode2 in SROS_TO_TEST:
         # No compensation
         battery.append({
-            'L': l,
-            'compensateSRO': False,
-            'flagsOn': False,
-            'ref': f'L{l}_noComp',
-        })
-        # SRO compensation without flags
-        battery.append({
-            'L': l,
-            'compensateSRO': True,
-            'flagsOn': False,
-            'ref': f'L{l}_compNoFlags',
-        })
-        # SRO compensation incl. flags
-        battery.append({
-            'L': l,
-            'compensateSRO': True,
-            'flagsOn': True,
-            'ref': f'L{l}_comp',
+            'sros': [0, sroNode2],
+            'ref': f'sroNode2_{sroNode2:.0f}',
         })
     
     return battery
 
 
-def launch(test: dict, baseConfigFile: str, exportFolder: str=EXPORT_FOLDER):
+def launch(
+        test: dict,
+        baseConfigFile: str,
+        exportFolder: str=EXPORT_FOLDER
+    ):
     """Launch a test."""
     # Load base parameters from config file
     p = TestParameters().load_from_yaml(baseConfigFile)
     # Adapt parameters
-    p.danseParams.DFTsize = N
-    p.danseParams.WOLAovlp = WOLA_OVLP
-    p.danseParams.broadcastType = 'fewSamples'  # ensure
-    p.danseParams.broadcastLength = test['L']
-    p.danseParams.compensateSROs = test['compensateSRO']
-    p.danseParams.estimateSROs = 'Oracle'  # ensure
-    p.danseParams.includeFSDflags = test['flagsOn']
+    p.danseParams.broadcastType = 'wholeChunk'  # ensure
+    p.danseParams.compensateSROs = False
     p.wasnParams.nSensorPerNode = MK
-    p.wasnParams.SROperNode = SROS
+    p.wasnParams.SROperNode = test['sros']
     p.exportParams.exportFolder = f'{exportFolder}/{test["ref"]}'
     p.exportParams.wavFiles = False
-    p.exportParams.filterNorms = False
+    p.exportParams.filterNorms = True
     p.exportParams.sroEstimPerfPlot = False
     p.danseParams.get_wasn_info(p.wasnParams)  # complete parameters
     p.__post_init__()
