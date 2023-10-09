@@ -150,6 +150,10 @@ def get_metrics(
     metricsDict = dict()
     if endIdx is None:
         endIdx = clean.shape[0]
+    if bestPerfData is not None:
+        # Hard-coded parameter: avoid clicks at beginning and end of batch
+        # processing
+        bestPerfShift = int(0.25 * fs)
 
     # Trim to correct lengths (avoiding initial filter convergence
     # in calculation of metrics)
@@ -189,8 +193,8 @@ def get_metrics(
         snr.diff = snr.after - snr.before
         if bestPerfData is not None:
             snr.best = get_snr(
-                bestPerfData['dCentr_s'][startIdx:endIdx, k],
-                bestPerfData['dCentr_n'][startIdx:endIdx, k],
+                bestPerfData['dCentr_s'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
+                bestPerfData['dCentr_n'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
                 vad,
                 bypassVADuse
             )
@@ -202,8 +206,8 @@ def get_metrics(
         sisnr.diff = sisnr.after - sisnr.before
         if bestPerfData is not None:
             sisnr.best = get_sisnr(
-                bestPerfData['dCentr_s'][startIdx:endIdx, k],
-                bestPerfData['dCentr_n'][startIdx:endIdx, k],
+                bestPerfData['dCentr_s'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
+                bestPerfData['dCentr_n'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
                 vad,
                 bestPerfData['fs'],
                 bypassVADuse
@@ -222,8 +226,8 @@ def get_metrics(
         fwSNRseg.diff = fwSNRseg.after - fwSNRseg.before
         if bestPerfData is not None:
             fwSNRseg_allFrames = get_fwsnrseg(
-                bestPerfData['cleanSpeech'][startIdx:endIdx, k],
-                bestPerfData['dCentr'][startIdx:endIdx, k],
+                bestPerfData['cleanSpeech'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
+                bestPerfData['dCentr'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
                 bestPerfData['fs'],
                 fLen,
                 gamma
@@ -237,8 +241,8 @@ def get_metrics(
         myStoi.diff = myStoi.after - myStoi.before
         if bestPerfData is not None:
             myStoi.best = stoi_fcn(
-                bestPerfData['cleanSpeech'][startIdx:endIdx, k],
-                bestPerfData['dCentr'][startIdx:endIdx, k],
+                bestPerfData['cleanSpeech'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
+                bestPerfData['dCentr'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
                 bestPerfData['fs'],
                 extended=True
             )
@@ -262,7 +266,7 @@ def get_metrics(
                 myPesq.best = pesq(
                     bestPerfData['fs'],
                     clean_c,
-                    bestPerfData['dCentr'][startIdx:endIdx, k],
+                    bestPerfData['dCentr'][startIdx + bestPerfShift:endIdx - bestPerfShift, k],
                     mode
                 )
         else:

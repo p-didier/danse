@@ -2287,28 +2287,28 @@ def plot_filters(
             plt.close(fig=fig)
             dataFigs.append(dataFig)  # Save data for later use
 
-        # Plot difference between centralized filters
-        # and network-wide DANSE filters
-        for k in range(nNodes):
-            fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-            for m in range(filtersCentr[k].shape[2]):   
-                mse1 = np.abs(
-                    np.mean(filtersCentr[k][:, :, m], axis=0) -\
-                    netwideDANSEfilts_allNodes[k][:, m].T
-                ) ** 2
-                # Plot
-                ax.plot(
-                    mse1.T,
-                    label=labelsCentr[k][m]
-                )
-                # Set title
-                ti = f'$\\mathrm{{MSE}}_1$ at node $k={k + 1}$'
-                # Format axes
-                _format_axes(ax, ti)
-                ax.set_ylabel('$\\log_{{10}}||\\hat{{\\mathbf{{w}}}}_k - \\mathbf{{w}}_k||^2$ (avg. over $\\nu$)')
-                fig.tight_layout()
-                plt.close(fig=fig)
-                figs.append((f'{fignamePrefix}_c{k + 1}_net_mse1', fig))
+        # # Plot difference between centralized filters
+        # # and network-wide DANSE filters
+        # for k in range(nNodes):
+        #     fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+        #     for m in range(filtersCentr[k].shape[2]):   
+        #         mse1 = np.abs(
+        #             np.mean(filtersCentr[k][:, :, m], axis=0) -\
+        #             netwideDANSEfilts_allNodes[k][:, m].T
+        #         ) ** 2
+        #         # Plot
+        #         ax.plot(
+        #             mse1.T,
+        #             label=labelsCentr[k][m]
+        #         )
+        #         # Set title
+        #         ti = f'$\\mathrm{{MSE}}_1$ at node $k={k + 1}$'
+        #         # Format axes
+        #         _format_axes(ax, ti)
+        #         ax.set_ylabel('$\\log_{{10}}||\\hat{{\\mathbf{{w}}}}_k - \\mathbf{{w}}_k||^2$ (avg. over $\\nu$)')
+        #         fig.tight_layout()
+        #         plt.close(fig=fig)
+        #         figs.append((f'{fignamePrefix}_c{k + 1}_net_mse1', fig))
     
 
     # Transform to dict

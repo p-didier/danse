@@ -546,11 +546,13 @@ def initialize_events(
     Ttot = timeInstants[-1, :]
 
     # Prepare events matrix building
-    print('Preparing events matrix building...')
+    if p.printoutsAndPlotting.verbose:
+        print('Preparing events matrix building...')
     prepOutput = prep_evmat_build(p, nNodes, wasnObj, fs, Ttot)
 
     # Build event matrix
-    print('Building events matrix...')
+    if p.printoutsAndPlotting.verbose:
+        print('Building events matrix...')
     outputEvents = build_events_matrix(
         up_t=prepOutput['upInstants'],
         bc_t=prepOutput['bcInstants'],

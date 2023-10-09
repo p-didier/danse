@@ -141,8 +141,8 @@ class ExportParameters:
     sroEstimPerfPlot: bool = True  # if True, SRO estimation performance plot is exported
     metricsPlot: bool = True  # if True, metrics plot is exported
     waveformsAndSpectrograms: bool = True  # if True, waveforms and spectrograms are exported
-    mmsePerfPlot: bool = True  # if True, MMSE performance plot is exported (only used in batch mode)
-    mseBatchPerfPlot: bool = True  # if True, MSE performance plot is exported (only used in online mode)
+    mmsePerfPlot: bool = False  # if True, MMSE performance plot is exported (only used in batch mode)
+    mseBatchPerfPlot: bool = False  # if True, MSE performance plot is exported (only used in online mode)
     bestPerfReference: bool = True  # if True, best performance reference (centralized, no SROs, batch) is added to all relevant plots
     # vvv Files (not plots)
     danseOutputsFile: bool = True  # if True, DANSE outputs are exported as a pickle file

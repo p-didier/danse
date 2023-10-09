@@ -154,7 +154,7 @@ def tidanse(
     eventInstants, fs, wasnObjList = base.initialize_events(
         timeInstants=tidv.timeInstants,
         p=p,
-        wasnObj=wasnObj
+        wasnObj=wasnObj,
     )
     # Update WASN object as the one at the start of the simulation
     wasnObj = wasnObjList[0]
