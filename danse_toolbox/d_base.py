@@ -30,6 +30,7 @@ class PreComputedFilters():
     # DANSE iteration.
     filtersCentr: list = field(default_factory=list)
     filtersLocal: list = field(default_factory=list)
+    filtersSSBC: list = field(default_factory=list)
     purpose: str = 'noise-only' # Signal to be used in DANSE.
     # ^^^ possible:
     # - 'speech-only': speech-only signal
@@ -280,12 +281,11 @@ class DANSEparameters(Hyperparameters):
     desSigProcessingType: str = 'wola'  # processing scheme used to compute
         # the desired signal estimates: "wola": WOLA synthesis,
                                     # "conv": T(z)-approximation.
+    computeLocal: bool = False  # if True, compute local estimate at each node.
     computeCentralised: bool = False    # if True, compute centralised
         # estimate (using all microphone signals in network).
-    computeLocal: bool = False  # if True, compute local estimate at each node.
-    computeNoiseFree: bool = False  # if True, compute estimate with the
-        # DANSE filters, but using noise-free signals (y_k's and z_q's).
-        # TODO: TODO: TODO: TODO: TODO: TODO: TODO: 
+    computeSingleSensorBroadcast: bool = False  # if True, compute estimate
+        # using only the signals from the reference sensor at each node.
     # ---- Metrics
     dynMetrics: DynamicMetricsParameters = DynamicMetricsParameters()
     gammafwSNRseg: float = 0.2  # gamma exponent for fwSNRseg

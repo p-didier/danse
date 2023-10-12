@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231012_tests/selfNoise/60dB
+  exportFolder: .\danse\out/20231012_tests/ssbc/test2_msNodes
   metricsInPlots:
   - snr
   - sisnr
@@ -17,8 +17,8 @@ danseParams:
   # noFusionAtSingleSensorNodes: false
   startUpdatesAfterAtLeast: 0 # [s]
   maxBatchUpdates: 20
-  performGEVD: true
-  # performGEVD: false
+  # performGEVD: true
+  performGEVD: false
   simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
@@ -26,6 +26,7 @@ danseParams:
   noExternalFilterRelaxation: false
   computeLocal: true
   computeCentralised: true
+  computeSingleSensorBroadcast: true
   # computeLocal: false
   # computeCentralised: false
   filterInitType: selectFirstSensor
@@ -47,8 +48,8 @@ danseParams:
     printout_profiler: false
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
-  # startComputeMetricsAt: after_5s
-  startComputeMetricsAt: after_10s
+  startComputeMetricsAt: after_5s
+  # startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
@@ -90,7 +91,7 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 15  # [s]
+  sigDur: 10  # [s]
   # selfnoiseSNR: 999999999  # [dB]
   # selfnoiseSNR: 99  # [dB]
   selfnoiseSNR: 60  # [dB]

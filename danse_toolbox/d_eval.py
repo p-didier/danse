@@ -28,6 +28,8 @@ class Metric:
     diffLocal: float = 0.       # difference between before and after local enhancement
     afterCentr: float = 0.      # metric value after _centralized_ enhancement (only all sensors in network)
     diffCentr: float = 0.       # difference between before and after centralized enhancement
+    afterSSBC: float = 0.       # metric value after _single-sensor broadcasts_ enhancement (only all sensors in network)
+    diffSSBC: float = 0.        # difference between before and after single-sensor broadcasts enhancement
     dynamicFlag: bool = False   # True if a dynamic version of the metric was computed
 
     def import_dynamic_metric(self, dynObject):
@@ -75,9 +77,12 @@ def get_metrics(
         filtNoise_c=None,
         filtSpeech_l=None,
         filtNoise_l=None,
+        filtSpeech_ssbc=None,
+        filtNoise_ssbc=None,
         enhan=None,
         enhan_c=None,
         enhan_l=None,
+        enhan_ssbc=None,
         fs=16e3,
         vad=None,
         dynamic: DynamicMetricsParameters=None,
@@ -113,12 +118,18 @@ def get_metrics(
         The filtered speech-only signal (after local processing).
     filtNoise_l : [N x 1] np.ndarray (float)
         The filtered noise-only signal (after local processing).
+    fileSpeech_ssbc : [N x 1] np.ndarray (float)
+        The speech-only signal (after single-sensor broadcasts processing).
+    fileNoise_ssbc : [N x 1] np.ndarray (float)
+        The noise-only signal (after single-sensor broadcasts processing).
     enhan : [N x 1] np.ndarray (float)
         The enhanced signal (post-signal enhancement).
     enhan_c : [N x 1] np.ndarray (float)
         The enhanced signal (after centralised processing).
     enhan_l : [N x 1] np.ndarray (float)
         The enhanced signal (after local processing).
+    enhan_ssbc : [N x 1] np.ndarray (float)
+        The enhanced signal (after single-sensor broadcasts processing).
     fs : int
         Sampling frequency [samples/s].
     vad : [N x 1] np.ndarray (float)
@@ -151,14 +162,15 @@ def get_metrics(
     if endIdx is None:
         endIdx = clean.shape[0]
     if bestPerfData is not None:
-        # Hard-coded parameter: avoid clicks at beginning and end of batch
-        # processing
+        # Hard-coded parameter: avoid clicks at beginning and
+        # end of batch processing
         bestPerfShift = int(0.25 * fs)
 
     # Trim to correct lengths (avoiding initial filter convergence
     # in calculation of metrics)
     clean_c = clean[startIdx:endIdx]
     clean_l = clean[startIdx:endIdx]
+    clean_ssbc = clean[startIdx:endIdx]
     clean = clean[startIdx:endIdx]
     # noiseOnly_c = noiseOnly[startIdx:endIdx]
     # noiseOnly_l = noiseOnly[startIdx:endIdx]
@@ -169,6 +181,9 @@ def get_metrics(
     if enhan_l is not None:
         enhan_l = enhan_l[startIdx:endIdx]
         vad_l = vad[startIdx:endIdx]
+    if enhan_ssbc is not None:
+        enhan_ssbc = enhan_ssbc[startIdx:endIdx]
+        vad_ssbc = vad[startIdx:endIdx]
     if enhan is not None:
         enhan = enhan[startIdx:endIdx]
     else:
@@ -183,8 +198,11 @@ def get_metrics(
     if filtSpeech_l is not None:
         filtSpeech_l = filtSpeech_l[startIdx:endIdx]
         filtNoise_l = filtNoise_l[startIdx:endIdx]
+    if filtSpeech_ssbc is not None:
+        filtSpeech_ssbc = filtSpeech_ssbc[startIdx:endIdx]
+        filtNoise_ssbc = filtNoise_ssbc[startIdx:endIdx]
 
-    bypassVADuse = True  # HARD-CODED /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\ /!\
+    bypassVADuse = True  # HARD-CODED /!\ /!\ /!\ /!\
     if 'snr' in metricsToPlot:
         # Unweighted SNR
         snr = Metric()
@@ -262,6 +280,8 @@ def get_metrics(
                 myPesq.afterCentr = pesq(fs, clean_c, enhan_c, mode)
             if enhan_l is not None:
                 myPesq.afterLocal = pesq(fs, clean_l, enhan_l, mode)
+            if enhan_ssbc is not None:
+                myPesq.afterSSBC = pesq(fs, filtSpeech_ssbc, enhan_ssbc, mode)
             if bestPerfData is not None:
                 myPesq.best = pesq(
                     bestPerfData['fs'],
@@ -297,7 +317,19 @@ def get_metrics(
             fwSNRseg.afterLocal = np.mean(fwSNRseg_allFrames)
         if 'stoi' in metricsToPlot or 'estoi' in metricsToPlot:
             myStoi.afterLocal = stoi_fcn(clean_l, enhan_l, fs, extended=True)
-
+    if enhan_ssbc is not None:
+        if 'snr' in metricsToPlot:
+            snr.afterSSBC = get_snr(filtSpeech_ssbc, filtNoise_ssbc, vad_ssbc, bypassVADuse)
+        if 'sisnr' in metricsToPlot:
+            sisnr.afterSSBC = get_sisnr(filtSpeech_ssbc, filtNoise_ssbc, vad_ssbc, fs, bypassVADuse)
+        if 'fwSNRseg' in metricsToPlot:
+            fwSNRseg_allFrames = get_fwsnrseg(
+                clean_ssbc, enhan_ssbc, fs, fLen, gamma
+            )
+            fwSNRseg.afterSSBC = np.mean(fwSNRseg_allFrames)
+        if 'stoi' in metricsToPlot or 'estoi' in metricsToPlot:
+            myStoi.afterSSBC = stoi_fcn(clean_ssbc, enhan_ssbc, fs, extended=True)
+    
     # Compute dynamic metrics
     # TODO: go through this if needed + account for centralised
     # and local estimates.

@@ -121,7 +121,9 @@ def format_output(
             wasnObj.wasn[k].enhancedData_c = dv.dCentr[:, k]
         if dv.computeLocal:
             wasnObj.wasn[k].enhancedData_l = dv.dLocal[:, k]
-    
+        if dv.computeSingleSensorBroadcast:
+            wasnObj.wasn[k].enhancedData_ssbc = dv.dSSBC[:, k]
+
     return out, wasnObj
 
 
@@ -577,6 +579,7 @@ def generate_signals_for_snr_computation(
         internalFilters=dv.wTilde,
         externalFilters=dv.wTildeExt,
         filtersCentr=dv.wCentr,
+        filtersSSBC=dv.wSSBC,
         filtersLocal=dv.wLocal,
         purpose='noise-only'
     )
@@ -597,9 +600,11 @@ def generate_signals_for_snr_computation(
     sigsSnr['n'] = dv_n.d
     sigsSnr['n_c'] = dv_n.dCentr
     sigsSnr['n_l'] = dv_n.dLocal
+    sigsSnr['n_ssbc'] = dv_n.dSSBC
     sigsSnr['s'] = dv_s.d
     sigsSnr['s_c'] = dv_s.dCentr
     sigsSnr['s_l'] = dv_s.dLocal
+    sigsSnr['s_ssbc'] = dv_s.dSSBC
     if bestPerfRef:
         sigsSnr['n_bp'] = outBP_n.dCentr
         sigsSnr['s_bp'] = outBP_s.dCentr

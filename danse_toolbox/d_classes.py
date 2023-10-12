@@ -477,7 +477,7 @@ class DANSEvariables(base.DANSEparameters):
         # Sampling frequencies of all nodes
         self.fs = np.array([node.fs for node in wasn])
         nSensorsTotal = sum([node.nSensors for node in wasn])
-        self.neighborsCentr = [
+        self.nSensorsNeighborsCentr = [
             [self.nSensorPerNode[q] for q in range(self.nNodes) if q != k]\
                 for k in range(self.nNodes)
         ]  # number of sensors of neighbors of each node in the centralized case
@@ -502,6 +502,8 @@ class DANSEvariables(base.DANSEparameters):
         Ryycentr = []   # autocorrelation matrix when VAD=1 [centralised]
         Rnnlocal = []   # autocorrelation matrix when VAD=0 [local]
         Ryylocal = []   # autocorrelation matrix when VAD=1 [local]
+        RnnSSBC = []    # autocorrelation matrix when VAD=0 [single-sensor BCs]
+        RyySSBC = []    # autocorrelation matrix when VAD=1 [single-sensor BCs]
         Rnntilde = []   # autocorrelation matrix when VAD=0 [DANSE]
         Ryytilde = []   # autocorrelation matrix when VAD=1 [DANSE]
         if not self.seqNUflag:  # simultaneous or asynchronous node-updating
@@ -515,6 +517,7 @@ class DANSEvariables(base.DANSEparameters):
         wIR = []
         wCentr = []
         wLocal = []
+        wSSBC = []
         wTilde = []
         wTildeExt = []
         wTildeExtTarget = []
@@ -527,6 +530,8 @@ class DANSEvariables(base.DANSEparameters):
         yHatCentrUncomp = []
         yHatLocal = []
         yLocal = []
+        ySSBC = []
+        ySSBCHat = []
         yTilde = []
         yTildeHat = []
         yTildeHatUncomp = []
@@ -608,6 +613,9 @@ class DANSEvariables(base.DANSEparameters):
                     Rnncentr.append(np.tile(fullSlice, (self.nPosFreqs, 1, 1)))
                     Ryycentr.append(np.tile(fullSlice, (self.nPosFreqs, 1, 1)))
                     #
+                    RnnSSBC.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
+                    RyySSBC.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
+                    #
                     sliceLocal = fullSlice[:wasn[k].nSensors, :wasn[k].nSensors]
                     Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
                     Ryylocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
@@ -617,6 +625,9 @@ class DANSEvariables(base.DANSEparameters):
                     #
                     Rnncentr.append(fullSlice)
                     Ryycentr.append(fullSlice)
+                    #
+                    RnnSSBC.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
+                    RyySSBC.append(fullSlice[:, :dimYTilde[k], :dimYTilde[k]])
                     #
                     Rnnlocal.append(
                         fullSlice[:, :wasn[k].nSensors, :wasn[k].nSensors]
@@ -645,6 +656,12 @@ class DANSEvariables(base.DANSEparameters):
             wtmp[self.DFTsize, self.referenceSensor] = 1   
             wIR.append(wtmp)
             wTilde.append(base.init_complex_filter(
+                (self.nPosFreqs, self.nIter + 1, dimYTilde[k]),
+                self.referenceSensor,
+                initType=self.filterInitType,
+                fixedValue=self.filterInitFixedValue
+            ))
+            wSSBC.append(base.init_complex_filter(
                 (self.nPosFreqs, self.nIter + 1, dimYTilde[k]),
                 self.referenceSensor,
                 initType=self.filterInitType,
@@ -718,6 +735,13 @@ class DANSEvariables(base.DANSEparameters):
                 (self.nPosFreqs, self.nIter, wasn[k].nSensors),
                 dtype=complex
             ))
+            ySSBC.append(np.zeros(
+                (self.DFTsize, self.nIter, dimYTilde[k])
+            ))
+            ySSBCHat.append(np.zeros(
+                (self.nPosFreqs, self.nIter, dimYTilde[k]),
+                dtype=complex
+            ))
             yTilde.append(np.zeros(
                 (self.DFTsize, self.nIter, dimYTilde[k])
             ))
@@ -764,6 +788,7 @@ class DANSEvariables(base.DANSEparameters):
         )
         self.dCentr = np.zeros_like(self.d)
         self.dLocal = np.zeros_like(self.d)
+        self.dSSBC = np.zeros_like(self.d)
         self.i = np.zeros(self.nNodes, dtype=int)
         self.dimYTilde = dimYTilde
         self.dhat = np.zeros(
@@ -771,6 +796,7 @@ class DANSEvariables(base.DANSEparameters):
         )
         self.dHatCentr = np.zeros_like(self.dhat)
         self.dHatLocal = np.zeros_like(self.dhat)
+        self.dHatSSBC = np.zeros_like(self.dhat)
         self.downstreamNeighbors = [node.downstreamNeighborsIdx\
             for node in wasn]
         self.expAvgBeta = [node.beta for node in wasn]
@@ -785,6 +811,7 @@ class DANSEvariables(base.DANSEparameters):
         self.nBroadcasts = np.zeros(self.nNodes)
         self.nCentrFilterUps = np.zeros(self.nNodes)
         self.nLocalFilterUps = np.zeros(self.nNodes)
+        self.nSSBCFilterUps = np.zeros(self.nNodes)
         self.nInternalFilterUps = np.zeros(self.nNodes)
         self.nLocalMic = [node.data.shape[-1] for node in wasn]
         self.numUpdatesRyy = np.zeros(self.nNodes, dtype=int)
@@ -800,6 +827,8 @@ class DANSEvariables(base.DANSEparameters):
         self.Ryycentr = Ryycentr
         self.Rnnlocal = Rnnlocal
         self.Ryylocal = Ryylocal
+        self.RnnSSBC = RnnSSBC
+        self.RyySSBC = RyySSBC
         self.Rnntilde = Rnntilde
         self.Ryytilde = Ryytilde
         if not self.seqNUflag:
@@ -813,6 +842,7 @@ class DANSEvariables(base.DANSEparameters):
         self.startUpdates = np.full(shape=(self.nNodes,), fill_value=False)
         self.startUpdatesCentr = np.full(shape=(self.nNodes,), fill_value=False)
         self.startUpdatesLocal = np.full(shape=(self.nNodes,), fill_value=False)
+        self.startUpdatesSSBC = np.full(shape=(self.nNodes,), fill_value=False)
         self.timeInstants = t
         self.tStartForMetrics = np.full(shape=(self.nNodes,), fill_value=None)
         self.tStartForMetricsCentr = np.full(shape=(self.nNodes,), fill_value=None)
@@ -826,6 +856,8 @@ class DANSEvariables(base.DANSEparameters):
         self.yLocal = yLocal
         self.yLocalCentr = yLocalCentr
         self.yHatLocal = yHatLocal
+        self.ySSBC = ySSBC
+        self.ySSBCHat = ySSBCHat
         self.yTilde = yTilde
         self.yTildeHat = yTildeHat
         self.yTildeHatUncomp = yTildeHatUncomp
@@ -837,6 +869,7 @@ class DANSEvariables(base.DANSEparameters):
         self.wTilde = wTilde
         self.wCentr = wCentr
         self.wLocal = wLocal
+        self.wSSBC = wSSBC
         self.wTildeExt = wTildeExt
         self.wTildeExtTarget = wTildeExtTarget
         self.z = z
@@ -1235,49 +1268,20 @@ class DANSEvariables(base.DANSEparameters):
 
         # Process buffers
         self.process_incoming_signals_buffers(k, tCurr)
-
-        # if len(self.neighbors[k]) == 1 and\
-        #     self.nSensorPerNode[self.neighbors[k][0]] == 1:
-        #     if not np.allclose(self.z[k].T, self.zBuffer[k][0]):
-        #         plt.plot((self.z[k].T - self.zBuffer[k][0]).T)
-        #         plt.show()
-        #         stop = 1
-
         self.wipe_buffers(k)  # wipe local buffers for next iteration
 
         # Build observation vector
         self.build_ytilde(tCurr, fs, k)
-
-        # Consider local / centralised estimation(s)
+        # Consider local / centralised / single-sensor broadcasts estimation(s)
         if self.computeCentralised:
             self.build_ycentr(tCurr, fs, k)
+        if self.computeSingleSensorBroadcast:
+            self.build_yssbc(tCurr, fs, k)
         if self.computeLocal:  # extract local info from `\tilde{y}_k`
             self.build_ylocal(k)
         # Account for buffer flags
         skipUpdate, skipUpdateCentr = self.compensate_sros(k, tCurr)
 
-        # if len(self.neighbors[k]) == 1 and\
-        #     self.nSensorPerNode[self.neighbors[k][0]] == 1:
-        #     if not np.allclose(
-        #         self.z[k],
-        #         self.yin[self.neighbors[k][0]][self.idxBegChunk:self.idxEndChunk, :]
-        #     ):
-        #         plt.plot(self.z[k] - self.yin[self.neighbors[k][0]][self.idxBegChunk:self.idxEndChunk, :])
-        #         plt.show(block=False)
-        #         stop = 1
-
-        # if k == 0:# and self.oVADframes[k][self.i[k]]:
-        #     if not np.allclose(self.yTilde[k][:, self.i[k], :], self.yCentr[k][:, self.i[k], :]):
-        #         stop = 1
-        #     if not np.allclose(self.Ryytilde[k], self.Ryycentr[k]):
-        #         stop = 1
-        #     if not np.allclose(self.Rnntilde[k], self.Rnncentr[k]):
-        #         stop = 1
-        #     if not np.allclose(self.wTilde[k][:, self.i[k], :], self.wCentr[k][:, self.i[k], :]):
-        #         if skipUpdateCentr:
-        #             stop = 1
-        #         stop = 1
-        
         if self.preGivenFilters.active:  # use given filters
             self.update_using_pregiven_filters(k)
         else:
@@ -1298,10 +1302,9 @@ class DANSEvariables(base.DANSEparameters):
                     print(f'Node {k+1}: {self.i[k]+1}-th update skipped.')
             if self.bypassUpdates:
                 print('!! User-forced bypass of filter coefficients updates !!')
-
             # Update external filters (for broadcasting)
             self.update_external_filters(k, tCurr)
-        
+
         # Update SRO estimates
         self.update_sro_estimates(k, fs)
         # Update phase shifts for SRO compensation
@@ -1311,6 +1314,12 @@ class DANSEvariables(base.DANSEparameters):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
+
+
+        # if not np.allclose(self.wCentr[k], self.wSSBC[k]):
+        #     print('!! dCentr != dSSBC !!')
+        # if not np.allclose(self.dCentr, self.dSSBC):
+        #     print('!! dCentr != dSSBC !!')
 
     def update_using_pregiven_filters(self, k):
         """Update filters using pre-given coefficients."""
@@ -1324,6 +1333,9 @@ class DANSEvariables(base.DANSEparameters):
         if self.computeCentralised:
             self.wCentr[k][:, self.i[k] + 1, :] =\
                 self.preGivenFilters.filtersCentr[k][:, self.i[k] + 1, :]
+        if self.computeSingleSensorBroadcast:
+            self.wSSBC[k][:, self.i[k] + 1, :] =\
+                self.preGivenFilters.filtersSSBC[k][:, self.i[k] + 1, :]
 
     def build_ylocal(self, k):
         """Build local vector based on `yTilde`."""
@@ -1459,6 +1471,7 @@ class DANSEvariables(base.DANSEparameters):
             self.startUpdates[k] = True
             self.startUpdatesCentr[k] = True
             self.startUpdatesLocal[k] = True
+            self.startUpdatesSSBC[k] = True
         else:
             if not self.startUpdates[k] and tCurr >= self.startUpdatesAfterAtLeast:
                 if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
@@ -1496,10 +1509,21 @@ class DANSEvariables(base.DANSEparameters):
                         else:
                             if _check_validity_nogevd(self.Rnncentr[k], self.Ryycentr[k]):
                                 self.startUpdatesCentr[k] = True
+                # Single-sensor broadcast estimate
+                if self.computeSingleSensorBroadcast and not self.startUpdatesSSBC[k]\
+                    and tCurr >= self.startUpdatesAfterAtLeast:
+                    if self.numUpdatesRyy[k] > self.RyySSBC[k].shape[-1] and \
+                        self.numUpdatesRnn[k] > self.RyySSBC[k].shape[-1]:
+                        if self.performGEVD:
+                            if _check_validity_gevd(self.RnnSSBC[k], self.RyySSBC[k]):
+                                self.startUpdatesSSBC[k] = True
+                        else:
+                            if _check_validity_nogevd(self.RnnSSBC[k], self.RyySSBC[k]):
+                                self.startUpdatesSSBC[k] = True
             elif self.simType == 'batch':  
                 self.startUpdatesCentr[k] = True
                 self.startUpdatesLocal[k] = True
-
+                self.startUpdatesSSBC[k] = True
 
     def build_ycentr(self, tCurr, fs, k):
         """Build STFT-domain centralised observation vector. """
@@ -1523,8 +1547,12 @@ class DANSEvariables(base.DANSEparameters):
                 )
             else:
                 # Include (possibly multichannel) data chunk from neighbor `q`
-                idxBeg = int(np.sum(self.neighborsCentr[k][:nNeighboursCovered]))
-                idxEnd = int(np.sum(self.neighborsCentr[k][:(nNeighboursCovered + 1)]))
+                idxBeg = int(np.sum(
+                    self.nSensorsNeighborsCentr[k][:nNeighboursCovered]
+                ))
+                idxEnd = int(np.sum(
+                    self.nSensorsNeighborsCentr[k][:(nNeighboursCovered + 1)]
+                ))
                 yCentrCurr = np.concatenate(
                     (yCentrCurr, self.yc[k][:, idxBeg:idxEnd]), axis=1
                 )
@@ -1542,6 +1570,46 @@ class DANSEvariables(base.DANSEparameters):
         # Keep only positive frequencies
         self.yHatCentr[k][:, self.i[k], :] = yHatCentrCurr[:self.nPosFreqs, :]
 
+    def build_yssbc(self, tCurr, fs, k):
+        """Build STFT-domain observation vector for the case where each
+        node only would broadcast its raw reference sensor signal (no
+        multichannel broadcast)."""
+        # Extract current local data chunk
+        yLocalCurr, _, _ = base.local_chunk_for_update(
+            self.yin[k],
+            t=tCurr,
+            fs=fs,
+            bd=self.broadcastType,
+            Ndft=self.DFTsize,
+            Ns=self.Ns
+        )
+        # Build full available observation vector
+        ySSBCCurr = copy.deepcopy(yLocalCurr)
+        nNeighboursCovered = 0  # number of neighbors of node `k` already covered
+        for q in range(self.nNodes):
+            if q != k:
+                # Include single-channel data chunk from neighbor `q`
+                idxRefSensor = int(np.sum(
+                    self.nSensorsNeighborsCentr[k][:nNeighboursCovered]
+                ))
+                currYc = self.yc[k][:, idxRefSensor]
+                ySSBCCurr = np.concatenate(
+                    (ySSBCCurr, currYc[:, np.newaxis]), axis=1
+                )
+                nNeighboursCovered += 1
+        
+        self.ySSBC[k][:, self.i[k], :] = ySSBCCurr
+
+        # Go to frequency domain
+        ySSBCHatCurr = np.fft.fft(
+            self.ySSBC[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        ) / np.sqrt(self.Ns)
+        # Keep only positive frequencies
+        self.ySSBCHat[k][:, self.i[k], :] = ySSBCHatCurr[:self.nPosFreqs, :]
+    
     def update_external_filters(self, k, t=None):
         """
         Update external filters for relaxed filter update.
@@ -1908,8 +1976,8 @@ class DANSEvariables(base.DANSEparameters):
             for q in range(self.nNodes):
                 if q != k:
                     if not np.isnan(self.bufferFlagsCentr[k][self.i[k], q]):
-                        idxBeg = int(np.sum(self.neighborsCentr[k][:q]))
-                        idxEnd = int(np.sum(self.neighborsCentr[k][:(q + 1)]))
+                        idxBeg = int(np.sum(self.nSensorsNeighborsCentr[k][:q]))
+                        idxEnd = int(np.sum(self.nSensorsNeighborsCentr[k][:(q + 1)]))
                         if idxEnd == idxBeg:
                             # Node `q` has only one sensor
                             idxEnd += 1
@@ -1942,6 +2010,10 @@ class DANSEvariables(base.DANSEparameters):
                 self.yHatCentr[k][:, self.i[k], :] *= psfCentr
         else:
             skipUpdateCentr = None
+
+        if self.computeSingleSensorBroadcast:
+            if self.compensateSROs:  # TODO: implement
+                raise NotImplementedError('SRO compensation for single-sensor broadcast not implemented yet.')
 
         return skipUpdate, skipUpdateCentr
 
@@ -2072,9 +2144,6 @@ class DANSEvariables(base.DANSEparameters):
             # Save
             self.yyHcentr[k][self.i[k], :, :, :] = yyHcurr
 
-            # if k == 0 and not np.allclose(RnnCurr, self.Rnntilde[k]):
-            #     stop = 1
-
             # Conditional updating of Ryy and Rnn
             self.conditional_scm_updating(
                 k, self.centrVADframes[self.i[k]], RyyCurr, RnnCurr, yyHcurr, 'centr'
@@ -2093,7 +2162,18 @@ class DANSEvariables(base.DANSEparameters):
                 )
                 self.lastCondNumberSaveRyyCentr[k] = self.i[k]
 
-        stop = 1
+        # Consider single-sensor broadcasts estimates
+        if self.computeSingleSensorBroadcast and self.simType == 'online':
+            RyyCurr, RnnCurr, yyHcurr = _update_covmats_online(
+                self.RyySSBC[k],
+                self.RnnSSBC[k],
+                y=self.ySSBCHat[k][:, self.i[k], :],
+                vad=currVad
+            )
+            # Conditional updating of Ryy and Rnn
+            self.conditional_scm_updating(
+                k, currVad, RyyCurr, RnnCurr, yyHcurr, 'ssbc'
+            )
 
     def conditional_scm_updating(
             self,
@@ -2102,7 +2182,7 @@ class DANSEvariables(base.DANSEparameters):
             RyyCurr,
             RnnCurr,
             yyHcurr,
-            whichSCM='danse'  # 'danse', 'local', 'centr'
+            whichSCM='danse'  # 'danse', 'local', 'centr', 'ssbc'
         ):
         
         # Conditional updating of Ryy and Rnn
@@ -2116,6 +2196,8 @@ class DANSEvariables(base.DANSEparameters):
                     self.Ryylocal[k] = yyHcurr
                 elif whichSCM == 'centr':
                     self.Ryycentr[k] = yyHcurr
+                elif whichSCM == 'ssbc':
+                    self.RyySSBC[k] = yyHcurr
             elif self.numUpdatesRyy[k] > 1:
                 if whichSCM == 'danse':
                     self.Ryytilde[k] = RyyCurr
@@ -2123,6 +2205,8 @@ class DANSEvariables(base.DANSEparameters):
                     self.Ryylocal[k] = RyyCurr
                 elif whichSCM == 'centr':
                     self.Ryycentr[k] = RyyCurr
+                elif whichSCM == 'ssbc':
+                    self.RyySSBC[k] = RyyCurr
             
             if self.numUpdatesRnn[k] == 1 and not currVad:
                 if whichSCM == 'danse':
@@ -2131,6 +2215,8 @@ class DANSEvariables(base.DANSEparameters):
                     self.Rnnlocal[k] = yyHcurr
                 elif whichSCM == 'centr':
                     self.Rnncentr[k] = yyHcurr
+                elif whichSCM == 'ssbc':
+                    self.RnnSSBC[k] = yyHcurr
             elif self.numUpdatesRnn[k] > 1:
                 if whichSCM == 'danse':
                     self.Rnntilde[k] = RnnCurr
@@ -2138,6 +2224,8 @@ class DANSEvariables(base.DANSEparameters):
                     self.Rnnlocal[k] = RnnCurr
                 elif whichSCM == 'centr':
                     self.Rnncentr[k] = RnnCurr
+                elif whichSCM == 'ssbc':
+                    self.RnnSSBC[k] = RnnCurr
         else:
             # Start the exponential averaging right away.
             if whichSCM == 'danse':
@@ -2149,6 +2237,9 @@ class DANSEvariables(base.DANSEparameters):
             elif whichSCM == 'centr':
                 self.Ryycentr[k] = RyyCurr
                 self.Rnncentr[k] = RnnCurr
+            elif whichSCM == 'ssbc':
+                self.RyySSBC[k] = RyyCurr
+                self.RnnSSBC[k] = RnnCurr
 
     def get_y_tilde_batch(
             self,
@@ -2207,7 +2298,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.simType != 'batch':
                 if not skipUpdateCentr:
                     # Do not update in "batch" mode --> this is done separately
-                    # in the BatchDANSEvariables class.
+                    # in the `BatchDANSEvariables` class.
                     self.wCentr[k][:, self.i[k] + 1, :] = filter_update_fcn(
                         self.Ryycentr[k],
                         self.Rnncentr[k],
@@ -2224,7 +2315,7 @@ class DANSEvariables(base.DANSEparameters):
             if self.computeLocal and self.startUpdatesLocal[k] and\
                 self.simType != 'batch':
                 # Do not update in "batch" mode --> this is done separately
-                # in the BatchDANSEvariables class.
+                # in the `BatchDANSEvariables` class.
                 self.wLocal[k][:, self.i[k] + 1, :] = filter_update_fcn(
                     self.Ryylocal[k],
                     self.Rnnlocal[k],
@@ -2232,6 +2323,18 @@ class DANSEvariables(base.DANSEparameters):
                     rank=rank
                 )
                 self.nLocalFilterUps[k] += 1
+            # Update single-sensor broadcast filter
+            if self.computeSingleSensorBroadcast and self.startUpdatesSSBC[k] and\
+                self.simType != 'batch':
+                # Do not update in "batch" mode --> this is done separately
+                # in the `BatchDANSEvariables` class.
+                self.wSSBC[k][:, self.i[k] + 1, :] = filter_update_fcn(
+                    self.RyySSBC[k],
+                    self.RnnSSBC[k],
+                    refSensorIdx=self.referenceSensor,
+                    rank=rank
+                )
+                self.nSSBCFilterUps[k] += 1
 
     def update_sro_estimates(self, k, fs):
         """
@@ -2507,7 +2610,6 @@ class DANSEvariables(base.DANSEparameters):
         kwargs = {
             'desSigProcessingType': self.desSigProcessingType,
             'win': self.winWOLAsynthesis,
-            # 'normFactWOLA': self.normFactWOLA,
             'normFactWOLA': np.sqrt(self.Ns),
             'Ns': self.Ns,
         }
@@ -2559,6 +2661,23 @@ class DANSEvariables(base.DANSEparameters):
                 self.dLocal[self.idxBegChunk:self.idxEndChunk, k] = dChunk
             elif self.desSigProcessingType == 'conv':
                 self.dLocal[self.idxEndChunk -\
+                    self.Ns:self.idxEndChunk, k] = dChunk
+                
+        if self.computeSingleSensorBroadcast:
+            # Build single-sensor broadcast desired signal estimate
+            dChunk, dhatCurr = base.get_desired_sig_chunk(
+                w=self.wSSBC[k][:, self.i[k] + 1, :],
+                y=self.ySSBCHat[k][:, self.i[k], :],
+                dChunk=self.dSSBC[self.idxBegChunk:self.idxEndChunk, k],
+                yTD=self.ySSBC[k][:, self.i[k], :self.nLocalMic[k]],
+                **kwargs
+            )
+            self.dHatSSBC[:, self.i[k], k] = dhatCurr
+            # Time-domain
+            if self.desSigProcessingType == 'wola':
+                self.dSSBC[self.idxBegChunk:self.idxEndChunk, k] = dChunk
+            elif self.desSigProcessingType == 'conv':
+                self.dSSBC[self.idxEndChunk -\
                     self.Ns:self.idxEndChunk, k] = dChunk
 
 class TIDANSEvariables(DANSEvariables):

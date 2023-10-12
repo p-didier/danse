@@ -48,6 +48,8 @@ class DANSEoutputs(DANSEparameters):
         self.STFTDdesiredSignals_est_c = None
         self.TDdesiredSignals_est_l = None
         self.STFTDdesiredSignals_est_l = None
+        self.TDdesiredSignals_est_ssbc = None
+        self.STFTDdesiredSignals_est_ssbc = None
         self.TDfiltSpeech_c = None
         self.STFTfiltSpeech_c = None
         self.TDfiltNoise_c = None
@@ -56,6 +58,10 @@ class DANSEoutputs(DANSEparameters):
         self.STFTfiltSpeech_l = None
         self.TDfiltNoise_l = None
         self.STFTfiltNoise_l = None
+        self.TDfiltSpeech_ssbc = None
+        self.STFTfiltSpeech_ssbc = None
+        self.TDfiltNoise_ssbc = None
+        self.STFTfiltNoise_ssbc = None
 
         # Original microphone signals
         self.micSignals = dv.yin
@@ -70,26 +76,18 @@ class DANSEoutputs(DANSEparameters):
         # DANSE desired signal estimates
         self.TDdesiredSignals_est = dv.d
         self.STFTDdesiredSignals_est = dv.dhat
-        # self.TDfiltSpeech = dv.d_s
-        # self.STFTfiltSpeech = dv.dhat_s
-        # self.TDfiltNoise = dv.d_n
-        # self.STFTfiltNoise = dv.dhat_n
         if self.computeCentralised:
             # Centralised desired signal estimates
             self.TDdesiredSignals_est_c = dv.dCentr
             self.STFTDdesiredSignals_est_c = dv.dHatCentr
-            # self.TDfiltSpeech_c = dv.dCentr_s
-            # self.STFTfiltSpeech_c = dv.dHatCentr_s
-            # self.TDfiltNoise_c = dv.dCentr_n
-            # self.STFTfiltNoise_c = dv.dHatCentr_n
         if self.computeLocal:
             # Local desired signal estimates
             self.TDdesiredSignals_est_l = dv.dLocal
             self.STFTDdesiredSignals_est_l = dv.dHatLocal
-            # self.TDfiltSpeech_l = dv.dLocal_s
-            # self.STFTfiltSpeech_l = dv.dHatLocal_s
-            # self.TDfiltNoise_l = dv.dLocal_n
-            # self.STFTfiltNoise_l = dv.dHatLocal_n
+        if self.computeSingleSensorBroadcast:
+            # Single-sensor broadcast desired signal estimates
+            self.TDdesiredSignals_est_ssbc = dv.dSSBC
+            self.STFTDdesiredSignals_est_ssbc = dv.dHatSSBC
         # DANSE fused signals
         self.TDfusedSignals = dv.zFullTD
         # SROs
@@ -145,6 +143,8 @@ class DANSEoutputs(DANSEparameters):
         self.TDfiltNoise_c = snrSigs['n_c']
         self.TDfiltSpeech_l = snrSigs['s_l']
         self.TDfiltNoise_l = snrSigs['n_l']
+        self.TDfiltSpeech_ssbc = snrSigs['s_ssbc']
+        self.TDfiltNoise_ssbc = snrSigs['n_ssbc']
         return self
     
     def include_best_perf_data(
@@ -789,9 +789,9 @@ def compute_metrics(
         print(f'Computing metrics for node {k + 1}/{out.nNodes} (sensor {out.referenceSensor + 1}/{wasn[k].nSensors})...')
 
         # Compute starting indices for centralised and local estimates
-        TDdesiredSignals_est_c, TDdesiredSignals_est_l = None, None
-        TDfilteredSpeech_c, TDfilteredSpeech_l = None, None
-        TDfilteredNoise_c, TDfilteredNoise_l = None, None
+        TDdesiredSignals_est_c, TDdesiredSignals_est_l, TDdesiredSignals_est_ssbc = None, None, None
+        TDfilteredSpeech_c, TDfilteredSpeech_l, TDfilteredSpeech_ssbc = None, None, None
+        TDfilteredNoise_c, TDfilteredNoise_l, TDfilteredNoise_ssbc = None, None, None
         if out.computeCentralised:
             TDdesiredSignals_est_c = out.TDdesiredSignals_est_c[:, k]
             TDfilteredSpeech_c = out.TDfiltSpeech_c[:, k]
@@ -802,7 +802,12 @@ def compute_metrics(
             TDfilteredSpeech_l = out.TDfiltSpeech_l[:, k]
             TDfilteredNoise_l = out.TDfiltNoise_l[:, k]
             print(f"Node {k+1}: computing metrics for LOCAL PROCESSING from {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
-        
+        if out.computeSingleSensorBroadcast:
+            TDdesiredSignals_est_ssbc = out.TDdesiredSignals_est_ssbc[:, k]
+            TDfilteredSpeech_ssbc = out.TDfiltSpeech_ssbc[:, k]
+            TDfilteredNoise_ssbc = out.TDfiltNoise_ssbc[:, k]
+            print(f"Node {k+1}: computing metrics for SINGLE-SENSOR BROADCAST from {startIdx[k] + 1}th sample on (t_start = {np.round(wasn[k].metricStartTime, 3)} s) till the {endIdx[k] + 1}th sample (t_end = {np.round(wasn[k].metricEndTime, 3)} s).")
+
         if out.simType == 'batch' and\
             endIdx[k] > wasn[k].cleanspeechRefSensor.shape[0] - out.DFTsize:
             # Discard the very end of the signal due to STFT/ISTFT artefacts
@@ -822,10 +827,13 @@ def compute_metrics(
             filtNoise_c=TDfilteredNoise_c,
             filtSpeech_l=TDfilteredSpeech_l,
             filtNoise_l=TDfilteredNoise_l,
+            filtSpeech_ssbc=TDfilteredSpeech_ssbc,
+            filtNoise_ssbc=TDfilteredNoise_ssbc,
             # DANSE outputs (desired signal estimates)
             enhan=out.TDdesiredSignals_est[:, k],
             enhan_c=TDdesiredSignals_est_c,
             enhan_l=TDdesiredSignals_est_l,
+            enhan_ssbc=TDdesiredSignals_est_ssbc,
             # Start/end indices
             startIdx=startIdx[k],
             endIdx=endIdx[k],
@@ -928,7 +936,6 @@ def plot_metrics(
             metricToPlot = out.metrics.pesq
         else:
             raise ValueError(f'Unknown metric {metricsToPlot[ii]}')
-        
         # Plot
         metrics_subplot(ax, barWidth, metricToPlot)
         ax.set(
@@ -1000,7 +1007,7 @@ def plot_metrics(
     return fig1, fig2
 
 
-def metrics_subplot(ax, barWidth=1, data=None):
+def metrics_subplot(ax, barWidth=1, data: dict[Metric]=None):
     """Helper function for <Results.plot_enhancement_metrics()>.
     
     Parameters
@@ -1023,6 +1030,8 @@ def metrics_subplot(ax, barWidth=1, data=None):
     if data['Node1'].afterCentr != 0.:
         baseCount += 1
     if data['Node1'].afterLocal != 0.:
+        baseCount += 1
+    if data['Node1'].afterSSBC != 0:
         baseCount += 1
     widthFact = baseCount + 1
     colShifts = np.arange(
@@ -1057,6 +1066,16 @@ def metrics_subplot(ax, barWidth=1, data=None):
                     color='C1',
                     edgecolor='k',
                     label='Local est.'
+                )
+                idxColShift += 1
+            if data['Node1'].afterSSBC != 0.:
+                ax.bar(
+                    idxNode + colShifts[idxColShift] * delta,
+                    data[f'Node{idxNode + 1}'].afterSSBC,
+                    width=barWidth / widthFact,
+                    color='C4',
+                    edgecolor='k',
+                    label='SSBC est.'
                 )
                 idxColShift += 1
             if data['Node1'].afterCentr != 0.:
@@ -1105,6 +1124,15 @@ def metrics_subplot(ax, barWidth=1, data=None):
                     edgecolor='k',
                 )
                 idxColShift += 1
+            if data['Node1'].afterSSBC != 0.:
+                ax.bar(
+                    idxNode + colShifts[idxColShift] * delta,
+                    data[f'Node{idxNode + 1}'].afterSSBC,
+                    width=barWidth / widthFact,
+                    color='C4',
+                    edgecolor='k',
+                )
+                idxColShift += 1
             if data['Node1'].afterCentr != 0.:
                 ax.bar(
                     idxNode + colShifts[idxColShift] * delta,
@@ -1136,7 +1164,8 @@ def metrics_subplot(ax, barWidth=1, data=None):
             if data[f'Node{idxNode + 1}'].after == 0 and\
                 data[f'Node{idxNode + 1}'].before == 0 and\
                 data[f'Node{idxNode + 1}'].afterCentr == 0 and\
-                data[f'Node{idxNode + 1}'].afterLocal == 0:
+                data[f'Node{idxNode + 1}'].afterLocal == 0 and\
+                data[f'Node{idxNode + 1}'].afterSSBC == 0:
                 ax.text(
                     idxNode,
                     0.05,
@@ -1149,7 +1178,8 @@ def metrics_subplot(ax, barWidth=1, data=None):
         if data[f'Node{idxNode + 1}'].after < 0 or\
             data[f'Node{idxNode + 1}'].before < 0 or\
             data[f'Node{idxNode + 1}'].afterCentr < 0 or\
-            data[f'Node{idxNode + 1}'].afterLocal < 0:
+            data[f'Node{idxNode + 1}'].afterLocal < 0 or\
+            data[f'Node{idxNode + 1}'].afterSSBC < 0:
             flagZeroBar = True
     
     plt.xticks(
@@ -1241,6 +1271,13 @@ def export_sounds(
                 data = normalize_toint16(out.TDdesiredSignals_est_l[:, k])
                 wavfile.write(
                     f'{folder}/wav/enhancedLocal_N{k + 1}.wav',
+                    int(wasn[k].fs), data
+                )
+        if out.computeSingleSensorBroadcast:
+            if len(out.TDdesiredSignals_est_ssbc[:, k]) > 0:
+                data = normalize_toint16(out.TDdesiredSignals_est_ssbc[:, k])
+                wavfile.write(
+                    f'{folder}/wav/enhancedSSBC_N{k + 1}.wav',
                     int(wasn[k].fs), data
                 )
     print(f'Signals exported in folder ".../{folderShort}/wav".')
@@ -1731,7 +1768,6 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
         'C0-',
         label='Noisy (ref. sensor)',
     )
-    # Desired signal estimate waveform 
     ax.plot(
         node.timeStamps,
         node.enhancedData - 4*delta,
@@ -1754,6 +1790,14 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
             'C2-',
             label='Enhanced (centr.)'
         )
+        currDelta += 2*delta
+    if len(node.enhancedData_ssbc) > 0:
+        ax.plot(
+            node.timeStamps,
+            node.enhancedData_ssbc - currDelta - 2*delta,
+            'C4-',
+            label='Enhanced (SSBC)'
+        )
     # Plot start/end of enhancement metrics computations
     ymin, ymax = np.amin(ax.get_ylim()), np.amax(ax.get_ylim())
     ax.vlines(
@@ -1768,15 +1812,6 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
         ymax=ymax,
         colors='0.75',
     )
-    # if batchMode:
-    #     # Plot end of enhancement metrics computations
-    #     ax.vlines(
-    #         x=(node.cleannoise.shape[0] - len(win)) / node.fs,
-    #         # ^^^ discard last window in batch mode due to STFT/ISTFT transforms artefacts
-    #         ymin=ymin,
-    #         ymax=ymax,
-    #         colors='0.75',
-    #     )
 
     ax.set_yticklabels([])
     ax.set(xlabel='$t$ [s]')
@@ -1796,6 +1831,9 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
         nRows += 1
     if len(node.enhancedData_c) > 0:
         enhanSTFT_c, _, _ = get_stft(node.enhancedData_c, node.fs, win, ovlp)
+        nRows += 1
+    if len(node.enhancedData_ssbc) > 0:
+        enhanSTFT_ssbc, _, _ = get_stft(node.enhancedData_ssbc, node.fs, win, ovlp)
         nRows += 1
     
     # Get color plot limits
@@ -1833,6 +1871,11 @@ def plot_signals(node: Node, win, ovlp, batchMode=False):
         ax = fig.add_subplot(nRows,2,currSubplotIdx + 2)
         data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT_c)))
         stft_subplot(ax, t, f, data, [limLow, limHigh], 'Centr. est.')
+        currSubplotIdx += 2
+    if len(node.enhancedData_ssbc) > 0:    # Enhanced signals (SSBC)
+        ax = fig.add_subplot(nRows,2,currSubplotIdx + 2)
+        data = 20 * np.log10(np.abs(np.squeeze(enhanSTFT_ssbc)))
+        stft_subplot(ax, t, f, data, [limLow, limHigh], 'SSBC est.')
     ax.set(xlabel='$t$ [s]')
     np.seterr(divide = 'warn')  # reset divide-by-zero error warning
 
