@@ -22,12 +22,12 @@ def main(configFilesFolder: str=CONFIG_FILES_FOLDER):
 
     t0 = time.time()
 
-    # tests.sandbox.main(
-    #     cfgFilename=f'{configFilesFolder}/sandbox_config.yaml',
-    # )
+    tests.sandbox.main(
+        cfgFilename=f'{configFilesFolder}/sandbox_config.yaml',
+    )
 
     # tests.battery20231009_filtnorms_asfctofSROs.main()
-    tests.battery20231009_pp.main()
+    # tests.battery20231009_pp.main()
 
     # tests.battery20230915_sros_asfctofL.main(
     #     baseConfigFile=f'{configFilesFolder}/sandbox_config_battery20230915.yaml',

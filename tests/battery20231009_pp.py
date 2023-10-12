@@ -11,7 +11,7 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-DATA_FOLDER = './danse/out/battery20231009_filtnorms_asfctofSROs'
+DATA_FOLDER = './danse/out/battery20231009_filtnorms_asfctofSROs_noGEVD_noSelfNoise'
 METRICS_TO_PLOT = [
     'stoi',
     'sisnr',
@@ -44,14 +44,14 @@ def get_data(dataFolder: str) -> dict[dict[pd.DataFrame]]:
     dfs = dict([
         (f'Node{k+1}', dict([
             (metric, dict([
-                ('danse', None), ('centr', None)
+                ('danse', None), ('centr', None), ('local', None)
             ])) for metric in METRICS_TO_PLOT
         ])) for k in range(params['nNodes'])
     ])
     for k in range(params['nNodes']):
         for metric in METRICS_TO_PLOT:
             df = pd.DataFrame(
-                index=['danse', 'centr'],
+                index=['danse', 'centr', 'local'],
                 columns=params['sro']
             )
             for subfolder in data.keys():
@@ -60,6 +60,8 @@ def get_data(dataFolder: str) -> dict[dict[pd.DataFrame]]:
                     getattr(currData['metrics'], metric)[f'Node{k+1}'].after
                 df.loc['centr', currData['sro']] =\
                     getattr(currData['metrics'], metric)[f'Node{k+1}'].afterCentr
+                df.loc['local', currData['sro']] =\
+                    getattr(currData['metrics'], metric)[f'Node{k+1}'].afterLocal
                 
             dfs[f'Node{k+1}'][metric] = df
 
@@ -135,7 +137,13 @@ def plot_data(metricsData: dict[dict[pd.DataFrame]], filtNormsData):
                 sros,
                 metricsData[node][metric].loc['centr'],
                 'C1--x',
-                label='GEVD-MWF',
+                label='Global GEVD-MWF',
+            )
+            axes[ii, k].plot(
+                sros,
+                metricsData[node][metric].loc['local'],
+                'C2-.d',
+                label='Local GEVD-MWF',
             )
             axes[ii, k].legend()
     plt.tight_layout()

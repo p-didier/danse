@@ -605,9 +605,8 @@ class DANSEvariables(base.DANSEparameters):
                     Rnntilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
                     Ryytilde.append(np.tile(sliceTilde, (self.nPosFreqs, 1, 1)))
                     #
-                    sliceCentr = copy.deepcopy(fullSlice)
-                    Rnncentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
-                    Ryycentr.append(np.tile(sliceCentr, (self.nPosFreqs, 1, 1)))
+                    Rnncentr.append(np.tile(fullSlice, (self.nPosFreqs, 1, 1)))
+                    Ryycentr.append(np.tile(fullSlice, (self.nPosFreqs, 1, 1)))
                     #
                     sliceLocal = fullSlice[:wasn[k].nSensors, :wasn[k].nSensors]
                     Rnnlocal.append(np.tile(sliceLocal, (self.nPosFreqs, 1, 1)))
@@ -1236,10 +1235,19 @@ class DANSEvariables(base.DANSEparameters):
 
         # Process buffers
         self.process_incoming_signals_buffers(k, tCurr)
+
+        # if len(self.neighbors[k]) == 1 and\
+        #     self.nSensorPerNode[self.neighbors[k][0]] == 1:
+        #     if not np.allclose(self.z[k].T, self.zBuffer[k][0]):
+        #         plt.plot((self.z[k].T - self.zBuffer[k][0]).T)
+        #         plt.show()
+        #         stop = 1
+
         self.wipe_buffers(k)  # wipe local buffers for next iteration
 
         # Build observation vector
         self.build_ytilde(tCurr, fs, k)
+
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
             self.build_ycentr(tCurr, fs, k)
@@ -1248,14 +1256,35 @@ class DANSEvariables(base.DANSEparameters):
         # Account for buffer flags
         skipUpdate, skipUpdateCentr = self.compensate_sros(k, tCurr)
 
-        # Ryy and Rnn updates (including centralised / local, if needed)
-        self.spatial_covariance_matrix_update(k)
-        # Check quality of covariance matrix estimates 
-        self.check_covariance_matrices(k, tCurr=tCurr)
+        # if len(self.neighbors[k]) == 1 and\
+        #     self.nSensorPerNode[self.neighbors[k][0]] == 1:
+        #     if not np.allclose(
+        #         self.z[k],
+        #         self.yin[self.neighbors[k][0]][self.idxBegChunk:self.idxEndChunk, :]
+        #     ):
+        #         plt.plot(self.z[k] - self.yin[self.neighbors[k][0]][self.idxBegChunk:self.idxEndChunk, :])
+        #         plt.show(block=False)
+        #         stop = 1
 
+        # if k == 0:# and self.oVADframes[k][self.i[k]]:
+        #     if not np.allclose(self.yTilde[k][:, self.i[k], :], self.yCentr[k][:, self.i[k], :]):
+        #         stop = 1
+        #     if not np.allclose(self.Ryytilde[k], self.Ryycentr[k]):
+        #         stop = 1
+        #     if not np.allclose(self.Rnntilde[k], self.Rnncentr[k]):
+        #         stop = 1
+        #     if not np.allclose(self.wTilde[k][:, self.i[k], :], self.wCentr[k][:, self.i[k], :]):
+        #         if skipUpdateCentr:
+        #             stop = 1
+        #         stop = 1
+        
         if self.preGivenFilters.active:  # use given filters
             self.update_using_pregiven_filters(k)
         else:
+            # Ryy and Rnn updates (including centralised / local, if needed)
+            self.spatial_covariance_matrix_update(k)
+            # Check quality of covariance matrix estimates 
+            self.check_covariance_matrices(k, tCurr=tCurr)
             if not skipUpdate and not bypassUpdateEventMat:
                 # If covariance matrices estimates are full-rank, update filters
                 self.perform_update(k, skipUpdateCentr=skipUpdateCentr)
@@ -1530,9 +1559,16 @@ class DANSEvariables(base.DANSEparameters):
         """
 
         if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
-            # No relaxation (i.e., no "external" filters)
-            self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+            if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
+                # If node `k` has only one sensor, do not perform external
+                # filter update (i.e., no "single-sensor signal fusion", as
+                # there is already just one channel).
+                self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                    self.wTildeExt[k][:, self.i[k], :]
+            else:
+                # No relaxation (i.e., no "external" filters)
+                self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                    self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
         else:   # Simultaneous or asynchronous node-updating
             # Relaxed external filter update
             if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
@@ -2005,7 +2041,7 @@ class DANSEvariables(base.DANSEparameters):
                 self.Ryylocal[k],
                 self.Rnnlocal[k],
                 y=self.yHatLocal[k][:, self.i[k], :],
-                vad=self.oVADframes[k][self.i[k]]
+                vad=currVad
             )
             # Conditional updating of Ryy and Rnn
             self.conditional_scm_updating(
@@ -2036,9 +2072,12 @@ class DANSEvariables(base.DANSEparameters):
             # Save
             self.yyHcentr[k][self.i[k], :, :, :] = yyHcurr
 
+            # if k == 0 and not np.allclose(RnnCurr, self.Rnntilde[k]):
+            #     stop = 1
+
             # Conditional updating of Ryy and Rnn
             self.conditional_scm_updating(
-                k, currVad, RyyCurr, RnnCurr, yyHcurr, 'centr'
+                k, self.centrVADframes[self.i[k]], RyyCurr, RnnCurr, yyHcurr, 'centr'
             )
             # Consider condition number
             if self.saveConditionNumber and\
@@ -3156,10 +3195,9 @@ def update_w(
     # Reference sensor selection vector
     Evect = np.zeros(Ryy.shape[-1])
     Evect[refSensorIdx] = 1
-
     # Cross-correlation matrix update 
     ryd = np.matmul(Ryy - Rnn, Evect)
-    # Update node-specific parameters of node k
+    # Update node-specific parameters of node `k`
     Ryyinv = np.linalg.inv(Ryy)
     w = np.matmul(Ryyinv, ryd[:, :, np.newaxis])
     return w[:, :, 0]  # get rid of singleton dimension
@@ -3171,9 +3209,7 @@ def update_w_gevd(
         refSensorIdx,
         rank=1
     ):
-    """
-    Helper function for GEVD-based MWF-like DANSE filter update.
-    """
+    """Helper function for GEVD-based MWF-like DANSE filter update."""
     n = Ryy.shape[-1]
     nFreqs = Ryy.shape[0]
     # Reference sensor selection vector 
@@ -3184,7 +3220,7 @@ def update_w_gevd(
     sigma = np.zeros((nFreqs, n))
     for kappa in range(nFreqs):
         # Perform generalized eigenvalue decomposition 
-        # -- as of 2022/02/17: scipy.linalg.eigh()
+        # -- as of 2022/02/17: `scipy.linalg.eigh()`
         # seemingly cannot be jitted nor vectorized.
         sigmacurr, Xmatcurr = sla.eigh(
             Ryy[kappa, :, :],
@@ -3192,12 +3228,11 @@ def update_w_gevd(
             # check_finite=False,
             # driver='gvd'
         )
-        # Flip Xmat to sort eigenvalues in descending order
-        # idx = np.flip(np.argsort(sigmacurr))
+        # Flip `Xmat` to sort eigenvalues in descending order
         idx = jit_flipargsort(sigmacurr)  # jitted version
         sigma[kappa, :] = sigmacurr[idx]
         Xmat[kappa, :, :] = Xmatcurr[:, idx]
-
+    # Inverse-hermitian of `Xmat`
     Qmat = np.linalg.inv(
         np.transpose(Xmat.conj(), axes=[0, 2, 1])
     )
@@ -3209,9 +3244,7 @@ def update_w_gevd(
     Qhermitian = np.transpose(Qmat.conj(), axes=[0, 2, 1])
     # Compute filters
     fullWmat = np.matmul(np.matmul(Xmat, Dmat), Qhermitian)
-    w = fullWmat[:, :, refSensorIdx]
-    # w = fullWmat[:, refSensorIdx, :]
-    
+    w = fullWmat[:, :, refSensorIdx]    
     return w
 
 

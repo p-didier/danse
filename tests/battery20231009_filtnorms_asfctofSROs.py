@@ -14,7 +14,7 @@ from .sandbox import main as sandbox_main
 from danse_toolbox.d_classes import TestParameters
 
 # General parameters
-EXPORT_FOLDER = f'./danse/out/{Path(__file__).stem}'
+EXPORT_FOLDER = f'./danse/out/{Path(__file__).stem}_noSelfNoise'
 MK = [2, 3]  # number of sensors per node
 BASE_CONFIG_FILE = './danse/config_files/sandbox_config.yaml'
 

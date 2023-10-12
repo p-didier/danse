@@ -614,7 +614,7 @@ def get_best_perf(wasnObj: WASN, p: base.DANSEparameters, wCentr=None):
     using batch estimates.
     If `wCentr` is given, use those filters instead of computing them.
     """
-    if wasnObj.adjacencyMatrix == np.array([]):  # fully connected topology
+    if wasnObj.adjacencyMatrix.size == 0:  # fully connected topology
         # Initialize variables
         bdv = BatchDANSEvariables()  # batch
         bdv.import_params(p)

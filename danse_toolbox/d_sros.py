@@ -11,8 +11,8 @@ while PurePath(pathToRoot).name != rootFolder:
     pathToRoot = pathToRoot.parent
 sys.path.append(f'{pathToRoot}/danse/dxcpphat')
 sys.path.append(f'{pathToRoot}/_third_parties')
-from paderwasn.synchronization.time_shift_estimation import max_time_lag_search
-# from paderwasn.paderwasn.synchronization.time_shift_estimation import max_time_lag_search
+# from paderwasn.synchronization.time_shift_estimation import max_time_lag_search
+from paderwasn.paderwasn.synchronization.time_shift_estimation import max_time_lag_search
 import sro_estimation as dxcp
 
 

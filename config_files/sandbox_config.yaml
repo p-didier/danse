@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231006_tests/tidanse/test1_ssNodes_WCBC
+  exportFolder: .\danse\out/20231012_tests/selfNoise/60dB
   metricsInPlots:
   - snr
   - sisnr
@@ -11,6 +11,8 @@ exportParams:
   conditionNumberPlot: false
   mseBatchPerfPlot: false
 danseParams:
+  # winWOLAanalysisType: rect
+  # winWOLAsynthesisType: rect
   noFusionAtSingleSensorNodes: true
   # noFusionAtSingleSensorNodes: false
   startUpdatesAfterAtLeast: 0 # [s]
@@ -20,6 +22,7 @@ danseParams:
   simType: online
   nodeUpdating: asy
   # nodeUpdating: seq
+  # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
   computeCentralised: true
@@ -44,8 +47,8 @@ danseParams:
     printout_profiler: false
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
-  startComputeMetricsAt: after_5s
-  # startComputeMetricsAt: after_10s
+  # startComputeMetricsAt: after_5s
+  startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
@@ -73,7 +76,6 @@ danseParams:
     alphaRps: .05
     loop: open  # `open` == as in OJSP paper
 referenceSensor: 0  # Python-index of reference sensor in DANSE
-snrYlimMax: null
 wasnParams:
   trueRoom: true
   # Diffuse noise params
@@ -88,15 +90,19 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 10  # [s]
+  sigDur: 15  # [s]
   # selfnoiseSNR: 999999999  # [dB]
-  selfnoiseSNR: 15  # [dB]
+  # selfnoiseSNR: 99  # [dB]
+  selfnoiseSNR: 60  # [dB]
+  # selfnoiseSNR: 15  # [dB]
   layoutType: random
   # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
   t60: 0.0  # [s]
-  nSensorPerNode: '[1, 1, 1]'
-  # nSensorPerNode: '[2, 3]'
+  # nSensorPerNode: '[1, 1, 1]'
+  nSensorPerNode: '[2, 3]'
+  # nSensorPerNode: '[2, 1]'
+  # nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
   # nSensorPerNode: '[1, 2, 3]'

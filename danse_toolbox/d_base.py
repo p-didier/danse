@@ -797,14 +797,7 @@ def prep_evmat_build(
         wasnObjList = None
         # Get expected broadcast instants
         if 'wholeChunk' in p.broadcastType:
-            # Expected DANSE update instants
-            upInstants = generate_aligned_instants(
-                startIdx=np.ceil((p.DFTsize + p.Ns) / p.Ns),  # we only start fusing when we have enough samples
-                eventSep=p.Ns,
-                nEventTotal=numUpInTtot,
-                nNodes=nNodes,
-                wasnObj=wasnObj
-            )
+            # Expected DANSE broadcast instants
             bcInstants = generate_aligned_instants(
                 startIdx=p.DFTsize/p.broadcastLength,
                 eventSep=p.broadcastLength,
@@ -814,6 +807,18 @@ def prep_evmat_build(
             )
             # ^ note that we only start broadcasting when we have enough
             # samples to perform compression.
+            # Expected DANSE update instants
+            upInstants = generate_aligned_instants(
+                startIdx=np.ceil((p.DFTsize + p.DFTsize) / p.Ns),  # we only start fusing when we have enough samples
+                eventSep=p.Ns,
+                nEventTotal=numUpInTtot,
+                nNodes=nNodes,
+                wasnObj=wasnObj
+            )
+            # ^ note that we only start updated one full frame after the 
+            # first broadcast (this was, we ensure that the WOLA windowing
+            # does not play a role in the updating - as it still impact
+            # the very first broadcasted segments).
         elif 'fewSamples' in p.broadcastType:
             # Expected DANSE update instants
             upInstants = generate_aligned_instants(
@@ -1609,7 +1614,7 @@ def events_parser(
     p : `DANSEparameters` object
         DANSE parameters.
     """
-    if p.printoutsAndPlotting.printout_eventsParser:
+    if p.printoutsAndPlotting.verbose and p.printoutsAndPlotting.printout_eventsParser:
         if 'up' in events.type or ('bc' in events.type and p.efficientSpSBC):
             txt = f'[{p.simType}] [{p.nodeUpdating}] t={np.round(events.t, 9):.9f}s -- '
             updatesTxt = 'UP: '
@@ -1768,7 +1773,6 @@ def danse_compression_whole_chunk(
     
     # Useful variables
     DFTsize = len(yq)
-    normFactWOLA = Ns / sum(f)  # normalization factor for WOLA
 
     # Checking input arguments
     if Ns is None:
@@ -1804,28 +1808,45 @@ def danse_compression_whole_chunk(
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', wHat.conj(), yqHat)
 
-    # WOLA synthesis stage
-    if zqPrevious is not None:
-        # IDFT
-        zqCurr = np.sqrt(Ns) * back_to_time_domain(zqHat, DFTsize, axis=0)
-        zqCurr = np.real_if_close(zqCurr)
-        zqCurr *= f    # multiply by synthesis window
-        # zqCurr *= normFactWOLA    # multiply by WOLA normalization factor
+    # WOLA synthesis stage - IDFT
+    zqCurr = np.sqrt(Ns) * back_to_time_domain(zqHat, DFTsize, axis=0)
+    zqCurr = np.real_if_close(zqCurr)
+    zqCurr *= f    # multiply by synthesis window
 
-        if not np.any(zqPrevious):
-            # No previous frame, keep current frame
-            zq = zqCurr
-        else:
-            # Overlap-add
-            zq = np.zeros(DFTsize)
-            zq[:(DFTsize - Ns)] = zqPrevious[-(DFTsize - Ns):]
-            zq += zqCurr
+    if not np.any(zqPrevious):
+        # No previous frame, keep current frame
+        zq = zqCurr
     else:
-        print('Cannot compute time-domain overlap-added chunk of local compressed signal.')
-        zq = None
+        # Overlap-add
+        zq = np.zeros(DFTsize)
+        zq[:(DFTsize - Ns)] = zqPrevious[-(DFTsize - Ns):]
+        zq += zqCurr
 
-    stop = 1
-    
+        # Build normalization factors for OLA
+        nOverlaps = DFTsize // Ns
+        normVal = np.zeros(DFTsize + Ns)
+        for ii in range(nOverlaps):
+            normVal[ii * Ns:ii * Ns + DFTsize] += h ** 2
+        normVal = normVal[Ns:]
+        # Normalize chunk that can be normalizedd
+        # normVal = h[:Ns] ** 2 + h[Ns:] ** 2        
+        # Normalize chunk that can be normalized
+        zq[:Ns] /= normVal[:Ns]
+
+    # if flagSingleSensor:
+    #     t = yq * h * f
+    #     if not np.allclose(t[Ns:], zq[Ns:]):
+    #         stop = 1
+    #     if not np.allclose(yq[:Ns], zq[:Ns]):
+    #         fig, axes = plt.subplots(2,1)
+    #         fig.set_size_inches(8.5, 3.5)
+    #         axes[0].plot(yq, label='yq')
+    #         axes[0].plot(zq, '--', label='zq')
+    #         axes[0].legend()
+    #         axes[1].plot(yq - zq)
+    #         plt.show(block=False)
+    #         stop = 1
+        
     return zqHat, zq
 
 
