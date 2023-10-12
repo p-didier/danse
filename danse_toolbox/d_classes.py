@@ -1097,7 +1097,7 @@ class DANSEvariables(base.DANSEparameters):
             # If "efficient" events for broadcast
             # (broadcast instants are aggregated when possible):
             if self.efficientSpSBC:
-                self.get_buffer_size_for_efficient_bc(k, tCurr)
+                currL = self.get_buffer_size_for_efficient_bc(k, tCurr)
                 self.lastBroadcastInstant[k] = tCurr  # update last broadcast instant
             else:
                 currL = self.broadcastLength
