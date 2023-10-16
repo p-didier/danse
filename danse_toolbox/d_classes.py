@@ -2894,9 +2894,6 @@ class TIDANSEvariables(DANSEvariables):
             else:   # <-- case where $\eta$ has not yet been computed, e.g., due to SROs
                 self.etaMk[l] = np.array([])
 
-    # def ti_process_incoming_signals_buffers(self, k, t):
-    #     self.process_incoming_signals_buffers(k, t)
-
     def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
         """
         Performs an update of the DANSE filter coefficients at node `k` and
@@ -2935,34 +2932,30 @@ class TIDANSEvariables(DANSEvariables):
         # Compensate for SROs
         # skipUpdate = self.ti_compensate_sros(k, tCurr)
 
-        # Ryy and Rnn updates (including centralised / local, if needed)
-        self.spatial_covariance_matrix_update(k)
-
-        # Check quality of covariance matrix estimates 
-        self.check_covariance_matrices(k, tCurr=tCurr)
-
-        # If covariance matrices estimates are full-rank, update filters
-        if not bypassUpdateEventMat:# and not skipUpdate:
-            # vvv !! depends on outcome of `check_covariance_matrices()` !!
-            self.perform_update(k)
-            # ^^^ !! depends on outcome of `check_covariance_matrices()` !!
+        if self.preGivenFilters.active:
+            self.update_using_pregiven_filters(k)
         else:
-            # Do not update the filter coefficients
-            self.wTilde[k][:, self.i[k] + 1, :] =\
-                self.wTilde[k][:, self.i[k], :]
-            # if self.computeCentralised:   # <-- done within `perform_update()`
-            #     self.wCentr[k][:, self.i[k] + 1, :] =\
-            #         self.wCentr[k][:, self.i[k], :]
-            if self.computeLocal:
-                self.wLocal[k][:, self.i[k] + 1, :] =\
-                    self.wLocal[k][:, self.i[k], :]
-            # if skipUpdate:
-            #     print(f'Node {k + 1}: {self.i[k] + 1}-th update skipped (not enough samples accummulated due to SROs).')
-        if self.bypassUpdates:
-            print('!! User-forced bypass of filter coefficients updates !!')
+            # Ryy and Rnn updates (including centralised / local, if needed)
+            self.spatial_covariance_matrix_update(k)
+            # Check quality of covariance matrix estimates 
+            self.check_covariance_matrices(k, tCurr=tCurr)
+            # If covariance matrices estimates are full-rank, update filters
+            if not bypassUpdateEventMat:# and not skipUpdate:
+                self.perform_update(k)
+                # ^^^ !! depends on outcome of `check_covariance_matrices()` !!
+            else:
+                # Do not update the filter coefficients
+                self.wTilde[k][:, self.i[k] + 1, :] =\
+                    self.wTilde[k][:, self.i[k], :]
+                if self.computeLocal:
+                    self.wLocal[k][:, self.i[k] + 1, :] =\
+                        self.wLocal[k][:, self.i[k], :]
+            if self.bypassUpdates:
+                print('!! User-forced bypass of filter coefficients updates !!')
 
-        # Update external filters (for broadcasting)
-        self.ti_update_external_filters(k, tCurr)
+            # Update external filters (for broadcasting)
+            self.ti_update_external_filters(k, tCurr)
+
         # # Update SRO estimates
         # self.update_sro_estimates(k, fs)
         # # Update phase shifts for SRO compensation
