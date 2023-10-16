@@ -155,6 +155,7 @@ class ExportParameters:
     exportFolder: str = ''  # folder to export outputs
     metricsInPlots: list[str] = field(default_factory=list)  # list of metrics
         # to plot in the metrics plot
+    writeOverPrevious: bool = False  # if True, overwrites previous export files
 
     def __post_init__(self):
         if len(self.metricsInPlots) == 0:
@@ -170,18 +171,21 @@ class ExportParameters:
         else:
             # Check whether export folder exists
             if Path(self.exportFolder).is_dir():
-                # Check whether the folder contains something
-                # if Path(self.exportFolder).stat().st_size > 0:
-                if any(Path(self.exportFolder).iterdir()):
-                    inp = input(f'The folder "{self.exportFolder}" contains data. Overwrite? [y/n]:  ')
-                    while inp not in ['y', 'Y', 'n', 'N']:
-                        inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
-                    if inp in ['n', 'N']:
-                        runit = False   # don't run
-                        print('Aborting figures and sounds export.')
-                    elif inp in ['y', 'Y']:
-                        print('Wiping folder before new figures and sounds exports.')
-                        wipe_folder(self.exportFolder)
+                if self.writeOverPrevious:
+                    print(f'Overwriting previous export files in "{self.exportFolder}".')
+                else:
+                    # Check whether the folder contains something
+                    # if Path(self.exportFolder).stat().st_size > 0:
+                    if any(Path(self.exportFolder).iterdir()):
+                        inp = input(f'The folder "{self.exportFolder}" contains data. Overwrite? [y/n]:  ')
+                        while inp not in ['y', 'Y', 'n', 'N']:
+                            inp = input(f'Invalid input "{inp}". Please answer "y" for "yes" or "n" for "no":  ')
+                        if inp in ['n', 'N']:
+                            runit = False   # don't run
+                            print('Aborting figures and sounds export.')
+                        elif inp in ['y', 'Y']:
+                            print('Wiping folder before new figures and sounds exports.')
+                            wipe_folder(self.exportFolder)
             else:
                 print(f'Create export folder "{self.exportFolder}".')
                 # Create dir. with missing parents directories.
