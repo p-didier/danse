@@ -271,8 +271,7 @@ class TestParameters:
                 raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs (because of division by `g_kq`).')
             self.exportParams.filterNormsPlot = False  # no filter norms plot in ad-hoc WASNs
             self.exportParams.filterNorms = False
-        # Transfer useful export parameters to DANSE parameters
-        self.danseParams.exportMSEBatchPerfPlot = self.exportParams.mseBatchPerfPlot
+            self.danseParams.computeSingleSensorBroadcast = False  # no single-sensor broadcast in ad-hoc WASNs
         # Check that the `startComputeMetricsAt` parameter is not after
         # the end of the signal.
         var = self.danseParams.startComputeMetricsAt
@@ -1302,6 +1301,11 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :] = self.wTilde[k][:, self.i[k], :]
                 if self.computeLocal:
                     self.wLocal[k][:, self.i[k] + 1, :] = self.wLocal[k][:, self.i[k], :]
+                if bypassUpdateEventMat:
+                    if self.computeCentralised:
+                        self.wCentr[k][:, self.i[k] + 1, :] = self.wCentr[k][:, self.i[k], :]
+                    if self.computeSingleSensorBroadcast:
+                        self.wSSBC[k][:, self.i[k] + 1, :] = self.wSSBC[k][:, self.i[k], :]
                 if skipUpdate:
                     print(f'Node {k+1}: {self.i[k]+1}-th update skipped.')
             if self.bypassUpdates:
@@ -2787,13 +2791,13 @@ class TIDANSEvariables(DANSEvariables):
             # Fully fill in buffers for centralized processing
             self.pre_fill_buffers_centralised(k, ykFrame, tCurr)
             if self.broadcastType == 'wholeChunk':
-                self.fill_buffers_centr(k, n=self.Ns)
+                centrBCLength = self.Ns
             elif self.broadcastType == 'fewSamples':
                 if self.efficientSpSBC:
-                    currL = self.get_buffer_size_for_efficient_bc(k, tCurr)
-                    self.fill_buffers_centr(k, n=-1 * currL)
+                    centrBCLength = -1 * self.get_buffer_size_for_efficient_bc(k, tCurr)
                 else:
-                    self.fill_buffers_centr(k, n=-1 * self.broadcastLength)
+                    centrBCLength = -1 * self.broadcastLength
+            self.fill_buffers_centr(k, n=centrBCLength)
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
@@ -2950,6 +2954,10 @@ class TIDANSEvariables(DANSEvariables):
                 if self.computeLocal:
                     self.wLocal[k][:, self.i[k] + 1, :] =\
                         self.wLocal[k][:, self.i[k], :]
+                if self.computeCentralised:
+                    self.wCentr[k][:, self.i[k] + 1, :] = self.wCentr[k][:, self.i[k], :]
+                if self.computeSingleSensorBroadcast:
+                    self.wSSBC[k][:, self.i[k] + 1, :] = self.wSSBC[k][:, self.i[k], :]
             if self.bypassUpdates:
                 print('!! User-forced bypass of filter coefficients updates !!')
 
