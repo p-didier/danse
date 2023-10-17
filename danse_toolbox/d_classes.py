@@ -152,6 +152,7 @@ class ExportParameters:
     filters: bool = False  # if True, (complex) filters are exported as a pickle file
     # vvv Global
     bypassAllExports: bool = False  # if True, all exports are bypassed
+    bypassGlobalPickleExport: bool = False  # if True, bypasses the global Pickle export of an `OutputsForPostProcessing` object
     exportFolder: str = ''  # folder to export outputs
     metricsInPlots: list[str] = field(default_factory=list)  # list of metrics
         # to plot in the metrics plot
@@ -269,8 +270,8 @@ class TestParameters:
             if self.danseParams.filterInitType == 'selectFirstSensor':
                 # Check that the filter initialization type is supported in ad-hoc WASNs.
                 raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs (because of division by `g_kq`).')
-            self.exportParams.filterNormsPlot = False  # no filter norms plot in ad-hoc WASNs
-            self.exportParams.filterNorms = False
+            # self.exportParams.filterNormsPlot = False  # no filter norms plot in ad-hoc WASNs
+            # self.exportParams.filterNorms = False
             self.danseParams.computeSingleSensorBroadcast = False  # no single-sensor broadcast in ad-hoc WASNs
         # Check that the `startComputeMetricsAt` parameter is not after
         # the end of the signal.
@@ -1618,7 +1619,7 @@ class DANSEvariables(base.DANSEparameters):
         # Keep only positive frequencies
         self.ySSBCHat[k][:, self.i[k], :] = ySSBCHatCurr[:self.nPosFreqs, :]
     
-    def update_external_filters(self, k, t=None):
+    def update_external_filters(self, k, t=None, tiDANSEflag=False):
         """
         Update external filters for relaxed filter update.
         To be used when using simultaneous or asynchronous node-updating.
@@ -1632,7 +1633,14 @@ class DANSEvariables(base.DANSEparameters):
         t : float
             Current time instant [s]. If None, perform external filter update
             regardless of the time elapsed since the last update.
+        tiDANSEflag : bool
+            If True, use TI-DANSE filter dimensions.
         """
+
+        if tiDANSEflag:
+            currWTilde = self.wTilde[k][:, self.i[k] + 1, :]
+        else:
+            currWTilde = self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
 
         if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
             if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
@@ -1643,8 +1651,7 @@ class DANSEvariables(base.DANSEparameters):
                     self.wTildeExt[k][:, self.i[k], :]
             else:
                 # No relaxation (i.e., no "external" filters)
-                self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                    self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+                self.wTildeExt[k][:, self.i[k] + 1, :] = currWTilde
         else:   # Simultaneous or asynchronous node-updating
             # Relaxed external filter update
             if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
@@ -1671,12 +1678,12 @@ class DANSEvariables(base.DANSEparameters):
                 # Update target
                 self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
                     self.wTildeExtTarget[k] + self.alphaExternalFilters *\
-                    self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
+                    currWTilde
                 
     def ti_update_external_filters_batch(self, k, t=None):
         """Wrapper for `update_external_filters()` for batch processing
         in non-fully connected WASNs."""
-        TIDANSEvariables.ti_update_external_filters(self, k, t)
+        TIDANSEvariables.update_external_filters(self, k, t, tiDANSEflag=True)
 
     def process_incoming_signals_buffers(self, k, t):
         """
@@ -2877,8 +2884,7 @@ class TIDANSEvariables(DANSEvariables):
                 self.zLocal[k] += self.zLocal[l]
 
         # At the root, the sum is complete
-        if len(self.downstreamNeighbors[k]) == 0 and\
-            self.currentWasnTreeObj.rootIdx == k:  # redundant but safe check
+        if self.currentWasnTreeObj.rootIdx == k:
             self.eta[k] = copy.deepcopy(self.zLocal[k])
             self.etaMk[k] = self.eta[k] - self.zLocalPrime[k]
 
@@ -2949,11 +2955,9 @@ class TIDANSEvariables(DANSEvariables):
                 # ^^^ !! depends on outcome of `check_covariance_matrices()` !!
             else:
                 # Do not update the filter coefficients
-                self.wTilde[k][:, self.i[k] + 1, :] =\
-                    self.wTilde[k][:, self.i[k], :]
+                self.wTilde[k][:, self.i[k] + 1, :] = self.wTilde[k][:, self.i[k], :]
                 if self.computeLocal:
-                    self.wLocal[k][:, self.i[k] + 1, :] =\
-                        self.wLocal[k][:, self.i[k], :]
+                    self.wLocal[k][:, self.i[k] + 1, :] = self.wLocal[k][:, self.i[k], :]
                 if self.computeCentralised:
                     self.wCentr[k][:, self.i[k] + 1, :] = self.wCentr[k][:, self.i[k], :]
                 if self.computeSingleSensorBroadcast:
@@ -2962,7 +2966,11 @@ class TIDANSEvariables(DANSEvariables):
                 print('!! User-forced bypass of filter coefficients updates !!')
 
             # Update external filters (for broadcasting)
-            self.ti_update_external_filters(k, tCurr)
+            self.update_external_filters(k, tCurr, tiDANSEflag=True)
+
+        if self.currentWasnTreeObj.rootIdx == k and\
+            self.oVADframes[k][self.i[k]]:
+            stop = 1
 
         # # Update SRO estimates
         # self.update_sro_estimates(k, fs)
@@ -3200,60 +3208,6 @@ class TIDANSEvariables(DANSEvariables):
         zq = np.sum(yfiltLastSamples, axis=1)
 
         return zq, wIR
-
-    def ti_update_external_filters(self, k, t):
-        """
-        Update external filters for relaxed filter update.
-        To be used when using simultaneous or asynchronous node-updating.
-        When using sequential node-updating, do not differentiate between
-        internal (`self.wTilde`) and external filters. 
-        For TI-DANSE --> dimensions of self.wTildeExt and self.wTildeExtTarget
-        differ from DANSE.
-        
-        Parameters
-        ----------
-        k : int
-            Receiving node index.
-        t : float
-            Current time instant [s].
-        """
-        # TODO: find a way to combine this function with the DANSE one
-        # (`DANSEvariables.update_external_filters()`)
-
-        if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
-            # No relaxation (i.e., no "external" filters)
-            self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                self.wTilde[k][:, self.i[k] + 1, :]
-        else:   # Simultaneous or asynchronous node-updating
-            # Relaxed external filter update
-            if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
-                # If node `k` has only one sensor, do not perform external
-                # filter update (i.e., no "single-sensor signal fusion", as
-                # there is already just one channel).
-                self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                    self.wTildeExt[k][:, self.i[k], :]
-            else:
-                self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                    self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
-                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
-            
-            if t is None:
-                updateFlag = True  # update regardless of time elapsed
-            else:   
-                updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
-                if updateFlag:
-                    # Update last external filter update instant [s]
-                    self.lastExtFiltUp[k] = t
-                    if self.printoutsAndPlotting.printout_externalFilterUpdate:
-                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-            if updateFlag:
-                # Update target
-                self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
-                    self.wTildeExtTarget[k] + self.alphaExternalFilters *\
-                    self.wTilde[k][:, self.i[k] + 1, :]
-
-    def ti_compensate_sros(self):
-        pass  #  TODO:
 
 
 def update_covmats_batch(yAllFrames, vadAllFrames):
