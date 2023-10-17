@@ -2118,14 +2118,19 @@ def prune_wasn_to_tree(
         [(k, wasnObj.wasn[k].nodePosition) for k in range(len(wasnObj.wasn))]
     )
     
-    # Add edge weights based on inter-node distance # TODO: is that a correct approach? TODO:
-    if nodesPos[0] is not None:
+    # Add edge weights...
+    if wasnObj.all_nodes_at_same_position():
         for e in Gnx.edges():
-            weight = np.linalg.norm(nodesPos[e[0]] - nodesPos[e[1]])
-            Gnx[e[0]][e[1]]['weight'] = weight
+            Gnx[e[0]][e[1]]['weight'] = 1
     else:
-        for e in Gnx.edges():
-            Gnx[e[0]][e[1]]['weight'] = 1  # not "true-room" scenario
+        # ...based on inter-node distance # TODO: is that a correct approach?
+        if nodesPos[0] is not None:
+            for e in Gnx.edges():
+                weight = np.linalg.norm(nodesPos[e[0]] - nodesPos[e[1]])
+                Gnx[e[0]][e[1]]['weight'] = weight
+        else:
+            for e in Gnx.edges():
+                Gnx[e[0]][e[1]]['weight'] = 1  # not "true-room" scenario
     
     # Compute minimum spanning tree
     prunedWasnNX = nx.minimum_spanning_tree(
