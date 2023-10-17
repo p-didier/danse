@@ -443,6 +443,14 @@ class WASN:
     vadPerFrameCentralized: np.ndarray = np.array([]) # centralized VAD
         # ^ boolean array.
 
+    def all_nodes_at_same_position(self):
+        """Returns True if all nodes of the WASN are located at the
+        same position in the environment."""
+        return all([
+            np.allclose(self.wasn[0].nodePosition, node.nodePosition)\
+                for node in self.wasn
+        ])
+
     def set_tree_root(self):
         """Sets the root of a tree-topology WASN."""
         # Base check

@@ -162,9 +162,9 @@ def get_metrics(
     if endIdx is None:
         endIdx = clean.shape[0]
     if bestPerfData is not None:
-        # Hard-coded parameter: avoid clicks at beginning and
+        # HARDCODED parameter: avoid clicks at beginning and
         # end of batch processing
-        bestPerfShift = int(0.25 * fs)
+        bestPerfShift = int(0.2 * fs)
 
     # Trim to correct lengths (avoiding initial filter convergence
     # in calculation of metrics)

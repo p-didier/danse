@@ -231,6 +231,8 @@ class DANSEparameters(Hyperparameters):
     noExternalFilterRelaxation: bool = False  # if True, bypass external
         # filter updates.
     timeBtwExternalFiltUpdates: float = 0.  # [s] bw. external filter updates.
+    onlyBroadcastRefSensorSigs: bool = False  # if True, only broadcast
+        # the signals from the reference sensor (ignore DANSE fusion).
     alphaExternalFilters: float = 1.    # exponential averaging constant
         # for external filter _target_ update using internal DANSE filters.
     t_expAvg50pExternalFilters: float = 2.  # [s] Time in the past at which

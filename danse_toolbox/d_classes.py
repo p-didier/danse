@@ -267,9 +267,9 @@ class TestParameters:
                 # Switch to topology-independent node-update system
                 print(f'/!\ The WASN is not fully connected -- switching `danseParams.nodeUpdating` from "{self.danseParams.nodeUpdating}" to "topo-indep_{self.danseParams.nodeUpdating}".')
                 self.danseParams.nodeUpdating = f'topo-indep_{self.danseParams.nodeUpdating}'
-            if self.danseParams.filterInitType == 'selectFirstSensor':
-                # Check that the filter initialization type is supported in ad-hoc WASNs.
-                raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs (because of division by `g_kq`).')
+            # if self.danseParams.filterInitType == 'selectFirstSensor':
+            #     # Check that the filter initialization type is supported in ad-hoc WASNs.
+            #     raise ValueError('`filterInitType` "selectFirstSensor" not supported in ad-hoc WASNs (because of division by `g_kq`).')
             # self.exportParams.filterNormsPlot = False  # no filter norms plot in ad-hoc WASNs
             # self.exportParams.filterNorms = False
             self.danseParams.computeSingleSensorBroadcast = False  # no single-sensor broadcast in ad-hoc WASNs
@@ -1642,43 +1642,46 @@ class DANSEvariables(base.DANSEparameters):
         else:
             currWTilde = self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
 
-        if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
-            if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
+        if self.onlyBroadcastRefSensorSigs:
+            # Ensure that only the reference signal of each node is
+            # broadcasted (overrides every other related parameters).
+            m = np.zeros(
+                (self.wTildeExt[k].shape[0], self.wTildeExt[k].shape[2]),
+                dtype=complex
+            )
+            m[:, self.referenceSensor] = 1
+            self.wTildeExt[k][:, self.i[k] + 1, :] = m
+        else:
+            if self.nLocalMic[k] == 1 and self.noFusionAtSingleSensorNodes:
                 # If node `k` has only one sensor, do not perform external
                 # filter update (i.e., no "single-sensor signal fusion", as
                 # there is already just one channel).
                 self.wTildeExt[k][:, self.i[k] + 1, :] =\
                     self.wTildeExt[k][:, self.i[k], :]
             else:
-                # No relaxation (i.e., no "external" filters)
-                self.wTildeExt[k][:, self.i[k] + 1, :] = currWTilde
-        else:   # Simultaneous or asynchronous node-updating
-            # Relaxed external filter update
-            if self.noFusionAtSingleSensorNodes and self.nLocalMic[k] == 1:
-                # If node `k` has only one sensor, do not perform external
-                # filter update (i.e., no "single-sensor signal fusion", as
-                # there is already just one channel).
-                self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                    self.wTildeExt[k][:, self.i[k], :]
-            else:
-                self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                    self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
-                    (1 - self.expAvgBetaWext[k]) *  self.wTildeExtTarget[k]
-            
-            if t is None:
-                updateFlag = True  # update regardless of time elapsed
-            else:   
-                updateFlag = t - self.lastExtFiltUp[k] >= self.timeBtwExternalFiltUpdates
-                if updateFlag:
-                    # Update last external filter update instant [s]
-                    self.lastExtFiltUp[k] = t
-                    if self.printoutsAndPlotting.printout_externalFilterUpdate:
-                        print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
-            if updateFlag:
-                # Update target
-                self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
-                    self.wTildeExtTarget[k] + self.alphaExternalFilters *\
-                    currWTilde
+                if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
+                    # No relaxation (i.e., no "external" filters)
+                    self.wTildeExt[k][:, self.i[k] + 1, :] = currWTilde
+                else:   # Simultaneous or asynchronous node-updating
+                    self.wTildeExt[k][:, self.i[k] + 1, :] =\
+                        self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
+                        (1 - self.expAvgBetaWext[k]) * self.wTildeExtTarget[k]
+                    
+                    if t is None:
+                        updateFlag = True  # update regardless of time elapsed
+                    else:   
+                        updateFlag = t - self.lastExtFiltUp[k] >=\
+                            self.timeBtwExternalFiltUpdates
+                        if updateFlag:
+                            # Update last external filter update instant [s]
+                            self.lastExtFiltUp[k] = t
+                            if self.printoutsAndPlotting.printout_externalFilterUpdate:
+                                print(f't={np.round(t, 3):.3f}s -- UPDATING EXTERNAL FILTERS for node {k+1} (scheduled every [at least] {self.timeBtwExternalFiltUpdates}s)')
+                    if updateFlag:
+                        # Update target
+                        self.wTildeExtTarget[k] = (1 - self.alphaExternalFilters) *\
+                            self.wTildeExtTarget[k] + self.alphaExternalFilters *\
+                            currWTilde
                 
     def ti_update_external_filters_batch(self, k, t=None):
         """Wrapper for `update_external_filters()` for batch processing
@@ -2660,6 +2663,9 @@ class DANSEvariables(base.DANSEparameters):
             elif self.desSigProcessingType == 'conv':
                 self.dCentr[self.idxEndChunk -\
                     self.Ns:self.idxEndChunk, k] = dChunk
+                
+            if self.i[k] > 70:
+                stop = 1
         
         if self.computeLocal:
             # Build local desired signal estimate
@@ -3128,9 +3134,9 @@ class TIDANSEvariables(DANSEvariables):
             # If the external filters have started updating, we must 
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
-            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
-                self.wTildeExt[k][:, self.i[k], -1:]
-            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
+            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
+            #     self.wTildeExt[k][:, self.i[k], -1:]
+            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 
@@ -3150,6 +3156,16 @@ class TIDANSEvariables(DANSEvariables):
                 zq[:(self.DFTsize - self.Ns)] =\
                     zForSynthesis[-(self.DFTsize - self.Ns):]
                 zq += zqCurr
+
+                # Build normalization factors for OLA
+                nOverlaps = self.DFTsize // self.Ns
+                normVal = np.zeros(self.DFTsize + self.Ns)
+                for ii in range(nOverlaps):
+                    normVal[ii * self.Ns:ii * self.Ns + self.DFTsize] +=\
+                        self.winWOLAanalysis ** 2
+                normVal = normVal[self.Ns:]  
+                # Normalize chunk that can be normalized
+                zq[:self.Ns] /= normVal[:self.Ns]
         else:
             zq = None
         

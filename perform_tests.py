@@ -15,6 +15,8 @@ import tests.battery20230919_perf_asfctofL
 import tests.battery20230919_pp
 import tests.battery20231009_filtnorms_asfctofSROs
 import tests.battery20231009_pp
+import tests.battery20231013_perf_asfctofSelfNoise
+import tests.battery20231013_pp
 
 CONFIG_FILES_FOLDER = f'{Path(__file__).parent}/config_files'
 
@@ -25,6 +27,9 @@ def main(configFilesFolder: str=CONFIG_FILES_FOLDER):
     tests.sandbox.main(
         cfgFilename=f'{configFilesFolder}/sandbox_config.yaml',
     )
+
+    # tests.battery20231013_perf_asfctofSelfNoise.main()
+    # tests.battery20231013_pp.main()
 
     # tests.battery20231009_filtnorms_asfctofSROs.main()
     # tests.battery20231009_pp.main()

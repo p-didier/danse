@@ -24,8 +24,9 @@ def main(foldername='', params=dict()):
         acousticScenarioPlot=False,
         sroEstimPerfPlot=False,
         metricsPlot=True,
-        waveformsAndSpectrograms=True,
+        waveformsAndSpectrograms=False,
         bestPerfReference=True,
+        metricsInPlots=['snr', 'sisnr', 'estoi'],
         # others
         filterNormsPlot=False,
         conditionNumberPlot=False,
@@ -39,7 +40,8 @@ def main(foldername='', params=dict()):
         exportFolder=a.testParams.exportParams.exportFolder,
     )
     # Update test parameters
-    a.testParams.exportParams = newExportParams
+    for k, v in newExportParams.__dict__.items():
+        setattr(a.testParams.exportParams, k, v)
     a.testParams.exportParams.exportFolder += '\\further_pp'
     baseExportFolder = a.testParams.exportParams.exportFolder
 
@@ -66,6 +68,7 @@ def main(foldername='', params=dict()):
         a.testParams.exportParams.exportFolder = baseExportFolder +\
             f'\\{subfolder}\\start_{int(t[ii])}s'
         # Ensure folder exists
+        a.testParams.exportParams.writeOverPrevious = True  # /!\ OVERWRITE
         a.testParams.exportParams.check_export_folder()
         # Ensure overall parameters consistency
         a.ensure_consistency()

@@ -1215,6 +1215,7 @@ def export_sounds(
         print(f'Created .wav export folder ".../{folderShort}/wav".')
 
     def _export_to_wav(name, data, fs=int(wasn[0].fs)):
+        """Helper function to export a signal to a .wav file."""
         if name[-4:] != '.wav':
             if '.' in name:
                 name = name.split('.')[0]
@@ -1240,35 +1241,41 @@ def export_sounds(
             if out.broadcastType == 'wholeChunk' and fullyConnected and\
                 out.simType != 'batch':
                 # Export the fused signals too
-                if not Path(f'{folder}/wav/fused').is_dir():
-                    Path(f'{folder}/wav/fused').mkdir()
+                subfolder = f'{folder}/wav/fused'
+                if not Path(subfolder).is_dir():
+                    Path(subfolder).mkdir()
                 _export_to_wav(
-                    f'{folder}/wav/fused/z_N{k + 1}.wav',
+                    f'{subfolder}/z_N{k + 1}.wav',
                     out.TDfusedSignals[k], fs=currFsAsInt
                 )
             elif out.broadcastType != 'wholeChunk':
                 print(f'Node {k+1}: Fused signals not exported (not yet implemented for per-sample broadcasting).')
             elif not fullyConnected:
-                if not Path(f'{folder}/wav/fused_ti').is_dir():
-                    Path(f'{folder}/wav/fused_ti').mkdir()
+                subfolder = f'{folder}/wav/fused_ti'
+                if not Path(subfolder).is_dir():
+                    Path(subfolder).mkdir()
                 _export_to_wav(
-                    f'{folder}/wav/fused/etaMk_N{k + 1}.wav',
+                    f'{subfolder}/etaMk_N{k + 1}.wav',
                     out.TDfusedSignalsTI[k], fs=currFsAsInt
                 )
-        # vvv if enhancement has been performed and centralised estimate computed
+        # vvv if enhancement has been performed and
+        # centralised estimate computed
         if out.computeCentralised:
             if len(out.TDdesiredSignals_est_c[:, k]) > 0:
                 _export_to_wav(
                     f'{folder}/wav/enhancedCentr_N{k + 1}.wav',
                     out.TDdesiredSignals_est_c[:, k], fs=currFsAsInt
                 )
-        # vvv if enhancement has been performed and local estimate computed
+        # vvv if enhancement has been performed and 
+        # local estimate computed
         if out.computeLocal:
             if len(out.TDdesiredSignals_est_l[:, k]) > 0:
                 _export_to_wav(
                     f'{folder}/wav/enhancedLocal_N{k + 1}.wav',
                     out.TDdesiredSignals_est_l[:, k], fs=currFsAsInt
                 )
+        # vvv if enhancement has been performed and single-sensor
+        # broadcasts (SSBCs) estimate computed
         if out.computeSingleSensorBroadcast:
             if len(out.TDdesiredSignals_est_ssbc[:, k]) > 0:
                 _export_to_wav(
@@ -2138,6 +2145,7 @@ def plot_filters(
         figs = plot_netwide_danse_filts(
             nwDANSEfilts_allNodes,
             legNW_allNodes,
+            nSensorsPerNode,
             [maxNorm, minNorm],
             figPrefix,
             bestPerfData

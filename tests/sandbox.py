@@ -87,7 +87,13 @@ def main(
 
         # Post-process results (save, export, plot...)
         print('Post-processing...')
-        outPostProc = postprocess(out, wasnObjUpdated, p, room)
+        outPostProc = postprocess(
+            out,
+            wasnObjUpdated,
+            p,
+            room,
+            bypassGlobalPickleExport=p.exportParams.bypassGlobalPickleExport
+        )
         print('Done.')
     else:
         print('Aborting DANSE run.')
@@ -185,6 +191,8 @@ def postprocess(
         forPP.save(p.exportParams.exportFolder)
     pp.export_danse_outputs(out, wasnObj, p, room)
 
+    plt.close('all')
+    
     return out
 
 

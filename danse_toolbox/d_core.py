@@ -205,7 +205,6 @@ def tidanse(
             elif evType == 'bc':
                 # Build partial in-network sum and broadcast downstream
                 tidv.ti_compute_partial_sum(k)
-                # tidv.ti_broadcast_partial_sum_downstream(k)
             elif evType == 're':
                 # Relay in-network sum upstream
                 tidv.ti_relay_innetwork_sum_upstream(k)
@@ -245,18 +244,6 @@ def tidanse(
     dur = time.perf_counter() - t0
     print(f'{np.amax(tidv.timeInstants)}s of signal processed in {str(datetime.timedelta(seconds=dur))}.')
     print(f'(Real-time processing factor: {np.round(np.amax(tidv.timeInstants) / dur, 4)})')
-
-    # # Build output
-    # out = DANSEoutputs()
-    # out.import_params(p)
-    # out.from_variables(tidv)
-    # # Update WASN object
-    # for k in range(len(wasnObj.wasn)):
-    #     wasnObj.wasn[k].enhancedData = tidv.d[:, k]
-    #     if tidv.computeCentralised:
-    #         wasnObj.wasn[k].enhancedData_c = tidv.dCentr[:, k]
-    #     if tidv.computeLocal:
-    #         wasnObj.wasn[k].enhancedData_l = tidv.dLocal[:, k]
 
     return tidv, wasnObj
 
