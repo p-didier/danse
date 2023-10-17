@@ -90,6 +90,8 @@ class DANSEoutputs(DANSEparameters):
             self.STFTDdesiredSignals_est_ssbc = dv.dHatSSBC
         # DANSE fused signals
         self.TDfusedSignals = dv.zFullTD
+        if hasattr(dv, 'etaMkFullTD'):
+            self.TDfusedSignalsTI = dv.etaMkFullTD  # <-- initialised in `TIDANSEVariables` class
         # SROs
         self.SROgroundTruth = dv.SROsppm
         self.SROsEstimates = dv.SROsEstimates
@@ -354,7 +356,8 @@ class DANSEoutputs(DANSEparameters):
             self,
             exportFolder=None,
             exportNormsAsPickle=False,
-            plots=['norm', 'real-imag']
+            plots=['norm', 'real-imag'],
+            tiDANSEflag=False,
         ):
         """
         Plots a visualization of the evolution of filters in DANSE.
@@ -369,6 +372,9 @@ class DANSEoutputs(DANSEparameters):
             List of plots to export. Possible values are:
             - 'norm' : plot of the norm of each filter
             - 'real-imag' : plot of the real and imaginary parts of each filter
+        tiDANSEflag : bool, optional
+            If True, we consider TI-DANSE (else, DANSE in a fully connected
+            WASN).
         """
         self.check_init()  # check if object is correctly initialised
 
@@ -396,41 +402,24 @@ class DANSEoutputs(DANSEparameters):
                 raise NotImplementedError(f'Unknown/unimplemented plot type {plots[ii]}')
             
             kwargs = {
+                'filters': [np.abs(filt) for filt in self.filters],
+                'filtersEXT': [np.abs(filt) for filt in self.filtersEXT],
+                'filtersCentr': [np.abs(filt) for filt in self.filtersCentr]\
+                    if self.filtersCentr is not None else None,
                 'nSensorsPerNode': self.nSensorPerNode,
                 'refSensorIdx': self.referenceSensor,
                 'bestPerfData': self.bestPerfData,
+                'tiDANSEflag': tiDANSEflag,
             }
             if plots[ii] == 'norm':
-                # Plot figures
-                figs, dataFigs = plot_filters(
-                    [np.abs(filt) for filt in self.filters],
-                    [np.abs(filt) for filt in self.filtersEXT],
-                    [np.abs(filt) for filt in self.filtersCentr] if self.filtersCentr is not None else None,
-                    fignamePrefix='filtnorm',
-                    **kwargs
-                )
-                # Export figures
+                figs, dataFigs = plot_filters(figPrefix='filtnorm', **kwargs)
                 _export(figs, dataFigs, subfolder='filtNorms')
             if plots[ii] == 'real-imag':
                 # Plot real part figures
-                figs, dataFigs = plot_filters(
-                    [np.real(filt) for filt in self.filters],
-                    [np.real(filt) for filt in self.filtersEXT],
-                    [np.real(filt) for filt in self.filtersCentr] if self.filtersCentr is not None else None,
-                    fignamePrefix='filtreal',
-                    **kwargs
-                )
-                # Export figures
+                figs, dataFigs = plot_filters(figPrefix='filtreal', **kwargs)
                 _export(figs, dataFigs, subfolder='filtReal')
-                # Plot iamginary part figures
-                figs, dataFigs = plot_filters(
-                    [np.imag(filt) for filt in self.filters],
-                    [np.imag(filt) for filt in self.filtersEXT],
-                    [np.imag(filt) for filt in self.filtersCentr] if self.filtersCentr is not None else None,
-                    fignamePrefix='filtimag',
-                    **kwargs
-                )
-                # Export figures
+                # Plot iamginary part
+                figs, dataFigs = plot_filters(figPrefix='filtimag', **kwargs)
                 _export(figs, dataFigs, subfolder='filtImag')
 
     def plot_cond(self, exportFolder=None):
@@ -1224,61 +1213,67 @@ def export_sounds(
     if not Path(f'{folder}/wav').is_dir():
         Path(f'{folder}/wav').mkdir()
         print(f'Created .wav export folder ".../{folderShort}/wav".')
+
+    def _export_to_wav(name, data, fs=int(wasn[0].fs)):
+        if name[-4:] != '.wav':
+            if '.' in name:
+                name = name.split('.')[0]
+            name += '.wav'
+        wavfile.write(name, fs, normalize_toint16(data))
+
     for k in range(len(wasn)):
-        data = normalize_toint16(wasn[k].data)
-        wavfile.write(
+        currFsAsInt = int(wasn[k].fs)  # current sampling frequency as int
+        _export_to_wav(
             f'{folder}/wav/noisy_N{k + 1}_Sref{out.referenceSensor + 1}.wav',
-            int(wasn[k].fs), data
+            wasn[k].data, fs=currFsAsInt
         )
-        #
-        data = normalize_toint16(wasn[k].cleanspeech[:, out.referenceSensor])
-        wavfile.write(
+        _export_to_wav(
             f'{folder}/wav/desired_N{k + 1}_Sref{out.referenceSensor + 1}.wav',
-            int(wasn[k].fs), data
+            wasn[k].cleanspeech[:, out.referenceSensor], fs=currFsAsInt
         )
         # vvv if enhancement has been performed
         if len(out.TDdesiredSignals_est[:, k]) > 0:
-            data = normalize_toint16(out.TDdesiredSignals_est[:, k])
-            wavfile.write(
+            _export_to_wav(
                 f'{folder}/wav/enhanced_N{k + 1}.wav',
-                int(wasn[k].fs), data
+                out.TDdesiredSignals_est[:, k], fs=currFsAsInt
             )
             if out.broadcastType == 'wholeChunk' and fullyConnected and\
                 out.simType != 'batch':
                 # Export the fused signals too
                 if not Path(f'{folder}/wav/fused').is_dir():
                     Path(f'{folder}/wav/fused').mkdir()
-                data = normalize_toint16(out.TDfusedSignals[k])
-                wavfile.write(
+                _export_to_wav(
                     f'{folder}/wav/fused/z_N{k + 1}.wav',
-                    int(wasn[k].fs), data
+                    out.TDfusedSignals[k], fs=currFsAsInt
                 )
             elif out.broadcastType != 'wholeChunk':
                 print(f'Node {k+1}: Fused signals not exported (not yet implemented for per-sample broadcasting).')
             elif not fullyConnected:
-                print(f'Node {k+1}: Fused signals not exported (not implemented for non-fully connected WASNs).')
+                if not Path(f'{folder}/wav/fused_ti').is_dir():
+                    Path(f'{folder}/wav/fused_ti').mkdir()
+                _export_to_wav(
+                    f'{folder}/wav/fused/etaMk_N{k + 1}.wav',
+                    out.TDfusedSignalsTI[k], fs=currFsAsInt
+                )
         # vvv if enhancement has been performed and centralised estimate computed
         if out.computeCentralised:
             if len(out.TDdesiredSignals_est_c[:, k]) > 0:
-                data = normalize_toint16(out.TDdesiredSignals_est_c[:, k])
-                wavfile.write(
+                _export_to_wav(
                     f'{folder}/wav/enhancedCentr_N{k + 1}.wav',
-                    int(wasn[k].fs), data
+                    out.TDdesiredSignals_est_c[:, k], fs=currFsAsInt
                 )
         # vvv if enhancement has been performed and local estimate computed
         if out.computeLocal:
             if len(out.TDdesiredSignals_est_l[:, k]) > 0:
-                data = normalize_toint16(out.TDdesiredSignals_est_l[:, k])
-                wavfile.write(
+                _export_to_wav(
                     f'{folder}/wav/enhancedLocal_N{k + 1}.wav',
-                    int(wasn[k].fs), data
+                    out.TDdesiredSignals_est_l[:, k], fs=currFsAsInt
                 )
         if out.computeSingleSensorBroadcast:
             if len(out.TDdesiredSignals_est_ssbc[:, k]) > 0:
-                data = normalize_toint16(out.TDdesiredSignals_est_ssbc[:, k])
-                wavfile.write(
+                _export_to_wav(
                     f'{folder}/wav/enhancedSSBC_N{k + 1}.wav',
-                    int(wasn[k].fs), data
+                    out.TDdesiredSignals_est_ssbc[:, k], fs=currFsAsInt
                 )
     print(f'Signals exported in folder ".../{folderShort}/wav".')
 
@@ -2059,8 +2054,9 @@ def plot_filters(
         filtersCentr=None,
         nSensorsPerNode=None,
         refSensorIdx=0,
-        fignamePrefix='filters',
-        bestPerfData=None
+        figPrefix='filters',
+        bestPerfData=None,
+        tiDANSEflag=False
     ) -> dict:
     """
     Plot filters.
@@ -2081,15 +2077,19 @@ def plot_filters(
         Can be the norm, real part, or imaginary part.
         Can also be the phase or magnitude of the filters.
     filtersCentr : [K x 1] list of [Nf x Nt x J] np.ndarray[real]
-        Centralized DANSE filters per node.
+        Centralized filters per node.
         Can be the norm, real part, or imaginary part.
         Can also be the phase or magnitude of the filters.
     nSensorPerNode : [K x 1] list[int]
         Number of sensors per node.
     refSensorIdx : int
         Index of reference sensor (same for all nodes).
-    fignamePrefix : str
+    figPrefix : str
         Prefix for figure name.
+    bestPerfData : dict
+        Dictionary containing best performance data.
+    tiDANSEflag : bool
+        If True, the inputs are related to TI-DANSE, not just DANSE.
 
     Returns
     ----------
@@ -2098,127 +2098,132 @@ def plot_filters(
     dataFigs : list[np.ndarray]
         List of data corresponding to each figure in `figs`.
     """
+    # Useful sensor to node index reference
+    sensorToNodeIndices = [[ii for _ in range(Mk)]
+                        for ii, Mk in enumerate(nSensorsPerNode)]
+    # Flatten
+    sensorToNodeIndices = [i for s in sensorToNodeIndices for i in s]
 
+    # Compute $\mathbf{w}_k^i$ (network-wide DANSE filters, for all `k`)
+    nwDANSEfilts_allNodes, legNW_allNodes = compute_netwide_danse_filts(
+        filters,
+        filtersEXT,
+        nSensorsPerNode,
+        tiDANSEflag=tiDANSEflag
+    )
+    
+    if tiDANSEflag:
+        maxNorm, minNorm = None, None  # TODO: implement network-wide filter computation for TI-DANSE
+        figs = []
+    else:
+        # Determine plot limits
+        np.seterr(divide = 'ignore')    # avoid annoying warnings
+        l = [np.log10(filt)\
+            for filt in nwDANSEfilts_allNodes]
+        maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+        minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+        if filtersCentr is not None:
+            l = [np.log10(np.mean(filt, axis=0))\
+                for filt in filters + filtersCentr]  # concatenate `filters` and `filtersCentr`
+        else:
+            l = [np.log10(np.mean(filt, axis=0))\
+                for filt in filters]
+        np.seterr(divide = 'warn')      # reset warnings
+        maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+        minNorm2 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+        maxNorm = np.amax([maxNorm1, maxNorm2])
+        minNorm = np.amin([minNorm1, minNorm2])
+
+        # Plot network-wide (TI-)DANSE filters
+        figs = plot_netwide_danse_filts(
+            nwDANSEfilts_allNodes,
+            legNW_allNodes,
+            [maxNorm, minNorm],
+            figPrefix,
+            bestPerfData
+        )
+
+    # Plot filter norms for regular (TI-)DANSE filters
+    figs2, dataFigs = plot_danse_filts(
+        filters,
+        nSensorsPerNode,
+        [maxNorm, minNorm],
+        figPrefix,
+        tiDANSEflag=tiDANSEflag
+    )
+    figs += figs2
+
+    if filtersCentr is not None:
+        # Plot filter norms for centralized filters
+        figs3, dataFigs_c = plot_centr_filts(
+            filtersCentr,
+            nSensorsPerNode,
+            [maxNorm, minNorm],
+            refSensorIdx,
+            figPrefix,
+            bestPerfData,
+            tiDANSEflag=tiDANSEflag
+        )
+        figs += figs3
+        dataFigs += dataFigs_c
+
+    # Transform to dict
+    figs = dict(figs)
+    
+    return figs, dataFigs
+
+
+def format_axes_filt_plot(ax, ti, maxNorm=None, minNorm=None):
+    """Format axes for filter coefficients plots."""
+    ax.autoscale(enable=True, axis='x', tight=True)
+    ax.set(
+        xlabel='STFT time frame index $i$',
+        ylabel='$\\log_{{10}}(E_{{\\nu}}\\{|w_{{k,m}}[\\nu, i]|\\})$',
+        title=ti,
+    )
+    if maxNorm is not None and minNorm is not None:
+        ax.set_ylim([minNorm, maxNorm])
+    ax.legend(loc='lower left')
+    ax.grid(True)
+
+
+def plot_netwide_danse_filts(
+        nwDANSEfilts_allNodes,
+        legNW_allNodes,
+        nSensorsPerNode,
+        maxminNorm,
+        figPrefix='netwide_filters',
+        bestPerfData=None
+    ):
+    """Plot network-wide (TI-)DANSE filters."""
     # Get number of nodes in WASN
-    nNodes = len(filters)
+    nNodes = len(nwDANSEfilts_allNodes)
     # Initialize main lists
     figs = []
-    dataFigs = []
-    
-    def _format_axes(myAx, ti, maxNorm=None, minNorm=None):
-        """
-        Format axes.
-        
-        Parameters
-        ----------
-        myAx : matplotlib.axes._subplots.AxesSubplot
-            Axes handle.
-        ti : str
-            Axes title.
-        maxNorm : float
-            Maximum filter norm.
-        minNorm : float
-            Minimum filter norm.
-        """
-        myAx.autoscale(enable=True, axis='x', tight=True)
-        myAx.set(
-            xlabel='STFT time frame index $i$',
-            ylabel='$\\log_{{10}}(E_{{\\nu}}\\{|w_{{k,m}}[\\nu, i]|\\})$',
-            title=ti,
-        )
-        if maxNorm is not None and minNorm is not None:
-            myAx.set_ylim([minNorm, maxNorm])
-        myAx.legend(loc='lower left')
-        myAx.grid(True)
-
-    # Useful sensor to node index reference
-    sensorToNodeIndices = [
-        [ii for _ in range(Mk)] for ii, Mk in enumerate(nSensorsPerNode)
-    ]
-    # Flatten list
-    sensorToNodeIndices = [
-        item for sublist in sensorToNodeIndices for item in sublist
-    ]
-        
-    # Compute $\mathbf{w}_k^i$ (network-wide DANSE filters, for all `k`)
-    netwideDANSEfilts_allNodes = []
-    legendNetwide_allNodes = []
-    for k in range(nNodes):
-        neighborCount = 0
-        legendNetwide = []
-        netwideDANSEfilts = np.zeros((filters[k].shape[1], 0))
-        for q in range(nNodes):
-            if q == k:
-                currVal = np.mean(
-                    filters[k][:, :, :nSensorsPerNode[k]],
-                    axis=0
-                )
-                for m in range(nSensorsPerNode[k]):
-                    legendNetwide.append(f'$w_{{kk,{m + 1}}}$ (local)')
-            else:
-                idxGkq = nSensorsPerNode[k] + neighborCount
-                currVal = np.mean(
-                    filtersEXT[q][:, 1:, :] *\
-                        filters[k][:, :-1, [idxGkq]],
-                    axis=0
-                )
-                # ^^^ NB: we multiply g_kq^i by the (i-1)-th fusion vectors
-                currVal = np.concatenate(
-                    (np.zeros((1, currVal.shape[1])), currVal),
-                    axis=0
-                )
-                for m in range(nSensorsPerNode[q]):
-                    legendNetwide.append(f'$w_{{qq,{m + 1}}}\\cdot g_{{kq}}$ ($q={q + 1}$)')
-                neighborCount += 1
-            netwideDANSEfilts = np.concatenate(
-                (netwideDANSEfilts, currVal),
-                axis=1
-            )
-        netwideDANSEfilts_allNodes.append(netwideDANSEfilts)
-        legendNetwide_allNodes.append(legendNetwide)
-    
-    # Get ylims
-    np.seterr(divide = 'ignore')    # avoid annoying warnings
-    l = [np.log10(filt)\
-        for filt in netwideDANSEfilts_allNodes]
-    maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-    minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-    if filtersCentr is not None:
-        l = [np.log10(np.mean(filt, axis=0))\
-            for filt in filters + filtersCentr]  # concatenate `filters` and `filtersCentr`
-    else:
-        l = [np.log10(np.mean(filt, axis=0))\
-            for filt in filters]
-    np.seterr(divide = 'warn')      # reset warnings
-    maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-    minNorm2 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-    maxNorm = np.amax([maxNorm1, maxNorm2])
-    minNorm = np.amin([minNorm1, minNorm2])
-
-    # Plot network-wide DANSE filters
     for k in range(nNodes):
         nodeCount = 0
         idxCurrNodeSensor = 0
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-        for m in range(netwideDANSEfilts_allNodes[k].shape[1]):
+        for m in range(nwDANSEfilts_allNodes[k].shape[1]):
             ax.plot(
-                np.log10(netwideDANSEfilts_allNodes[k][:, m]),
+                np.log10(nwDANSEfilts_allNodes[k][:, m]),
                 f'C{nodeCount}-',
-                label=legendNetwide_allNodes[k][m],
+                label=legNW_allNodes[k][m],
                 alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
             )
+
             if bestPerfData is not None:
                 # Add horizontal bar to show best perf coefficients
-                if 'real' in fignamePrefix:
+                if 'real' in figPrefix:
                     data = np.real(bestPerfData['wCentr'][k][:, 1, m])
-                elif 'imag' in fignamePrefix:
+                elif 'imag' in figPrefix:
                     data = np.imag(bestPerfData['wCentr'][k][:, 1, m])
-                elif 'norm' in fignamePrefix:
+                elif 'norm' in figPrefix:
                     data = np.abs(bestPerfData['wCentr'][k][:, 1, m])
                 ax.hlines(
                     y=np.log10(np.mean(data, axis=0)),
                     xmin=0,
-                    xmax=netwideDANSEfilts_allNodes[k].shape[0] - 1,
+                    xmax=nwDANSEfilts_allNodes[k].shape[0] - 1,
                     colors=f'C{nodeCount}',
                     linestyles='dashed',
                     alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
@@ -2232,12 +2237,28 @@ def plot_filters(
         ti = f'Network-wide DANSE filters at node $k={k + 1}$'
         if nSensorsPerNode is not None:
             ti += f' ({nSensorsPerNode[k]} sensors)'
-        _format_axes(ax, ti, maxNorm, minNorm)
+        format_axes_filt_plot(ax, ti, maxminNorm[0], maxminNorm[1])
         fig.tight_layout()
-        figs.append((f'{fignamePrefix}_n{k + 1}_net', fig))
+        figs.append((f'{figPrefix}_n{k + 1}_net', fig))
         plt.close(fig=fig)
 
-    # Plot filter norms for regular DANSE filters
+    return figs
+
+
+def plot_danse_filts(
+        filters,
+        nSensorsPerNode,
+        maxminNorm,
+        figPrefix='filters',
+        tiDANSEflag=False
+    ):
+    """Plot regular (TI-)DANSE filters (i.e., not network-wide)."""
+    # Get number of nodes in WASN
+    nNodes = len(filters)
+    # Initialize main lists
+    figs = []
+    dataFigs = []
+    # Plot filter norms for regular (TI-)DANSE filters
     for k in range(nNodes):
         fig, ax = plt.subplots(1, 1, figsize=(7, 5))
         neighborIndices = [ii for ii in np.arange(nNodes) if ii != k]
@@ -2249,8 +2270,11 @@ def plot_filters(
             if m < nSensorsPerNode[k]:
                 lab += ' (local)'
             else:
-                lab += f' (Node $k={neighborIndices[neighborCount] + 1}$)'
-                neighborCount += 1
+                if tiDANSEflag:
+                    lab += f' ($\\eta_{{-{k + 1}}}$)'
+                else:
+                    lab += f' (Node $k={neighborIndices[neighborCount] + 1}$)'
+                    neighborCount += 1
             # Mean over frequency bins
             np.seterr(divide = 'ignore')   # avoid annoying warnings
             dataPlot[:, m] = np.log10(
@@ -2267,97 +2291,139 @@ def plot_filters(
         if nSensorsPerNode is not None:
             ti += f' ({nSensorsPerNode[k]} sensors)'
         # Format axes
-        _format_axes(ax, ti, maxNorm, minNorm)
+        format_axes_filt_plot(ax, ti, maxminNorm[0], maxminNorm[1])
         fig.tight_layout()
-        figs.append((f'{fignamePrefix}_n{k + 1}', fig))
+        figs.append((f'{figPrefix}_n{k + 1}', fig))
         plt.close(fig=fig)
         dataFigs.append(dataPlot)  # Save data for later use
 
-    if filtersCentr is not None:
-        # Plot filter norms for ``centralized'' (== no-fusion DANSE) filters
-        labelsCentr = [[] for _ in range(nNodes)]
-        for k in range(nNodes):
-            fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-            nodeCount = 0
-            idxCurrNodeSensor = 0
-            dataFig = np.zeros_like(filtersCentr[k][0, :, :], dtype=float)
-            for m in range(filtersCentr[k].shape[2]):        
-                # Get label for legend
-                lab = f'$m={m + 1}$, Node {nodeCount + 1}'
-                if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
-                    lab += ' (reference)'
-                # Mean over frequency bins
-                np.seterr(divide = 'ignore')   # avoid annoying warnings
-                dataFig[:, m] = np.log10(
-                    np.mean(filtersCentr[k][:, :, m], axis=0)
-                )
-                np.seterr(divide = 'warn')     # reset warnings
-                ax.plot(
-                    dataFig[:, m],
-                    f'C{nodeCount}-',
-                    alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
-                    label=lab,
-                )
-                labelsCentr[k].append(lab)
-                if bestPerfData is not None:
-                    # Add horizontal bar to show best perf coefficients
-                    if 'real' in fignamePrefix:
-                        data = np.real(bestPerfData['wCentr'][k][:, 1, m])
-                    elif 'imag' in fignamePrefix:
-                        data = np.imag(bestPerfData['wCentr'][k][:, 1, m])
-                    elif 'norm' in fignamePrefix:
-                        data = np.abs(bestPerfData['wCentr'][k][:, 1, m])
-                    ax.hlines(
-                        y=np.log10(np.mean(data, axis=0)),
-                        xmin=0,
-                        xmax=netwideDANSEfilts_allNodes[k].shape[0] - 1,
-                        colors=f'C{nodeCount}',
-                        linestyles='dashed',
-                        alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
-                    )
-                # Increment node count
-                if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
-                    nodeCount += 1
-                    idxCurrNodeSensor = 0  # Reset sensor count
-                else:
-                    idxCurrNodeSensor += 1  # Increment sensor count
-            # Set title
-            ti = f'Centralized filters at node $k={k + 1}$'
-            # Format axes
-            _format_axes(ax, ti, maxNorm, minNorm)
-            fig.tight_layout()
-            figs.append((f'{fignamePrefix}_c{k + 1}', fig))
-            plt.close(fig=fig)
-            dataFigs.append(dataFig)  # Save data for later use
-
-        # # Plot difference between centralized filters
-        # # and network-wide DANSE filters
-        # for k in range(nNodes):
-        #     fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-        #     for m in range(filtersCentr[k].shape[2]):   
-        #         mse1 = np.abs(
-        #             np.mean(filtersCentr[k][:, :, m], axis=0) -\
-        #             netwideDANSEfilts_allNodes[k][:, m].T
-        #         ) ** 2
-        #         # Plot
-        #         ax.plot(
-        #             mse1.T,
-        #             label=labelsCentr[k][m]
-        #         )
-        #         # Set title
-        #         ti = f'$\\mathrm{{MSE}}_1$ at node $k={k + 1}$'
-        #         # Format axes
-        #         _format_axes(ax, ti)
-        #         ax.set_ylabel('$\\log_{{10}}||\\hat{{\\mathbf{{w}}}}_k - \\mathbf{{w}}_k||^2$ (avg. over $\\nu$)')
-        #         fig.tight_layout()
-        #         plt.close(fig=fig)
-        #         figs.append((f'{fignamePrefix}_c{k + 1}_net_mse1', fig))
-    
-
-    # Transform to dict
-    figs = dict(figs)
-    
     return figs, dataFigs
+
+
+def plot_centr_filts(
+        filtersCentr,
+        nSensorsPerNode,
+        maxminNorm,
+        refSensorIdx,
+        figPrefix='filters',
+        bestPerfData=None,
+        tiDANSEflag=False
+    ):
+    # Get number of nodes in WASN
+    nNodes = len(filtersCentr)
+    # Initialize main lists
+    figs = []
+    dataFigs = []
+    # Plot filter norms for ``centralized'' (== no-fusion DANSE) filters
+    labelsCentr = [[] for _ in range(nNodes)]
+    for k in range(nNodes):
+        fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+        nodeCount = 0
+        idxCurrNodeSensor = 0
+        dataFig = np.zeros_like(filtersCentr[k][0, :, :], dtype=float)
+        for m in range(filtersCentr[k].shape[2]):        
+            # Get label for legend
+            lab = f'$m={m + 1}$, Node {nodeCount + 1}'
+            if m == np.sum(nSensorsPerNode[:k]) + refSensorIdx:
+                lab += ' (reference)'
+            # Mean over frequency bins
+            np.seterr(divide = 'ignore')   # avoid annoying warnings
+            dataFig[:, m] = np.log10(
+                np.mean(filtersCentr[k][:, :, m], axis=0)
+            )
+            np.seterr(divide = 'warn')     # reset warnings
+            ax.plot(
+                dataFig[:, m],
+                f'C{nodeCount}-',
+                alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
+                label=lab,
+            )
+            labelsCentr[k].append(lab)
+            if bestPerfData is not None:
+                # Add horizontal bar to show best perf coefficients
+                if 'real' in figPrefix:
+                    data = np.real(bestPerfData['wCentr'][k][:, 1, m])
+                elif 'imag' in figPrefix:
+                    data = np.imag(bestPerfData['wCentr'][k][:, 1, m])
+                elif 'norm' in figPrefix:
+                    data = np.abs(bestPerfData['wCentr'][k][:, 1, m])
+                ax.hlines(
+                    y=np.log10(np.mean(data, axis=0)),
+                    xmin=0,
+                    xmax=filtersCentr[k].shape[1] - 1,
+                    colors=f'C{nodeCount}',
+                    linestyles='dashed',
+                    alpha=1 / nSensorsPerNode[nodeCount] * (idxCurrNodeSensor + 1),
+                )
+            # Increment node count
+            if m == np.sum(nSensorsPerNode[:nodeCount + 1]) - 1:
+                nodeCount += 1
+                idxCurrNodeSensor = 0  # Reset sensor count
+            else:
+                idxCurrNodeSensor += 1  # Increment sensor count
+        # Set title
+        ti = f'Centralized filters at node $k={k + 1}$'
+        # Format axes
+        format_axes_filt_plot(ax, ti, maxminNorm[0], maxminNorm[1])
+        fig.tight_layout()
+        figs.append((f'{figPrefix}_c{k + 1}', fig))
+        plt.close(fig=fig)
+        dataFigs.append(dataFig)  # Save data for later use
+
+    return figs, dataFigs
+
+
+def compute_netwide_danse_filts(
+        filters,
+        filtersEXT,
+        nSensorsPerNode,
+        tiDANSEflag=False
+    ):
+    """Compute network-wide DANSE filters."""
+    nNodes = len(filters)
+    nwDANSEfilts_allNodes = []
+    legNW_allNodes = []
+    for k in range(nNodes):
+        neighborCount = 0
+        legendNetwide = []
+        netwideDANSEfilts = np.zeros((filters[k].shape[1], 0))
+
+        if tiDANSEflag:
+            print('TI-DANSE network-wide filters computation not implemented yet.')
+            return None, None 
+        else:
+            for q in range(nNodes):
+                if q == k:
+                    currVal = np.mean(
+                        filters[k][:, :, :nSensorsPerNode[k]],
+                        axis=0
+                    )
+                    for m in range(nSensorsPerNode[k]):
+                        legendNetwide.append(f'$w_{{kk,{m + 1}}}$ (local)')
+                else:
+                    idxGkq = nSensorsPerNode[k] + neighborCount
+                    currVal = np.mean(
+                        filtersEXT[q][:, 1:, :] *\
+                            filters[k][:, :-1, [idxGkq]],
+                        axis=0
+                    )
+                    # ^^^ NB: we multiply g_kq^i by the (i-1)-th fusion vectors
+                    currVal = np.concatenate(
+                        (np.zeros((1, currVal.shape[1])), currVal),
+                        axis=0
+                    )
+                    for m in range(nSensorsPerNode[q]):
+                        legendNetwide.append(f'$w_{{qq,{m + 1}}}\\cdot g_{{kq}}$ ($q={q + 1}$)')
+                    neighborCount += 1
+                netwideDANSEfilts = np.concatenate(
+                    (netwideDANSEfilts, currVal),
+                    axis=1
+                )
+        
+        nwDANSEfilts_allNodes.append(netwideDANSEfilts)
+        legNW_allNodes.append(legendNetwide)
+    
+    return nwDANSEfilts_allNodes, legNW_allNodes
 
 
 def export_danse_outputs(
@@ -2414,7 +2480,8 @@ def export_danse_outputs(
             out.plot_filter_evol(
                 p.exportParams.exportFolder,
                 exportNormsAsPickle=p.exportParams.filterNorms,  # boolean to export filter norms as pickle
-                plots=['norm']
+                plots=['norm'],
+                tiDANSEflag=not p.is_fully_connected_wasn()
             )
             print('Done.')
 

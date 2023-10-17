@@ -2730,6 +2730,7 @@ class TIDANSEvariables(DANSEvariables):
         # `etaMk`: in-network sum minus local fused signal.
         #       == $\dot{\eta}_{-k}[n]$ extrapolating notation from [1] & [2].
         self.etaMk = [np.array([]) for _ in range(self.nNodes)]
+        self.etaMkFullTD = [np.array([]) for _ in range(self.nNodes)]
         #
         self.treeFormationCounter = 0  # counting the number of tree-formations
         self.currentWasnTreeObj = None  # current tree WASN object
@@ -2904,6 +2905,7 @@ class TIDANSEvariables(DANSEvariables):
             else:   # <-- case where $\eta$ has not yet been computed, e.g., due to SROs
                 self.etaMk[l] = np.array([])
 
+
     def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
         """
         Performs an update of the DANSE filter coefficients at node `k` and
@@ -3068,6 +3070,11 @@ class TIDANSEvariables(DANSEvariables):
             axis=1
         )
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
+
+        # Save full time-domain $\eta_{-k}$ for later use
+        self.etaMkFullTD[k] = np.concatenate((
+            self.etaMkFullTD[k], self.etaMk[k][:self.Ns]  # first `Ns` samples
+        ))
 
         # Go to frequency domain
         yTildeHatCurr = np.fft.fft(
