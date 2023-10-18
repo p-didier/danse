@@ -2118,38 +2118,34 @@ def plot_filters(
         nSensorsPerNode,
         tiDANSEflag=tiDANSEflag
     )
-    
-    if tiDANSEflag:
-        maxNorm, minNorm = None, None  # TODO: implement network-wide filter computation for TI-DANSE
-        figs = []
-    else:
-        # Determine plot limits
-        np.seterr(divide = 'ignore')    # avoid annoying warnings
-        l = [np.log10(filt)\
-            for filt in nwDANSEfilts_allNodes]
-        maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-        minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-        if filtersCentr is not None:
-            l = [np.log10(np.mean(filt, axis=0))\
-                for filt in filters + filtersCentr]  # concatenate `filters` and `filtersCentr`
-        else:
-            l = [np.log10(np.mean(filt, axis=0))\
-                for filt in filters]
-        np.seterr(divide = 'warn')      # reset warnings
-        maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-        minNorm2 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
-        maxNorm = np.amax([maxNorm1, maxNorm2])
-        minNorm = np.amin([minNorm1, minNorm2])
 
-        # Plot network-wide (TI-)DANSE filters
-        figs = plot_netwide_danse_filts(
-            nwDANSEfilts_allNodes,
-            legNW_allNodes,
-            nSensorsPerNode,
-            [maxNorm, minNorm],
-            figPrefix,
-            bestPerfData
-        )
+    # Determine plot limits
+    np.seterr(divide = 'ignore')    # avoid annoying warnings
+    l = [np.log10(filt)\
+        for filt in nwDANSEfilts_allNodes]
+    maxNorm1 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    minNorm1 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    if filtersCentr is not None:
+        l = [np.log10(np.mean(filt, axis=0))\
+            for filt in filters + filtersCentr]  # concatenate `filters` and `filtersCentr`
+    else:
+        l = [np.log10(np.mean(filt, axis=0))\
+            for filt in filters]
+    np.seterr(divide = 'warn')      # reset warnings
+    maxNorm2 = np.nanmax([np.nanmax(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    minNorm2 = np.nanmin([np.nanmin(ll[np.isfinite(ll)]) for ll in l])   # avoid NaNs and inf's
+    maxNorm = np.amax([maxNorm1, maxNorm2])
+    minNorm = np.amin([minNorm1, minNorm2])
+
+    # Plot network-wide (TI-)DANSE filters
+    figs = plot_netwide_danse_filts(
+        nwDANSEfilts_allNodes,
+        legNW_allNodes,
+        nSensorsPerNode,
+        [maxNorm, minNorm],
+        figPrefix,
+        bestPerfData
+    )
 
     # Plot filter norms for regular (TI-)DANSE filters
     figs2, dataFigs = plot_danse_filts(
@@ -2396,37 +2392,53 @@ def compute_netwide_danse_filts(
         legendNetwide = []
         netwideDANSEfilts = np.zeros((filters[k].shape[1], 0))
 
-        if tiDANSEflag:
-            print('TI-DANSE network-wide filters computation not implemented yet.')
-            return None, None 
-        else:
-            for q in range(nNodes):
-                if q == k:
+        for q in range(nNodes):
+            if q == k:
+                currVal = np.mean(
+                    filters[k][:, :, :nSensorsPerNode[k]],
+                    axis=0
+                )
+                for m in range(nSensorsPerNode[k]):
+                    legendNetwide.append(f'$w_{{kk,{m + 1}}}$ (local)')
+            else:
+                if tiDANSEflag:
+                    # In the case of TI-DANSE, the legend entries and the 
+                    # network-wide filter computation indices are slightly
+                    # different than for a fully connected case.
+                    for m in range(nSensorsPerNode[q]):
+                        legendNetwide.append(f'$p_{{q,{m + 1}}}\\cdot g_{{k}}$ ($q={q + 1}$)')
+                    idxGkq = nSensorsPerNode[k]
+                    # Compute network-wide DANSE filters (mean over frequency bins)
                     currVal = np.mean(
-                        filters[k][:, :, :nSensorsPerNode[k]],
+                        # vvv NB: need to pay attention to dimension of `filtersEXT`
+                        # In TI-DANSE, they span the entire dimension of `wTilde`.
+                        # Here, then should stand `filtersEXT[q][:, 1:, :-1]` or
+                        # `filtersEXT[q][:, 1:, :-1]/filtersEXT[q][:, 1:, -1]`
+                        filtersEXT[q][:, 1:, :-1] *\
+                            filters[k][:, :-1, [idxGkq]],
                         axis=0
                     )
-                    for m in range(nSensorsPerNode[k]):
-                        legendNetwide.append(f'$w_{{kk,{m + 1}}}$ (local)')
                 else:
+                    for m in range(nSensorsPerNode[q]):
+                        legendNetwide.append(f'$w_{{qq,{m + 1}}}\\cdot g_{{kq}}$ ($q={q + 1}$)')
                     idxGkq = nSensorsPerNode[k] + neighborCount
+                    # Compute network-wide DANSE filters (mean over frequency bins)
                     currVal = np.mean(
                         filtersEXT[q][:, 1:, :] *\
                             filters[k][:, :-1, [idxGkq]],
                         axis=0
                     )
-                    # ^^^ NB: we multiply g_kq^i by the (i-1)-th fusion vectors
-                    currVal = np.concatenate(
-                        (np.zeros((1, currVal.shape[1])), currVal),
-                        axis=0
-                    )
-                    for m in range(nSensorsPerNode[q]):
-                        legendNetwide.append(f'$w_{{qq,{m + 1}}}\\cdot g_{{kq}}$ ($q={q + 1}$)')
-                    neighborCount += 1
-                netwideDANSEfilts = np.concatenate(
-                    (netwideDANSEfilts, currVal),
-                    axis=1
+                # ^^^ NB: we multiply g_kq^i by the (i-1)-th fusion vectors
+                currVal = np.concatenate(
+                    (np.zeros((1, currVal.shape[1])), currVal),
+                    axis=0
                 )
+                neighborCount += 1
+
+            netwideDANSEfilts = np.concatenate(
+                (netwideDANSEfilts, currVal),
+                axis=1
+            )
         
         nwDANSEfilts_allNodes.append(netwideDANSEfilts)
         legNW_allNodes.append(legendNetwide)
