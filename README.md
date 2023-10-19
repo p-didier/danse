@@ -4,7 +4,7 @@
 As of 09.11.2022:
 - Basic DANSE algorithm with fully connected network topology.
 - GEVD-DANSE possible.
-- Including SRO estimation and compensation as described in https://arxiv.org/abs/2211.02489.
+- Including SRO estimation and compensation as described in [https://arxiv.org/abs/2211.02489](https://ieeexplore.ieee.org/document/10042012).
 
 To **install** all dependencies --> most straightforwardly done via a [Conda](https://www.anaconda.com/products/distribution) virtual environment:
 
