@@ -121,7 +121,7 @@ def danse_it_up(
         print(f'Running {p.danseParams.simType} TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         if p.danseParams.simType == 'batch':  # true batch mode
             raise NotImplementedError('Batch mode not implemented / tested yet.')
-            danse_function = core.tidanse_batch
+            # danse_function = core.tidanse_batch
         else:
             danse_function = core.tidanse
     # Launch DANSE

@@ -386,7 +386,7 @@ class DANSEoutputs(DANSEparameters):
                     if not os.path.exists(fullExportFolder):
                         os.makedirs(fullExportFolder)
                     fig.savefig(f'{fullExportFolder}/{title}.png', dpi=300)
-                    fig.savefig(f'{fullExportFolder}/{title}.pdf')
+                    # fig.savefig(f'{fullExportFolder}/{title}.pdf')
             else:
                 plt.close(fig)
             # Export data
@@ -2414,7 +2414,7 @@ def compute_netwide_danse_filts(
                         # In TI-DANSE, they span the entire dimension of `wTilde`.
                         # Here, then should stand `filtersEXT[q][:, 1:, :-1]` or
                         # `filtersEXT[q][:, 1:, :-1]/filtersEXT[q][:, 1:, -1]`
-                        filtersEXT[q][:, 1:, :-1] *\
+                        filtersEXT[q][:, 1:, :-1] / filtersEXT[q][:, 1:, [-1]] *\
                             filters[k][:, :-1, [idxGkq]],
                         axis=0
                     )
@@ -2478,12 +2478,12 @@ def export_danse_outputs(
         if p.danseParams.simType == 'batch':
             fig = out.plot_mmse_cost()
             fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.png', dpi=300)
-            fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.pdf')
+            # fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.pdf')
             plt.close(fig)
         elif p.danseParams.simType == 'online' and p.exportParams.mseBatchPerfPlot:
             fig = out.plot_batch_cost_at_each_update()
             fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.png', dpi=300)
-            fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.pdf')
+            # fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.pdf')
 
         # Export filter coefficients
         if p.exportParams.filters:

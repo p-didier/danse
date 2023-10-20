@@ -1,17 +1,16 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231020_tests/danse/test5_stopAfter300ups_noSROs
+  exportFolder: .\danse\out/20231012_tests/currentState/test5_Mk2222_metricsAfter15s
   metricsInPlots:
   - snr
   - sisnr
   - estoi
   sroEstimPerfPlot: true
+  filters: false
   conditionNumberPlot: false
   mseBatchPerfPlot: false
-  bypassGlobalPickleExport: true  # if true, do not export the big outputs file for further post-processing
 danseParams:
-  stopUpdatesAfter: 300
   # winWOLAanalysisType: rect
   # winWOLAsynthesisType: rect
   noFusionAtSingleSensorNodes: true
@@ -21,8 +20,8 @@ danseParams:
   performGEVD: true
   # performGEVD: false
   simType: online
-  # nodeUpdating: asy
-  nodeUpdating: seq
+  nodeUpdating: asy
+  # nodeUpdating: seq
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
@@ -31,7 +30,6 @@ danseParams:
   # computeLocal: false
   # computeCentralised: false
   filterInitType: selectFirstSensor
-  # filterInitType: random
   # filterInitType: fixedValue
   # filterInitFixedValue: 1
   # covMatRandomInitScaling: 0  # <-- init SCMs as zeros
@@ -42,10 +40,8 @@ danseParams:
   t_expAvg50p: 1
   t_expAvg50pExternalFilters: 1
   # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
-  forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`. If == 0, no exp. averaging.
-  timeBtwExternalFiltUpdates: 0
-  # timeBtwExternalFiltUpdates: 0.5
-  onlyBroadcastRefSensorSigs: false # /!\ /!\ /!\ /!\
+  forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`
+  timeBtwExternalFiltUpdates: 0.
   # timeBtwExternalFiltUpdates: 99999.
   covMatInitType: fully_random
   printoutsAndPlotting:
@@ -54,8 +50,8 @@ danseParams:
   # vvvvvvvvv Metrics vvvvvvvvv
   # startComputeMetricsAt: after_5s
   # startComputeMetricsAt: after_10s
-  # startComputeMetricsAt: after_15s
-  startComputeMetricsAt: after_20s
+  startComputeMetricsAt: after_15s
+  # startComputeMetricsAt: after_20s
   # startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
   # broadcastType: wholeChunk
@@ -86,8 +82,6 @@ wasnParams:
   trueRoom: true
   # Diffuse noise params
   diffuseNoise: false
-  diffuseNoisePowerFactor: 0.
-  typeDiffuseNoise: noise
   #
   VADenergyDecrease_dB: 40
   VADwinLength: 0.04  # [s]
@@ -98,7 +92,7 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 25  # [s]
+  sigDur: 20  # [s]
   # selfnoiseSNR: 999999999  # [dB]
   # selfnoiseSNR: 99  # [dB]
   # selfnoiseSNR: 60  # [dB]
@@ -106,11 +100,10 @@ wasnParams:
   layoutType: random
   # layoutType: all_nodes_in_center
   # minDistToWalls: 0.5
-  t60: 0.0  # [s]
+  t60: 0.4  # [s]
   # nSensorPerNode: '[1, 1, 1]'
-  # nSensorPerNode: '[1, 1, 1, 1]'
   # nSensorPerNode: '[5,5,5,5]'
-  nSensorPerNode: '[2, 3]'
+  # nSensorPerNode: '[2, 2]'
   # nSensorPerNode: '[1, 3, 2, 5]'
   # nSensorPerNode: '[2,2,2,2,2]'
   # nSensorPerNode: '[2, 1]'
@@ -118,8 +111,7 @@ wasnParams:
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
   # nSensorPerNode: '[1, 2, 3]'
-  # nSensorPerNode: '[1, 2, 3, 4]'
-  # nSensorPerNode: '[2, 2, 2, 2]'
+  nSensorPerNode: '[2, 2, 2, 2]'
   #
   snrBasis: at_mic_0
   snr: 5
@@ -137,7 +129,6 @@ wasnParams:
   # noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   noiseSignalFile:
   - .\\danse\\tests\\sigs\\02_noise\\ssn\\ssn_3729-6852-0026.wav
-  - .\\danse\\tests\\sigs\\02_noise\\ssn\\ssn_2830-3980-0002.wav
   referenceSensor: 0
   vadFilesFolder: .\danse\vad_files
   #
@@ -147,5 +138,4 @@ wasnParams:
     commDistance: 4.0
     plotTopo: false
     seed: 12348
-    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'
-    # userDefinedTopo: '[[1, 1, 0, 0], [1, 1, 1, 0], [0, 1, 1, 1], [0, 0, 1, 1]]'
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'  # compact way to write lists

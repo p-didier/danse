@@ -982,6 +982,13 @@ class DANSEvariables(base.DANSEparameters):
 
         return self
     
+    def check_stop_updates(self, k):
+        """Check if we should stop the DANSE updates according to
+        `self.stopUpdatesAfter`. Returns `True` if we should stop, `False`
+        otherwise."""
+        return self.i[k] > self.stopUpdatesAfter\
+            if self.stopUpdatesAfter is not None else False
+    
     def init_covmats_from_batch(self):
         """
         Initialize covariance matrices using batch estimates and initial
@@ -1283,7 +1290,8 @@ class DANSEvariables(base.DANSEparameters):
             self.build_yssbc(tCurr, fs, k)
         if self.computeLocal:  # extract local info from `\tilde{y}_k`
             self.build_ylocal(k)
-        # Account for buffer flags
+
+        # Account for SRO-induced buffer flags
         skipUpdate, skipUpdateCentr = self.compensate_sros(k, tCurr)
 
         if self.preGivenFilters.active:  # use given filters
@@ -1293,7 +1301,9 @@ class DANSEvariables(base.DANSEparameters):
             self.spatial_covariance_matrix_update(k)
             # Check quality of covariance matrix estimates 
             self.check_covariance_matrices(k, tCurr=tCurr)
-            if not skipUpdate and not bypassUpdateEventMat:
+
+            if not skipUpdate and not bypassUpdateEventMat\
+                and not self.check_stop_updates(k):
                 # If covariance matrices estimates are full-rank, update filters
                 self.perform_update(k, skipUpdateCentr=skipUpdateCentr)
                 # ^^^ depends on outcome of `check_covariance_matrices()`.
@@ -1302,11 +1312,10 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTilde[k][:, self.i[k] + 1, :] = self.wTilde[k][:, self.i[k], :]
                 if self.computeLocal:
                     self.wLocal[k][:, self.i[k] + 1, :] = self.wLocal[k][:, self.i[k], :]
-                if bypassUpdateEventMat:
-                    if self.computeCentralised:
-                        self.wCentr[k][:, self.i[k] + 1, :] = self.wCentr[k][:, self.i[k], :]
-                    if self.computeSingleSensorBroadcast:
-                        self.wSSBC[k][:, self.i[k] + 1, :] = self.wSSBC[k][:, self.i[k], :]
+                if self.computeCentralised:
+                    self.wCentr[k][:, self.i[k] + 1, :] = self.wCentr[k][:, self.i[k], :]
+                if self.computeSingleSensorBroadcast:
+                    self.wSSBC[k][:, self.i[k] + 1, :] = self.wSSBC[k][:, self.i[k], :]
                 if skipUpdate:
                     print(f'Node {k+1}: {self.i[k]+1}-th update skipped.')
             if self.bypassUpdates:
@@ -1323,12 +1332,6 @@ class DANSEvariables(base.DANSEparameters):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
-
-
-        # if not np.allclose(self.wCentr[k], self.wSSBC[k]):
-        #     print('!! dCentr != dSSBC !!')
-        # if not np.allclose(self.dCentr, self.dSSBC):
-        #     print('!! dCentr != dSSBC !!')
 
     def update_using_pregiven_filters(self, k):
         """Update filters using pre-given coefficients."""
@@ -1473,7 +1476,15 @@ class DANSEvariables(base.DANSEparameters):
             check1 = __full_rank_check(RnnMat)
             check2 = __full_rank_check(RyyMat)
             return check1 and check2
-
+        
+        def _num_updates_cond(n):
+            """Helper function: check number of updates condition."""
+            cond1 = self.numUpdatesRyy[k] > n  # full rank condition
+            cond2 = self.numUpdatesRnn[k] > n  # full rank condition
+            # cond3 = self.numUpdatesRyy[k] >= int(self.numUpdatesRnn[k] * 0.75)  # fair number of updates condition
+            # cond4 = self.numUpdatesRnn[k] >= int(self.numUpdatesRyy[k] * 0.75)  # fair number of updates condition
+            return cond1 and cond2# and cond3 and cond4
+        
         if self.covMatInitType  == 'batch_estimates':
             # If the covariance matrices are initialized from batch estimates,
             # start updating the filters right away.
@@ -1483,8 +1494,7 @@ class DANSEvariables(base.DANSEparameters):
             self.startUpdatesSSBC[k] = True
         else:
             if not self.startUpdates[k] and tCurr >= self.startUpdatesAfterAtLeast:
-                if self.numUpdatesRyy[k] > self.Ryytilde[k].shape[-1] and \
-                    self.numUpdatesRnn[k] > self.Ryytilde[k].shape[-1]:
+                if _num_updates_cond(self.Ryytilde[k].shape[-1]):
                     if self.performGEVD:
                         if _check_validity_gevd(self.Rnntilde[k], self.Ryytilde[k]):
                             self.startUpdates[k] = True# and self.startUpdatesCentr[k]
@@ -1496,8 +1506,7 @@ class DANSEvariables(base.DANSEparameters):
                 # Local estimate
                 if self.computeLocal and not self.startUpdatesLocal[k]\
                     and tCurr >= self.startUpdatesAfterAtLeast:
-                    if self.numUpdatesRyy[k] > self.Ryylocal[k].shape[-1] and \
-                        self.numUpdatesRnn[k] > self.Ryylocal[k].shape[-1]:
+                    if _num_updates_cond(self.Ryylocal[k].shape[-1]):
                         if self.performGEVD:
                             if _check_validity_gevd(self.Rnnlocal[k], self.Ryylocal[k]):
                                 self.startUpdatesLocal[k] = True# and\
@@ -1510,8 +1519,7 @@ class DANSEvariables(base.DANSEparameters):
                 # Centralised estimate
                 if self.computeCentralised and not self.startUpdatesCentr[k]\
                     and tCurr >= self.startUpdatesAfterAtLeast:
-                    if self.numUpdatesRyy[k] > self.Ryycentr[k].shape[-1] and \
-                        self.numUpdatesRnn[k] > self.Ryycentr[k].shape[-1]:
+                    if _num_updates_cond(self.Ryycentr[k].shape[-1]):
                         if self.performGEVD:
                             if _check_validity_gevd(self.Rnncentr[k], self.Ryycentr[k]):
                                 self.startUpdatesCentr[k] = True
@@ -1521,8 +1529,7 @@ class DANSEvariables(base.DANSEparameters):
                 # Single-sensor broadcast estimate
                 if self.computeSingleSensorBroadcast and not self.startUpdatesSSBC[k]\
                     and tCurr >= self.startUpdatesAfterAtLeast:
-                    if self.numUpdatesRyy[k] > self.RyySSBC[k].shape[-1] and \
-                        self.numUpdatesRnn[k] > self.RyySSBC[k].shape[-1]:
+                    if _num_updates_cond(self.RyySSBC[k].shape[-1]):
                         if self.performGEVD:
                             if _check_validity_gevd(self.RnnSSBC[k], self.RyySSBC[k]):
                                 self.startUpdatesSSBC[k] = True
@@ -1656,8 +1663,10 @@ class DANSEvariables(base.DANSEparameters):
                 # If node `k` has only one sensor, do not perform external
                 # filter update (i.e., no "single-sensor signal fusion", as
                 # there is already just one channel).
-                self.wTildeExt[k][:, self.i[k] + 1, :] =\
-                    self.wTildeExt[k][:, self.i[k], :]
+                self.wTildeExt[k][:, self.i[k] + 1, :] = np.ones(
+                    (self.wTildeExt[k].shape[0], self.wTildeExt[k].shape[2]),
+                    dtype=complex
+                )
             else:
                 if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
                     # No relaxation (i.e., no "external" filters)
@@ -1860,7 +1869,7 @@ class DANSEvariables(base.DANSEparameters):
                             idxStart = int(np.sum([
                                 self.nSensorPerNode[i] for i in range(self.nNodes)\
                                     if i != k and i < q
-                            ])) - 1
+                            ]))# - 1
                         idxEnd = idxStart + self.nSensorPerNode[q]
 
                         yCurrBufferCentr = np.concatenate(
@@ -2157,15 +2166,20 @@ class DANSEvariables(base.DANSEparameters):
                 self.Ryycentr[k],
                 self.Rnncentr[k],
                 y=self.yHatCentr[k][:, self.i[k], :],
-                vad=self.centrVADframes[self.i[k]]
+                # vad=self.centrVADframes[self.i[k]]
+                vad=currVad
             )
             # Save
             self.yyHcentr[k][self.i[k], :, :, :] = yyHcurr
 
             # Conditional updating of Ryy and Rnn
+            # self.conditional_scm_updating(
+            #     k, self.centrVADframes[self.i[k]], RyyCurr, RnnCurr, yyHcurr, 'centr'
+            # )
             self.conditional_scm_updating(
-                k, self.centrVADframes[self.i[k]], RyyCurr, RnnCurr, yyHcurr, 'centr'
+                k, currVad, RyyCurr, RnnCurr, yyHcurr, 'centr'
             )
+
             # Consider condition number
             if self.saveConditionNumber and\
                 self.i[k] - self.lastCondNumberSaveRyyCentr[k] >=\
@@ -2740,6 +2754,7 @@ class TIDANSEvariables(DANSEvariables):
         #
         self.treeFormationCounter = 0  # counting the number of tree-formations
         self.currentWasnTreeObj = None  # current tree WASN object
+        self.justStartedUpdates = np.full(self.nNodes, False)  # init to True
         # ------- SRO compensation variables -------
         if self.compensationStrategy == 'network-wide':
             self.localSROwrtRoot = np.zeros(self.nNodes)
@@ -2884,10 +2899,10 @@ class TIDANSEvariables(DANSEvariables):
         self.zLocal[k] = copy.deepcopy(self.zLocalPrime[k])
         for l in self.upstreamNeighbors[k]:
             if len(self.zLocal[l] > 0):  # do not consider empty buffers
-                if self.compensateSROs:
-                    if self.compensationStrategy == 'node-specific':
-                        # Account for SROs when summing
-                        raise NotImplementedError  # TODO: implement
+                # if self.compensateSROs:
+                #     if self.compensationStrategy == 'node-specific':
+                #         # Account for SROs when summing
+                #         raise NotImplementedError  # TODO: implement
                 self.zLocal[k] += self.zLocal[l]
 
         # At the root, the sum is complete
@@ -3131,12 +3146,23 @@ class TIDANSEvariables(DANSEvariables):
         if not self.startUpdates[k]:
             p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
         else:
-            # If the external filters have started updating, we must 
-            # transform by the inverse of the part of the estimator
-            # corresponding to the in-network sum.
-            # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
-            #     self.wTildeExt[k][:, self.i[k], -1:]
-            p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
+            if not self.justStartedUpdates[k] or\
+                np.any(self.wTildeExt[k][:, self.i[k], -1:] == 0):
+                # At the first effective iteration, still only set
+                # p_k = w_kk (cf. [2] Section V-A).
+                # - We also use this `if`-statement to avoid `NaN` problems
+                #   because of division by a not-yet-updated `Gk`.
+                p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
+                self.justStartedUpdates[k] = True
+            else:
+                # If the external filters have started updating, we 
+                # transform by the inverse of the part of the estimator
+                # corresponding to the in-network sum.
+                p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
+                    self.wTildeExt[k][:, self.i[k], -1:]
+                
+                if k == 1:
+                    stop = 1
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
 

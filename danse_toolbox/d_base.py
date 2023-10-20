@@ -116,6 +116,8 @@ class Hyperparameters:
         # sample broadcast by adapting the DANSE-events creation mechanism.
     # Other
     bypassUpdates: bool = False   # if True, do not update filters.
+    stopUpdatesAfter: int = None  # [iter] stop updates after this many
+        # iterations. If None, do not stop.
 
 @dataclass
 class PrintoutsAndPlotting:
