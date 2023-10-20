@@ -20,7 +20,15 @@ def build_scenario(p: classes.WASNparameters):
     Interprets parameters to decide whether to simulate an actual room,
     or to generate random impulse responses.
 
-    
+    Parameters
+    ----------
+    p : `WASNparameters` object
+        Parameters.
+
+    Returns
+    -------
+    room : `pyroomacoustics.room.ShoeBox` object
+        Room (acoustic scenario) object.
     vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
     wetSpeeches : [Nnodes x 1] list of [Nm[k] x N] np.ndarray (float)
@@ -42,18 +50,18 @@ def build_scenario(p: classes.WASNparameters):
     # Get wet signals for each sensor of each node, for each raw source signals
     wetSpeeches = get_wet_source_signals(irs_d, dRaw)
     # If necessary, compute node- and source-specific VADs
+    vad = None
     if p.signalType == 'from_file' or (p.signalType == 'random' and p.randSignalsParams.pauseType != 'none'):
         vad = get_vad(wetSpeeches, p)
-    # Sum wet signals over sources
+    # Sum wet speech signals over sources
     wetSpeeches = [np.sum(wetsig, axis=-1) for wetsig in wetSpeeches]
-
+    # Deal with noise sources
+    wetNoises = None
     if p.nNoiseSources > 0:
         wetNoises = get_wet_source_signals(irs_n, nRaw)
         wetNoises = [np.sum(wetsig, axis=-1) for wetsig in wetNoises]
         if 'mic' in p.snrBasis:
             check_correct_snr_at_ref_mic(p, wetSpeeches, wetNoises)
-    else:
-        wetNoises = None
 
     return room, vad, wetSpeeches, wetNoises
 

@@ -188,13 +188,10 @@ class DANSEparameters(Hyperparameters):
         # (used iff `simType == 'online'`)
     WOLAovlp: float = .5    # WOLA window overlap [*100%]
         # (used iff `simType == 'online'`)
-    nodeUpdating: str = 'seq'   # node-updating strategy
+    nodeUpdating: str = 'seq'   # node-updating strategy (also valid for [5])
         # - "seq": round-robin updating [1]
         # - "sim": simultaneous updating [2]
         # - "asy": asynchronous updating [2]
-        # - "topo-indep_seq": round-robin updating for TI-DANSE [5]
-        # - "topo-indep_sim": simultaneous updating for TI-DANSE [5]
-        # - "topo-indep_asy": asynchronous updating for TI-DANSE [5]
     seqUpdateStartNodeIdx : int = 0  # index of node updating first.
         # Used iff `'seq' in nodeUpdating`.
     broadcastType: str = 'wholeChunk'    # type of broadcast

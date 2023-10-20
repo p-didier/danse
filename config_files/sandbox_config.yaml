@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231020_tests/danse/test5_stopAfter300ups_noSROs
+  exportFolder: .\danse\out/20231020_tests/danse/oracle_scms/test1
   metricsInPlots:
   - snr
   - sisnr
@@ -129,7 +129,8 @@ wasnParams:
   # SROperNode: '[0, 200]'  # [PPM]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   #
-  signalType: from_file
+  signalType: random
+  # signalType: from_file
   desiredSignalFile:
   - .\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
