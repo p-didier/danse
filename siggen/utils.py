@@ -51,65 +51,41 @@ def build_scenario(p: classes.WASNparameters):
         wetNoises = get_wet_source_signals(irs_n, nRaw)
         wetNoises = [np.sum(wetsig, axis=-1) for wetsig in wetNoises]
         if 'mic' in p.snrBasis:
-            # Verify that correct SNR is obtained at reference mic
-            #  -- NB: computation only valid for a single noise source.  # TODO: generalize
-            # Extract reference (network-wide) microphone index
-            refMicIdx = int(re.findall("\d+", p.snrBasis)[0])
-            # Find corresponding node index
-            refNodeIdx = np.where(p.sensorToNodeIndices == refMicIdx)[0][0]
-            # Find corresponding local sensor index (at node `refNodeIdx`)
-            refMicIdxLocal = int(
-                refMicIdx -np.sum(p.nSensorPerNode[:refNodeIdx])
-            )
-            # Compute SNR based on wet speech and wet noise
-            currSNR = 10 * np.log10(
-                np.sum(wetSpeeches[refNodeIdx][refMicIdxLocal, :] ** 2) / \
-                    np.sum(wetNoises[refNodeIdx][refMicIdxLocal, :] ** 2)
-            )
-            if np.round(currSNR) == p.snr:
-                print(f'Correct SNR ({currSNR} dB ~= {int(np.round(currSNR))} dB) obtained at reference microphone.')
-            else:
-                print(f'Incorrect SNR ({currSNR} dB ~= {int(np.round(currSNR))} dB) obtained at reference microphone.')
+            check_correct_snr_at_ref_mic(p, wetSpeeches, wetNoises)
     else:
         wetNoises = None
 
     return room, vad, wetSpeeches, wetNoises
 
 
-# def apply_rirs(signals: np.ndarray, rirs: list) -> np.ndarray:
-#     """
-#     Apply RIRs to signals.
-
-#     Parameters
-#     ----------
-#     signals : [N x Nsources] np.ndarray (float)
-#         Signals to which to apply RIRs.
-#     rirs : [Nnodes x 1] list of [Nm[k] x 1] lists of [Nsource x N] np.ndarray (float)
-#         RIRs at each sensor of each node, for each source.
-#         `Nm[k]` is the number of microphones at node `k`.
-
-#     Returns
-#     -------
-#     signalsOut : [Nnodes x 1] list of [N x Nm[k]] np.ndarray (float)
-#     """
-
-#     # Apply RIRs
-#     signalsOut = []
-#     for k in range(len(rirs)):  # loop over nodes
-#         # Loop over sensors
-#         signalsOut.append(np.zeros((signals.shape[0], len(rirs[k]))))
-#         for ii in range(len(rirs[k])):  # loop over sensors
-#             # Loop over sources
-#             for jj in range(len(rirs[k][ii])):  # loop over sources
-#                 # Apply RIR
-#                 currSourceContribution = sig.lfilter(rirs[k][ii][jj], 1, signals[:, jj])
-#                 # Add to output
-#                 if jj == 0:
-#                     signalsOut[k][:, ii] = currSourceContribution
-#                 else:
-#                     signalsOut[k][:, ii] += currSourceContribution
-
-#     return signalsOut
+def check_correct_snr_at_ref_mic(
+        p: classes.WASNparameters,
+        wetSpeeches: list,
+        wetNoises: list
+    ):
+    """
+    Verify that correct SNR is obtained at reference microphone.
+    
+    -- NB: computation only valid for a single noise source.
+        TODO: generalize to multiple noise sources.
+    """
+    # Extract reference (network-wide) microphone index
+    refMicIdx = int(re.findall("\d+", p.snrBasis)[0])
+    # Find corresponding node index
+    refNodeIdx = np.where(p.sensorToNodeIndices == refMicIdx)[0][0]
+    # Find corresponding local sensor index (at node `refNodeIdx`)
+    refMicIdxLocal = int(
+        refMicIdx -np.sum(p.nSensorPerNode[:refNodeIdx])
+    )
+    # Compute SNR based on wet speech and wet noise
+    currSNR = 10 * np.log10(
+        np.sum(wetSpeeches[refNodeIdx][refMicIdxLocal, :] ** 2) / \
+            np.sum(wetNoises[refNodeIdx][refMicIdxLocal, :] ** 2)
+    )
+    if np.round(currSNR) == p.snr:
+        print(f'Correct SNR ({currSNR} dB ~= {int(np.round(currSNR))} dB) obtained at reference microphone.')
+    else:
+        print(f'Incorrect SNR ({currSNR} dB ~= {int(np.round(currSNR))} dB) obtained at reference microphone.')
 
 
 def get_raw_source_signals(
@@ -860,6 +836,7 @@ def get_wet_source_signals(
     
     return wetsigs
 
+
 def get_vad(
         wetsigs: np.ndarray,
         p: classes.WASNparameters
@@ -880,13 +857,9 @@ def get_vad(
     vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
         VAD per sample, per node, and per speech source.
     """
-
     nNodes = len(wetsigs)
-    nSamples = wetsigs[0].shape[1]
     nSources = wetsigs[0].shape[2]
-
-    # Initialize VAD
-    vad = np.zeros((nSamples, nNodes, nSources))
+    vad = np.zeros((wetsigs[0].shape[1], nNodes, nSources))
     for k in range(nNodes):  # for each node
         for ii in range(nSources):  # for each desired source
             # Inform user
@@ -899,7 +872,6 @@ def get_vad(
                 loadIfPossible=p.enableVADloadFromFile,
                 vadFilesFolder=p.vadFilesFolder
             )
-
     return vad
 
 
