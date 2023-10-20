@@ -415,10 +415,13 @@ class Node:
 
     def __post_init__(self):
         # Combined VAD
-        self.vadCombined = np.array(
-            [1 if sum(self.vad[ii, :]) > 0 else 0\
-                for ii in range(self.vad.shape[0])]
-        )
+        if self.vad is not None:
+            self.vadCombined = np.array(
+                [1 if sum(self.vad[ii, :]) > 0 else 0\
+                    for ii in range(self.vad.shape[0])]
+            )
+        else:
+            self.vadCombined = None
         # Wet clean speech at reference sensor
         self.cleanspeechRefSensor = self.cleanspeech[:, self.refSensorIdx]
         # Wet clean noise at reference sensor
@@ -513,22 +516,23 @@ class WASN:
                 -- 'start': return the start time [s] of the metrics computation.
                 -- 'end': return the end time [s] of the metrics computation.
         """
+
         # Get VADs
         VADs = [node.vad for node in self.wasn]
-
-        # Check that the VADs are for single-sources only
-        if VADs[0].shape[-1] > 1:
-            raise ValueError('NYI: multiple-sources VAD case.')  # TODO:
 
         nNodes = len(VADs)
         times = np.zeros(nNodes)
         for k in range(nNodes):
             # Compute the key time
-            if ref is None and timeType == 'start':
-                times[k] = 0
-            elif ref is None and timeType == 'end':
-                times[k] = self.wasn[k].data.shape[0] / self.wasn[k].fs
+            if ref is None or VADs[k] is None:
+                if timeType == 'start':
+                    times[k] = 0
+                elif timeType == 'end':
+                    times[k] = self.wasn[k].data.shape[0] / self.wasn[k].fs
             else:
+                # Check that the VAD is for single-sources only
+                if VADs[k].shape[-1] > 1:
+                    raise ValueError('NYI: multiple-sources VAD case.')  # TODO:
                 times[k] = get_key_time(
                     ref=ref,
                     vad=VADs[k],
@@ -679,7 +683,12 @@ class WASN:
             considered active.
         """
         for k in range(len(self.wasn)):  # for each node
+            
             vadCurrNode = self.wasn[k].vad
+            if vadCurrNode is None:
+                self.wasn[k].vadPerFrame = None  # no-VAD case
+                continue
+
             if len(vadCurrNode) == 0:
                 raise ValueError(f"Node {k} has no VAD.")
             # Compute VAD per frame

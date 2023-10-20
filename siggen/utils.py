@@ -17,8 +17,8 @@ from pyANFgen.pyanfgen.utils import pyanfgen, ANFgenConfig
 
 def build_scenario(p: classes.WASNparameters):
     """
-    Interprets parameters to decide whether to simulate an actual room,
-    or to generate random impulse responses.
+    Generate room, RIRs, and source signals.
+    Option to use randomly generated RIRs and/or source signals.
 
     Parameters
     ----------
@@ -39,14 +39,15 @@ def build_scenario(p: classes.WASNparameters):
     """
 
     # Get impulse responses
+    room = None
     if p.trueRoom:
         room, irs_d, irs_n = build_room(p)
     else:
         irs_d, irs_n = generate_random_impulse_responses(p)
-        room = None
     
     # Get raw source signals
     dRaw, nRaw = get_raw_source_signals(p, irs_d, irs_n)
+    
     # Get wet signals for each sensor of each node, for each raw source signals
     wetSpeeches = get_wet_source_signals(irs_d, dRaw)
     # If necessary, compute node- and source-specific VADs
@@ -54,12 +55,13 @@ def build_scenario(p: classes.WASNparameters):
     if p.signalType == 'from_file' or (p.signalType == 'random' and p.randSignalsParams.pauseType != 'none'):
         vad = get_vad(wetSpeeches, p)
     # Sum wet speech signals over sources
-    wetSpeeches = [np.sum(wetsig, axis=-1) for wetsig in wetSpeeches]
+    wetSpeeches = [wetsig.sum(axis=-1) for wetsig in wetSpeeches]
+
     # Deal with noise sources
     wetNoises = None
     if p.nNoiseSources > 0:
         wetNoises = get_wet_source_signals(irs_n, nRaw)
-        wetNoises = [np.sum(wetsig, axis=-1) for wetsig in wetNoises]
+        wetNoises = [wetsig.sum(axis=-1) for wetsig in wetNoises]
         if 'mic' in p.snrBasis:
             check_correct_snr_at_ref_mic(p, wetSpeeches, wetNoises)
 
@@ -1323,7 +1325,7 @@ def build_wasn(
             cleannoise_noSRO=noiseOnly_noSROs,
             timeStamps=t,
             neighborsIdx=neighbors[k],
-            vad=vad[:, k, :],
+            vad=vad[:, k, :] if vad is not None else None,
             sensorPositions=sensorPositions,
             nodePosition=nodePosition
         )

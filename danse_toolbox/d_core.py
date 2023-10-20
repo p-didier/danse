@@ -84,6 +84,12 @@ def danse(
                     events.bypassUpdate[idxEventCurrInstant],
                     # True  # debugging
                 )
+                if 0:
+                    for k in range(dv.nNodes):
+                        plt.semilogy(dv.mseCostOnline[:, k], f'C{k}o-', label=f'Node {k+1}, DANSE cost')
+                        plt.semilogy(dv.mseCostOnline_c[:, k], f'C{k}x--', label=f'Node {k+1}, Centr. cost')
+                        plt.semilogy(dv.mseCostOnline_l[:, k], f'C{k}d-.', label=f'Node {k+1}, Local cost')
+                    plt.legend()
             else:
                 raise ValueError(
                     f'Unknown event: "{events.type[idxEventCurrInstant]}".'

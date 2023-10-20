@@ -422,14 +422,19 @@ class DANSEvariables(base.DANSEparameters):
             self.yin = [node.cleanspeech_noSRO for node in wasn]
         else:
             self.yin = [node.data_noSRO for node in wasn]
+            self.xin = [node.cleanspeech_noSRO for node in wasn]
+            self.nin = [node.cleannoise_noSRO for node in wasn]
         
         # Compute the centralized VAD per frame - average of all nodes
         # (active if at least 1 node is active)
-        vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
-        for k in range(len(wasn)):
-            vadPerFrameCentr += wasn[k].vadPerFrame
-        vadPerFrameCentr /= len(wasn)
-        self.centrVADframes = vadPerFrameCentr.astype(bool)
+        if wasn[0].vadPerFrame is None:
+            self.centrVADframes = None  # no-VAD case
+        else:
+            vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
+            for k in range(len(wasn)):
+                vadPerFrameCentr += wasn[k].vadPerFrame
+            vadPerFrameCentr /= len(wasn)
+            self.centrVADframes = vadPerFrameCentr.astype(bool)
 
         # Useful for both batch mode and online mode (for the latter, useful
         # in the computation of the MSE cost based on batch estimates)
@@ -853,17 +858,39 @@ class DANSEvariables(base.DANSEparameters):
         self.tStartForMetricsLocal = np.full(shape=(self.nNodes,), fill_value=None)
         self.upstreamNeighbors = [node.upstreamNeighborsIdx for node in wasn]
         self.yBufferCentr = yBufferCentr
+        self.nBufferCentr = copy.deepcopy(yBufferCentr)
+        self.xBufferCentr = copy.deepcopy(yBufferCentr)
         self.yc = yc
+        self.nc = copy.deepcopy(yCentr)
+        self.xc = copy.deepcopy(yCentr)
         self.yCentr = yCentr
         self.yHatCentr = yHatCentr
+        self.nCentr = copy.deepcopy(yCentr)         # for no-VAD case
+        self.nHatCentr = copy.deepcopy(yHatCentr)   # for no-VAD case
+        self.xCentr = copy.deepcopy(yCentr)         # for no-VAD case
+        self.xHatCentr = copy.deepcopy(yHatCentr)   # for no-VAD case
         self.yHatCentrUncomp = yHatCentrUncomp
         self.yLocal = yLocal
         self.yLocalCentr = yLocalCentr
         self.yHatLocal = yHatLocal
+        self.nLocal = copy.deepcopy(yLocal)             # for no-VAD case
+        self.nLocalCentr = copy.deepcopy(yLocalCentr)   # for no-VAD case
+        self.nHatLocal = copy.deepcopy(yHatLocal)       # for no-VAD case
+        self.xLocal = copy.deepcopy(yLocal)             # for no-VAD case
+        self.xLocalCentr = copy.deepcopy(yLocalCentr)   # for no-VAD case
+        self.xHatLocal = copy.deepcopy(yHatLocal)       # for no-VAD case
         self.ySSBC = ySSBC
         self.ySSBCHat = ySSBCHat
+        self.nSSBC = copy.deepcopy(ySSBC)           # for no-VAD case
+        self.nSSBCHat = copy.deepcopy(ySSBCHat)     # for no-VAD case
+        self.xSSBC = copy.deepcopy(ySSBC)           # for no-VAD case
+        self.xSSBCHat = copy.deepcopy(ySSBCHat)     # for no-VAD case
         self.yTilde = yTilde
         self.yTildeHat = yTildeHat
+        self.nTilde = copy.deepcopy(yTilde)         # for no-VAD case
+        self.nTildeHat = copy.deepcopy(yTildeHat)   # for no-VAD case
+        self.xTilde = copy.deepcopy(yTilde)         # for no-VAD case
+        self.xTildeHat = copy.deepcopy(yTildeHat)   # for no-VAD case
         self.yTildeHatUncomp = yTildeHatUncomp
         self.yyH = yyH
         self.yyHcentr = yyHcentr
@@ -877,9 +904,15 @@ class DANSEvariables(base.DANSEparameters):
         self.wTildeExt = wTildeExt
         self.wTildeExtTarget = wTildeExtTarget
         self.z = z
+        self.z_n = copy.deepcopy(z)
+        self.z_x = copy.deepcopy(z)
         self.zFullTD = [np.array([]) for _ in range(self.nNodes)]
         self.zBuffer = zBuffer
+        self.zBuffer_n = copy.deepcopy(zBuffer)
+        self.zBuffer_x = copy.deepcopy(zBuffer)
         self.zLocal = zLocal
+        self.zLocal_n = copy.deepcopy(zLocal)
+        self.zLocal_x = copy.deepcopy(zLocal)
         # Initialize variables that are used for both online and batch modes
         self.cleanSpeechSignalsAtNodes = [node.cleanspeech for node in wasn]
         self.cleanNoiseSignalsAtNodes = [node.cleannoise for node in wasn]
@@ -893,6 +926,8 @@ class DANSEvariables(base.DANSEparameters):
             self.yin = [node.cleanspeech for node in wasn]
         else:
             self.yin = [node.data for node in wasn]
+            self.nin = [node.cleannoise for node in wasn]
+            self.xin = [node.cleanspeech for node in wasn]
 
         # For centralised estimates
         self.yinStacked = np.concatenate(
@@ -902,11 +937,14 @@ class DANSEvariables(base.DANSEparameters):
 
         # Compute the centralized VAD per frame - average of all nodes
         # (active if at least 1 node is active)
-        vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
-        for k in range(len(wasn)):
-            vadPerFrameCentr += wasn[k].vadPerFrame
-        vadPerFrameCentr /= len(wasn)
-        self.centrVADframes = vadPerFrameCentr.astype(bool)
+        if wasn[0].vadPerFrame is None:
+            self.centrVADframes = None  # no-VAD case
+        else:
+            vadPerFrameCentr = np.zeros(len(wasn[0].vadPerFrame))
+            for k in range(len(wasn)):
+                vadPerFrameCentr += wasn[k].vadPerFrame
+            vadPerFrameCentr /= len(wasn)
+            self.centrVADframes = vadPerFrameCentr.astype(bool)
 
         # Useful for both batch mode and online mode (for the latter, useful
         # in the computation of the MSE cost based on batch estimates)
@@ -1058,31 +1096,40 @@ class DANSEvariables(base.DANSEparameters):
         """
 
         # Extract correct frame of local signals
-        ykFrame, self.idxBegChunkBroadcast, self.idxEndChunkBroadcast =\
-            base.local_chunk_for_broadcast(
-            self.yin[k],
+        kwargs = dict(
             t=tCurr,
             fs=fs,
-            DFTsize=self.DFTsize,
+            DFTsize=self.DFTsize
         )
+        ykFrame, self.idxBegChunkBroadcast, self.idxEndChunkBroadcast =\
+            base.local_chunk_for_broadcast(self.yin[k], **kwargs)
+        nkFrame, _, _ = base.local_chunk_for_broadcast(self.nin[k], **kwargs)
+        xkFrame, _, _ = base.local_chunk_for_broadcast(self.xin[k], **kwargs)
 
         if self.computeCentralised:
             # Directly fill in buffers for centralized processing
-            self.pre_fill_buffers_centralised(k, ykFrame, tCurr)
+            self.pre_fill_buffers_centralised(k, ykFrame, nkFrame, xkFrame, tCurr)
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local signals samples.')
 
         elif self.broadcastType == 'wholeChunk':
             # Time-domain chunk-wise broadcasting
-            _, self.zLocal[k] = base.danse_compression_whole_chunk(
-                ykFrame,
-                zqPrevious=self.zLocal[k],
+            kwargs = dict(
                 h=self.winWOLAanalysis,
                 f=self.winWOLAsynthesis,
                 Ns=self.Ns,
                 wHat=self.wTildeExt[k][:, self.i[k], :]  # external DANSE filters
+            )
+            _, self.zLocal[k] = base.danse_compression_whole_chunk(
+                ykFrame, zqPrevious=self.zLocal[k], **kwargs
             )  # local compressed signals (time-domain)
+            _, self.zLocal_n[k] = base.danse_compression_whole_chunk(
+                nkFrame, zqPrevious=self.zLocal_n[k], **kwargs
+            )
+            _, self.zLocal_x[k] = base.danse_compression_whole_chunk(
+                xkFrame, zqPrevious=self.zLocal_x[k], **kwargs
+            )
 
             # Save full time-domain signals for export / debugging
             self.zFullTD[k] = np.concatenate(
@@ -1113,8 +1160,7 @@ class DANSEvariables(base.DANSEparameters):
             else:
                 currL = self.broadcastLength
 
-            self.zLocal[k], self.wIR[k] = base.danse_compression_few_samples(
-                ykFrame,
+            kwargs = dict(
                 wqqHat=self.wTildeExt[k][:, self.i[k], :],  # external DANSE filters
                 L=currL,
                 wIRprevious=self.wIR[k],
@@ -1122,7 +1168,17 @@ class DANSEvariables(base.DANSEparameters):
                 winWOLAsynthesis=self.winWOLAsynthesis,
                 Ns=self.Ns,
                 updateBroadcastFilter=updateBroadcastFilter
+            )
+            self.zLocal[k], self.wIR[k] = base.danse_compression_few_samples(
+                ykFrame, **kwargs
             )  # local compressed signals
+            # FIXME: CAREFUL ABOUT `updateBroadcastFilter`: if called too many times, can cause trouble
+            self.zLocal_n[k], _ = base.danse_compression_few_samples(
+                nkFrame, **kwargs
+            ) 
+            self.zLocal_x[k], _ = base.danse_compression_few_samples(
+                xkFrame, **kwargs
+            )
             
             # Prepare to fill buffers in
             nSamplesToBC = -1 * currL  #  <-- /!\ important: use positive `n` to broadcast first `n` samples
@@ -1164,7 +1220,7 @@ class DANSEvariables(base.DANSEparameters):
         ))
         return currL
     
-    def pre_fill_buffers_centralised(self, k, ykFrame, tCurr):
+    def pre_fill_buffers_centralised(self, k, yk, nk, xk, tCurr):
         """
         Prepare filling-in of centralised processing buffers.
 
@@ -1172,20 +1228,30 @@ class DANSEvariables(base.DANSEparameters):
         ----------
         k : int
             Current node index.
-        ykFrame : array_like
+        yk : array_like
             Current node's local signal frame.
+        nk : array_like
+            Current node's local noise frame.
+        xk : array_like
+            Current node's local target signal frame.
         tCurr : float
             Current time instant [s].
         """
         if self.broadcastType == 'wholeChunk':
-            self.yLocalCentr[k] = ykFrame
+            self.yLocalCentr[k] = yk
+            self.nLocalCentr[k] = nk
+            self.xLocalCentr[k] = xk
         elif self.broadcastType == 'fewSamples':
             if self.efficientSpSBC:
                 currL = self.get_buffer_size_for_efficient_bc(k, tCurr)
-                self.yLocalCentr[k] = ykFrame[-currL:, :]
+                self.yLocalCentr[k] = yk[-currL:, :]
+                self.nLocalCentr[k] = nk[-currL:, :]
+                self.xLocalCentr[k] = xk[-currL:, :]
             else:
                 raise NotImplementedError('[PD~20.09.2023-9AM] Not tested yet')
-                self.yLocalCentr[k] = ykFrame[:self.broadcastLength, :]
+                self.yLocalCentr[k] = yk[:self.broadcastLength, :]
+                self.nLocalCentr[k] = nk[:self.broadcastLength, :]
+                self.xLocalCentr[k] = xk[:self.broadcastLength, :]
 
     def fill_buffers(self, k, n):
         """
@@ -1204,12 +1270,18 @@ class DANSEvariables(base.DANSEparameters):
         if n < 0:
             # Only broadcast the `n` last samples of local compressed signals
             zLocalChunk = self.zLocal[k][n:]
+            zLocalChunk_n = self.zLocal_n[k][n:]
+            zLocalChunk_x = self.zLocal_x[k][n:]
         elif n > 0:
             # Only broadcast the `n` first samples of local compressed signals
             zLocalChunk = self.zLocal[k][:n]
+            zLocalChunk_n = self.zLocal_n[k][:n]
+            zLocalChunk_x = self.zLocal_x[k][:n]
         else:
             # No broadcasting
             zLocalChunk = np.array([])
+            zLocalChunk_n = np.array([])
+            zLocalChunk_x = np.array([])
         
         # Loop over neighbors of node `k`
         for idxq in range(len(self.neighbors[k])):
@@ -1224,22 +1296,36 @@ class DANSEvariables(base.DANSEparameters):
                 (self.zBuffer[q][idxKforNeighborQ], zLocalChunk),
                 axis=0
             )
+            self.zBuffer_n[q][idxKforNeighborQ] = np.concatenate(
+                (self.zBuffer_n[q][idxKforNeighborQ], zLocalChunk_n),
+                axis=0
+            )
+            self.zBuffer_x[q][idxKforNeighborQ] = np.concatenate(
+                (self.zBuffer_x[q][idxKforNeighborQ], zLocalChunk_x),
+                axis=0
+            )
         
         if self.computeCentralised:
             self.fill_buffers_centr(k, n)
 
-    def fill_buffers_centr(self, k, n):
+    def fill_buffers_centr(self, k, nSamples):
         """
         Fill in buffers for online centralized processing.
         """
-        if n < 0:
-            # Only broadcast the `n` last samples of local signals
-            yLocalCentrChunk = self.yLocalCentr[k][n:, :]
-        elif n > 0:
-            # Only broadcast the `n` first samples of local signals
-            yLocalCentrChunk = self.yLocalCentr[k][:n, :]
+        if nSamples < 0:
+            # Only broadcast the `nSamples` last samples of local signals
+            yLocalCentrChunk = self.yLocalCentr[k][nSamples:, :]
+            nLocalCentrChunk = self.nLocalCentr[k][nSamples:, :]
+            xLocalCentrChunk = self.xLocalCentr[k][nSamples:, :]
+        elif nSamples > 0:
+            # Only broadcast the `nSamples` first samples of local signals
+            yLocalCentrChunk = self.yLocalCentr[k][:nSamples, :]
+            nLocalCentrChunk = self.nLocalCentr[k][:nSamples, :]
+            xLocalCentrChunk = self.xLocalCentr[k][:nSamples, :]
         else:
             yLocalCentrChunk = np.array([])
+            nLocalCentrChunk = np.array([])
+            xLocalCentrChunk = np.array([])
 
         for q in range(self.nNodes):
             if q != k:
@@ -1251,6 +1337,14 @@ class DANSEvariables(base.DANSEparameters):
 
                 self.yBufferCentr[q][idxKforNeighborQ] = np.concatenate(
                     (self.yBufferCentr[q][idxKforNeighborQ], yLocalCentrChunk),
+                    axis=0
+                )
+                self.nBufferCentr[q][idxKforNeighborQ] = np.concatenate(
+                    (self.nBufferCentr[q][idxKforNeighborQ], nLocalCentrChunk),
+                    axis=0
+                )
+                self.xBufferCentr[q][idxKforNeighborQ] = np.concatenate(
+                    (self.xBufferCentr[q][idxKforNeighborQ], xLocalCentrChunk),
                     axis=0
                 )
 
@@ -1323,6 +1417,9 @@ class DANSEvariables(base.DANSEparameters):
             # Update external filters (for broadcasting)
             self.update_external_filters(k, tCurr)
 
+        if self.oVADframes[k][self.i[k]]:
+            stop = 1
+
         # Update SRO estimates
         self.update_sro_estimates(k, fs)
         # Update phase shifts for SRO compensation
@@ -1330,8 +1427,27 @@ class DANSEvariables(base.DANSEparameters):
             self.build_phase_shifts_for_srocomp(k)
         # Compute desired signal chunk estimate
         self.get_desired_signal(k)
+        # Compute MMSE cost
+        if self.oVADframes[k] is None: # no-VAD case --> can compute an MSE cost over a single frame
+            self.compute_batch_mse_cost(k)
+            self.compute_mse_cost(k)
         # Update iteration index
         self.i[k] += 1
+
+    def compute_mse_cost(self, k):
+        self.mseCostOnline[self.i[k], k] = np.mean(np.abs(
+            self.xin[k][self.idxBegChunk:(self.idxBegChunk + self.Ns), self.referenceSensor] -
+            self.d[self.idxBegChunk:(self.idxBegChunk + self.Ns), k]
+        ) **2)
+        self.mseCostOnline_c[self.i[k], k] = np.mean(np.abs(
+            self.xin[k][self.idxBegChunk:(self.idxBegChunk + self.Ns), self.referenceSensor] -
+            self.dCentr[self.idxBegChunk:(self.idxBegChunk + self.Ns), k]
+        ) **2)
+        self.mseCostOnline_l[self.i[k], k] = np.mean(np.abs(
+            self.xin[k][self.idxBegChunk:(self.idxBegChunk + self.Ns), self.referenceSensor] -
+            self.dLocal[self.idxBegChunk:(self.idxBegChunk + self.Ns), k]
+        ) **2)
+        
 
     def update_using_pregiven_filters(self, k):
         """Update filters using pre-given coefficients."""
@@ -1353,12 +1469,24 @@ class DANSEvariables(base.DANSEparameters):
         """Build local vector based on `yTilde`."""
         self.yLocal[k][:, self.i[k], :] =\
             self.yTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
+        self.nLocal[k][:, self.i[k], :] =\
+            self.nTilde[k][:, self.i[k], self.nSensorPerNode[k]:]
+        self.xLocal[k][:, self.i[k], :] =\
+            self.xTilde[k][:, self.i[k], :self.nSensorPerNode[k]]
         self.yHatLocal[k][:, self.i[k], :] =\
             self.yTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
+        self.nHatLocal[k][:, self.i[k], :] =\
+            self.nTildeHat[k][:, self.i[k], self.nSensorPerNode[k]:]
+        self.xHatLocal[k][:, self.i[k], :] =\
+            self.xTildeHat[k][:, self.i[k], :self.nSensorPerNode[k]]
 
     def wipe_buffers(self, k):
         """Wipe buffers."""
         self.zBuffer[k] = [np.array([])\
+            for _ in range(len(self.neighbors[k]))]
+        self.zBuffer_n[k] = [np.array([])\
+            for _ in range(len(self.neighbors[k]))]
+        self.zBuffer_x[k] = [np.array([])\
             for _ in range(len(self.neighbors[k]))]
         if self.computeCentralised:
             self.wipe_buffers_centr(k)
@@ -1366,6 +1494,10 @@ class DANSEvariables(base.DANSEparameters):
     def wipe_buffers_centr(self, k):
         allNodeIndices = [int(i) for i in np.arange(self.nNodes)]
         self.yBufferCentr[k] = [np.empty((0, self.nSensorPerNode[q]))\
+            for q in allNodeIndices if q != k]
+        self.nBufferCentr[k] = [np.empty((0, self.nSensorPerNode[q]))\
+            for q in allNodeIndices if q != k]
+        self.xBufferCentr[k] = [np.empty((0, self.nSensorPerNode[q]))\
             for q in allNodeIndices if q != k]
 
     def compute_batch_mse_cost(self, k):
@@ -1381,7 +1513,7 @@ class DANSEvariables(base.DANSEparameters):
         dhatSTFT = np.einsum(
             'ik,ijk->ij',
             self.wTilde[k][:, self.i[k] + 1, :].conj(), 
-            self.get_y_tilde_batch(k, False)
+            self.get_y_tilde_batch(k, None)
         )
         # Compute time-domain signal
         kwargs = {
@@ -1544,22 +1676,32 @@ class DANSEvariables(base.DANSEparameters):
     def build_ycentr(self, tCurr, fs, k):
         """Build STFT-domain centralised observation vector. """
         # Extract current local data chunk
-        yLocalCurr, _, _ = base.local_chunk_for_update(
-            self.yin[k],
+        kwargs = dict(
             t=tCurr,
             fs=fs,
             bd=self.broadcastType,
             Ndft=self.DFTsize,
             Ns=self.Ns
         )
+        yLocalCurr, _, _ = base.local_chunk_for_update(self.yin[k], **kwargs)
+        nLocalCurr, _, _ = base.local_chunk_for_update(self.nin[k], **kwargs)
+        xLocalCurr, _, _ = base.local_chunk_for_update(self.xin[k], **kwargs)
         # Build full available observation vector
         yCentrCurr = np.empty((self.DFTsize, 0))
+        nCentrCurr = np.empty((self.DFTsize, 0))
+        xCentrCurr = np.empty((self.DFTsize, 0))
         nNeighboursCovered = 0  # number of neighbors of node `k` already covered
         for q in range(self.nNodes):
             if q == k:
                 # Include (possibly multichannel) local data chunk
                 yCentrCurr = np.concatenate(
                     (yCentrCurr, yLocalCurr), axis=1
+                )
+                nCentrCurr = np.concatenate(
+                    (nCentrCurr, nLocalCurr), axis=1
+                )
+                xCentrCurr = np.concatenate(
+                    (xCentrCurr, xLocalCurr), axis=1
                 )
             else:
                 # Include (possibly multichannel) data chunk from neighbor `q`
@@ -1572,9 +1714,17 @@ class DANSEvariables(base.DANSEparameters):
                 yCentrCurr = np.concatenate(
                     (yCentrCurr, self.yc[k][:, idxBeg:idxEnd]), axis=1
                 )
+                nCentrCurr = np.concatenate(
+                    (nCentrCurr, self.nc[k][:, idxBeg:idxEnd]), axis=1
+                )
+                xCentrCurr = np.concatenate(
+                    (xCentrCurr, self.xc[k][:, idxBeg:idxEnd]), axis=1
+                )
                 nNeighboursCovered += 1
         
         self.yCentr[k][:, self.i[k], :] = yCentrCurr
+        self.nCentr[k][:, self.i[k], :] = nCentrCurr
+        self.xCentr[k][:, self.i[k], :] = xCentrCurr
 
         # Go to frequency domain
         yHatCentrCurr = np.fft.fft(
@@ -1583,24 +1733,42 @@ class DANSEvariables(base.DANSEparameters):
             self.DFTsize,
             axis=0
         ) / np.sqrt(self.Ns)
+        nHatCentrCurr = np.fft.fft(
+            self.nCentr[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        ) / np.sqrt(self.Ns)
+        xHatCentrCurr = np.fft.fft(
+            self.xCentr[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         self.yHatCentr[k][:, self.i[k], :] = yHatCentrCurr[:self.nPosFreqs, :]
+        self.nHatCentr[k][:, self.i[k], :] = nHatCentrCurr[:self.nPosFreqs, :]
+        self.xHatCentr[k][:, self.i[k], :] = xHatCentrCurr[:self.nPosFreqs, :]
 
     def build_yssbc(self, tCurr, fs, k):
         """Build STFT-domain observation vector for the case where each
         node only would broadcast its raw reference sensor signal (no
         multichannel broadcast)."""
         # Extract current local data chunk
-        yLocalCurr, _, _ = base.local_chunk_for_update(
-            self.yin[k],
+        kwargs = dict(
             t=tCurr,
             fs=fs,
             bd=self.broadcastType,
             Ndft=self.DFTsize,
             Ns=self.Ns
         )
+        yLocalCurr, _, _ = base.local_chunk_for_update(self.yin[k], **kwargs)
+        nLocalCurr, _, _ = base.local_chunk_for_update(self.nin[k], **kwargs)
+        xLocalCurr, _, _ = base.local_chunk_for_update(self.xin[k], **kwargs)
         # Build full available observation vector
         ySSBCCurr = copy.deepcopy(yLocalCurr)
+        nSSBCCurr = copy.deepcopy(nLocalCurr)
+        xSSBCCurr = copy.deepcopy(xLocalCurr)
         nNeighboursCovered = 0  # number of neighbors of node `k` already covered
         for q in range(self.nNodes):
             if q != k:
@@ -1612,9 +1780,19 @@ class DANSEvariables(base.DANSEparameters):
                 ySSBCCurr = np.concatenate(
                     (ySSBCCurr, currYc[:, np.newaxis]), axis=1
                 )
+                currNc = self.nc[k][:, idxRefSensor]
+                nSSBCCurr = np.concatenate(
+                    (nSSBCCurr, currNc[:, np.newaxis]), axis=1
+                )
+                currXc = self.xc[k][:, idxRefSensor]
+                xSSBCCurr = np.concatenate(
+                    (xSSBCCurr, currXc[:, np.newaxis]), axis=1
+                )
                 nNeighboursCovered += 1
         
         self.ySSBC[k][:, self.i[k], :] = ySSBCCurr
+        self.nSSBC[k][:, self.i[k], :] = nSSBCCurr
+        self.xSSBC[k][:, self.i[k], :] = xSSBCCurr
 
         # Go to frequency domain
         ySSBCHatCurr = np.fft.fft(
@@ -1623,8 +1801,22 @@ class DANSEvariables(base.DANSEparameters):
             self.DFTsize,
             axis=0
         ) / np.sqrt(self.Ns)
+        nSSBCHatCurr = np.fft.fft(
+            self.nSSBC[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        ) / np.sqrt(self.Ns)
+        xSSBCHatCurr = np.fft.fft(
+            self.xSSBC[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         self.ySSBCHat[k][:, self.i[k], :] = ySSBCHatCurr[:self.nPosFreqs, :]
+        self.nSSBCHat[k][:, self.i[k], :] = nSSBCHatCurr[:self.nPosFreqs, :]
+        self.xSSBCHat[k][:, self.i[k], :] = xSSBCHatCurr[:self.nPosFreqs, :]
     
     def update_external_filters(self, k, t=None, tiDANSEflag=False):
         """
@@ -1720,14 +1912,11 @@ class DANSEvariables(base.DANSEparameters):
         # Initialize compressed signal matrix
         # ($\mathbf{z}_{-k}$ in [1]'s notation)
         zk = np.empty((Ndft, 0), dtype=float)
+        zk_n = np.empty((Ndft, 0), dtype=float)
+        zk_x = np.empty((Ndft, 0), dtype=float)
 
         # Initialise flags vector (overflow: >0; underflow: <0; or none: ==0)
         bufferFlags = np.zeros(len(self.neighbors[k]))
-
-        # if tiFlag:
-        #     buf = self.
-        # else:
-        #     buf = self.zBuffer[k]
 
         for idxq in range(len(self.neighbors[k])):
 
@@ -1740,6 +1929,8 @@ class DANSEvariables(base.DANSEparameters):
                     # There is no significant SRO between node `k` and `q`.
                     # Response: `k` uses all samples in the `q` buffer.
                     zCurrBuffer = self.zBuffer[k][idxq]
+                    zCurrBuffer_n = self.zBuffer_n[k][idxq]
+                    zCurrBuffer_x = self.zBuffer_x[k][idxq]
                 
                 elif Bq < Ndft:
                     # Node `q` has not yet transmitted enough data to node
@@ -1754,6 +1945,14 @@ class DANSEvariables(base.DANSEparameters):
                         (np.zeros(Ndft - Bq), self.zBuffer[k][idxq]),
                         axis=0
                     )
+                    zCurrBuffer_n = np.concatenate(
+                        (np.zeros(Ndft - Bq), self.zBuffer_n[k][idxq]),
+                        axis=0
+                    )
+                    zCurrBuffer_x = np.concatenate(
+                        (np.zeros(Ndft - Bq), self.zBuffer_x[k][idxq]),
+                        axis=0
+                    )
                 elif Bq > Ndft:
                     # Node `q` has already transmitted too much data
                     # to node `k`. Interpretation: Node `q` samples faster
@@ -1763,7 +1962,8 @@ class DANSEvariables(base.DANSEparameters):
                     # Raise positive flag
                     bufferFlags[idxq] = +1 * nExtraSamples  # explicit "+1" positive factor
                     zCurrBuffer = self.zBuffer[k][idxq][-Ndft:]
-            
+                    zCurrBuffer_n = self.zBuffer_n[k][idxq][-Ndft:]
+                    zCurrBuffer_x = self.zBuffer_x[k][idxq][-Ndft:]
             else:   # not the first DANSE iteration 
                 # -- we are expecting a normally full buffer,
                 # with a DANSE chunk size considering overlap.
@@ -1791,14 +1991,30 @@ class DANSEvariables(base.DANSEparameters):
                         self.zBuffer[k][idxq]),
                         axis=0
                     )
+                    zCurrBuffer_n = np.concatenate(
+                        (self.z_n[k][-(Ndft - Bq):, idxq],
+                        self.zBuffer_n[k][idxq]),
+                        axis=0
+                    )
+                    zCurrBuffer_x = np.concatenate(
+                        (self.z_x[k][-(Ndft - Bq):, idxq],
+                        self.zBuffer_x[k][idxq]),
+                        axis=0
+                    )
                 else:   # edge case: no overlap between consecutive frames
                     zCurrBuffer = self.zBuffer[k][idxq]
+                    zCurrBuffer_n = self.zBuffer_n[k][idxq]
+                    zCurrBuffer_x = self.zBuffer_x[k][idxq]
 
             # Stack compressed signals
             zk = np.concatenate((zk, zCurrBuffer[:, np.newaxis]), axis=1)
+            zk_n = np.concatenate((zk_n, zCurrBuffer_n[:, np.newaxis]), axis=1)
+            zk_x = np.concatenate((zk_x, zCurrBuffer_x[:, np.newaxis]), axis=1)
 
         # Update DANSE variables
         self.z[k] = zk
+        self.z_n[k] = zk_n
+        self.z_x[k] = zk_x
         self.bufferFlags[k][self.i[k], :] = bufferFlags
 
         # Centralised case
@@ -1812,6 +2028,8 @@ class DANSEvariables(base.DANSEparameters):
         (`N` new local samples were captured since last update).
         """
         yk = np.empty((self.DFTsize, 0), dtype=float)
+        nk = np.empty((self.DFTsize, 0), dtype=float)
+        xk = np.empty((self.DFTsize, 0), dtype=float)
         bufferFlagsCentr = np.zeros(self.nNodes)
         for q in range(self.nNodes):
             if q != k:
@@ -1826,6 +2044,8 @@ class DANSEvariables(base.DANSEparameters):
                 if self.i[k] == 0: # first iteration case 
                     if Bq == self.DFTsize: 
                         yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr]
+                        nCurrBufferCentr = self.nBufferCentr[k][idxQforKcentr]
+                        xCurrBufferCentr = self.xBufferCentr[k][idxQforKcentr]
                     
                     elif Bq < self.DFTsize:
                         yCurrBufferCentr = np.concatenate(
@@ -1835,6 +2055,20 @@ class DANSEvariables(base.DANSEparameters):
                             )), self.yBufferCentr[k][idxQforKcentr]),
                             axis=0
                         )
+                        nCurrBufferCentr = np.concatenate(
+                            (np.zeros((
+                                self.DFTsize - Bq,
+                                self.nBufferCentr[k][idxQforKcentr].shape[-1]
+                            )), self.nBufferCentr[k][idxQforKcentr]),
+                            axis=0
+                        )
+                        xCurrBufferCentr = np.concatenate(
+                            (np.zeros((
+                                self.DFTsize - Bq,
+                                self.xBufferCentr[k][idxQforKcentr].shape[-1]
+                            )), self.xBufferCentr[k][idxQforKcentr]),
+                            axis=0
+                        )
                         # Raise negative flag
                         nMissingSamples = int(np.abs(self.DFTsize - Bq))
                         bufferFlagsCentr[q] = -1 * nMissingSamples
@@ -1842,6 +2076,8 @@ class DANSEvariables(base.DANSEparameters):
 
                     elif Bq > self.DFTsize:
                         yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr][-self.DFTsize:, :]
+                        nCurrBufferCentr = self.nBufferCentr[k][idxQforKcentr][-self.DFTsize:, :]
+                        xCurrBufferCentr = self.xBufferCentr[k][idxQforKcentr][-self.DFTsize:, :]
                         # Raise positive flag
                         nExtraSamples = int(np.abs(self.DFTsize - Bq))
                         bufferFlagsCentr[q] = +1 * nExtraSamples
@@ -1879,14 +2115,34 @@ class DANSEvariables(base.DANSEparameters):
                             ),
                             axis=0
                         )
+                        nCurrBufferCentr = np.concatenate(
+                            (
+                                self.nc[k][-(self.DFTsize - Bq):, idxStart:idxEnd],
+                                self.nBufferCentr[k][idxQforKcentr]
+                            ),
+                            axis=0
+                        )
+                        xCurrBufferCentr = np.concatenate(
+                            (
+                                self.xc[k][-(self.DFTsize - Bq):, idxStart:idxEnd],
+                                self.xBufferCentr[k][idxQforKcentr]
+                            ),
+                            axis=0
+                        )
                     else:   # edge case: no overlap between consecutive frames
                         yCurrBufferCentr = self.yBufferCentr[k][idxQforKcentr]
+                        nCurrBufferCentr = self.nBufferCentr[k][idxQforKcentr]
+                        xCurrBufferCentr = self.xBufferCentr[k][idxQforKcentr]
 
                 # Stack compressed signals
                 yk = np.concatenate((yk, yCurrBufferCentr), axis=1)
+                nk = np.concatenate((nk, nCurrBufferCentr), axis=1)
+                xk = np.concatenate((xk, xCurrBufferCentr), axis=1)
 
         # Update centralised variables
         self.yc[k] = yk
+        self.nc[k] = nk
+        self.xc[k] = xk
         self.bufferFlagsCentr[k][self.i[k], :] = bufferFlagsCentr
 
     def build_ytilde(self, tCurr, fs, k):
@@ -1913,14 +2169,17 @@ class DANSEvariables(base.DANSEparameters):
             'Ns': self.Ns
         }
         yLocalCurr, self.idxBegChunk, self.idxEndChunk =\
-            base.local_chunk_for_update(
-                self.yin[k],
-                **kwargs
-            )
+            base.local_chunk_for_update(self.yin[k], **kwargs)
+        nLocalCurr, _, _ = base.local_chunk_for_update(self.nin[k], **kwargs)
+        xLocalCurr, _, _ = base.local_chunk_for_update(self.xin[k], **kwargs)
 
         # Build full available observation vector
         yTildeCurr = np.concatenate((yLocalCurr, self.z[k]), axis=1)
+        nTildeCurr = np.concatenate((nLocalCurr, self.z_n[k]), axis=1)
+        xTildeCurr = np.concatenate((xLocalCurr, self.z_x[k]), axis=1)
         self.yTilde[k][:, self.i[k], :] = yTildeCurr
+        self.nTilde[k][:, self.i[k], :] = nTildeCurr
+        self.xTilde[k][:, self.i[k], :] = xTildeCurr
 
         # Go to frequency domain
         yTildeHatCurr = np.fft.fft(
@@ -1929,8 +2188,22 @@ class DANSEvariables(base.DANSEparameters):
             self.DFTsize,
             axis=0
         ) / np.sqrt(self.Ns)
+        nTildeHatCurr = np.fft.fft(
+            self.nTilde[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        ) / np.sqrt(self.Ns)
+        xTildeHatCurr = np.fft.fft(
+            self.xTilde[k][:, self.i[k], :] *\
+                self.winWOLAanalysis[:, np.newaxis],
+            self.DFTsize,
+            axis=0
+        ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
+        self.nTildeHat[k][:, self.i[k], :] = nTildeHatCurr[:self.nPosFreqs, :]
+        self.xTildeHat[k][:, self.i[k], :] = xTildeHatCurr[:self.nPosFreqs, :]
 
     def compensate_sros(self, k, t):
         """
@@ -1993,6 +2266,8 @@ class DANSEvariables(base.DANSEparameters):
                 self.phaseShiftFactors[k]
             ))
             self.yTildeHat[k][:, self.i[k], :] *= psf
+            self.nTildeHat[k][:, self.i[k], :] *= psf
+            self.xTildeHat[k][:, self.i[k], :] *= psf
 
         # Centralised case
         if self.computeCentralised:
@@ -2035,6 +2310,8 @@ class DANSEvariables(base.DANSEparameters):
                     self.phaseShiftFactorsCentr[k]
                 ))
                 self.yHatCentr[k][:, self.i[k], :] *= psfCentr
+                self.nHatCentr[k][:, self.i[k], :] *= psfCentr
+                self.xHatCentr[k][:, self.i[k], :] *= psfCentr
         else:
             skipUpdateCentr = None
 
@@ -2054,7 +2331,15 @@ class DANSEvariables(base.DANSEparameters):
             Node index.
         """
 
-        def _update_covmats_online(Ryy, Rnn, y, vad, beta=self.expAvgBeta[k]):
+        def _update_covmats_online(
+                Ryy,
+                Rnn,
+                y,
+                vad,
+                beta=self.expAvgBeta[k],
+                n=None,
+                x=None
+            ):
             """
             Helper function to perform exponential averaging (online
             spatial covariance matrix estimate, VAD-based).
@@ -2071,6 +2356,10 @@ class DANSEvariables(base.DANSEparameters):
                 Current VAD frame flag.
             beta : float
                 Exponential averaging constant.
+            n : ndarray (nFreqs x nMics)
+                Current noise signal. Only used if `vad` is None.
+            x : ndarray (nFreqs x nMics)
+                Current clean signal. Only used if `vad` is None.
 
             Returns
             -------
@@ -2081,22 +2370,38 @@ class DANSEvariables(base.DANSEparameters):
             yyH : ndarray (nFreqs x nMics x nMics)
                 Current outer product.
             """
+            # if vad is None:
             # Outer product and mean
-            yyH = 1 / y.shape[1] * np.einsum('ij,ik->ijk', y, y.conj())
-            if vad:
-                Ryy = beta * Ryy + (1 - beta) * yyH
-            else:
-                Rnn = beta * Rnn + (1 - beta) * yyH
+            nnH = 1 / y.shape[1] * np.einsum('ij,ik->ijk', n, n.conj())
+            yyH = 1 / y.shape[1] * np.einsum(
+                'ij,ik->ijk',
+                (x + n),
+                (x + n).conj()
+            )
+            Ryy = beta * Ryy + (1 - beta) * yyH
+            Rnn = beta * Rnn + (1 - beta) * nnH
+            # else:
+            #     # Outer product and mean
+            #     yyH = 1 / y.shape[1] * np.einsum('ij,ik->ijk', y, y.conj())
+            #     if vad:
+            #         Ryy = beta * Ryy + (1 - beta) * yyH
+            #     else:
+            #         Rnn = beta * Rnn + (1 - beta) * yyH
+
             return Ryy, Rnn, yyH
         
-        # Shorter name
-        currVad = self.oVADframes[k][self.i[k]]
 
-        # Count number of spatial covariance matrices updates
-        if currVad:
+        if self.oVADframes[k] is None:  # no-VAD case
+            currVad = None
             self.numUpdatesRyy[k] += 1
-        else:
             self.numUpdatesRnn[k] += 1
+        else:
+            currVad = self.oVADframes[k][self.i[k]]
+            # Count number of spatial covariance matrices updates
+            if currVad:
+                self.numUpdatesRyy[k] += 1
+            else:
+                self.numUpdatesRnn[k] += 1
         
         # Perform DANSE covariance matrices udpates
         if self.simType == 'online':
@@ -2104,7 +2409,9 @@ class DANSEvariables(base.DANSEparameters):
                 self.Ryytilde[k],
                 self.Rnntilde[k],
                 y=self.yTildeHat[k][:, self.i[k], :],
-                vad=currVad
+                vad=currVad,
+                n=self.nTildeHat[k][:, self.i[k], :],  # noise signal
+                x=self.xTildeHat[k][:, self.i[k], :],  # clean signal
             )
             # Save
             self.yyH[k][self.i[k], :, :, :] = yyHcurr
@@ -2140,7 +2447,9 @@ class DANSEvariables(base.DANSEparameters):
                 self.Ryylocal[k],
                 self.Rnnlocal[k],
                 y=self.yHatLocal[k][:, self.i[k], :],
-                vad=currVad
+                vad=currVad,
+                n=self.nHatLocal[k][:, self.i[k], :],  # noise signal
+                x=self.xHatLocal[k][:, self.i[k], :],  # clean signal
             )
             # Conditional updating of Ryy and Rnn
             self.conditional_scm_updating(
@@ -2167,7 +2476,9 @@ class DANSEvariables(base.DANSEparameters):
                 self.Rnncentr[k],
                 y=self.yHatCentr[k][:, self.i[k], :],
                 # vad=self.centrVADframes[self.i[k]]
-                vad=currVad
+                vad=currVad,
+                n=self.nHatCentr[k][:, self.i[k], :],  # noise signal
+                x=self.xHatCentr[k][:, self.i[k], :],  # clean signal
             )
             # Save
             self.yyHcentr[k][self.i[k], :, :, :] = yyHcurr
@@ -2200,7 +2511,9 @@ class DANSEvariables(base.DANSEparameters):
                 self.RyySSBC[k],
                 self.RnnSSBC[k],
                 y=self.ySSBCHat[k][:, self.i[k], :],
-                vad=currVad
+                vad=currVad,
+                n=self.nSSBCHat[k][:, self.i[k], :],  # noise signal
+                x=self.xSSBCHat[k][:, self.i[k], :],  # clean signal
             )
             # Conditional updating of Ryy and Rnn
             self.conditional_scm_updating(
@@ -2797,12 +3110,14 @@ class TIDANSEvariables(DANSEvariables):
         """
 
         # Extract correct frame of local signals
-        ykFrame, _, _ = base.local_chunk_for_broadcast(
-            self.yin[k],
+        kwargs = dict(
             t=tCurr,
             fs=fs,
-            DFTsize=self.DFTsize,
+            DFTsize=self.DFTsize
         )
+        ykFrame, _, _ = base.local_chunk_for_broadcast(self.yin[k], **kwargs)
+        nkFrame, _, _ = base.local_chunk_for_broadcast(self.nin[k], **kwargs)
+        xkFrame, _, _ = base.local_chunk_for_broadcast(self.xin[k], **kwargs)
 
         # # Account for SROs w.r.t. the root node if the compensation
         # # strategy is 'network-wide'.
@@ -2818,7 +3133,7 @@ class TIDANSEvariables(DANSEvariables):
 
         if self.computeCentralised:
             # Fully fill in buffers for centralized processing
-            self.pre_fill_buffers_centralised(k, ykFrame, tCurr)
+            self.pre_fill_buffers_centralised(k, ykFrame, nkFrame, xkFrame, tCurr)
             if self.broadcastType == 'wholeChunk':
                 centrBCLength = self.Ns
             elif self.broadcastType == 'fewSamples':
@@ -2826,7 +3141,7 @@ class TIDANSEvariables(DANSEvariables):
                     centrBCLength = -1 * self.get_buffer_size_for_efficient_bc(k, tCurr)
                 else:
                     centrBCLength = -1 * self.broadcastLength
-            self.fill_buffers_centr(k, n=centrBCLength)
+            self.fill_buffers_centr(k, nSamples=centrBCLength)
 
         if len(ykFrame) < self.DFTsize:
             print('Cannot perform compression: not enough local samples.')
@@ -3279,18 +3594,21 @@ def update_covmats_batch(yAllFrames, vadAllFrames):
         Updated spatial covariance matrix estimate, averaged over
         all time frames - noise-only.
     """
-    if len(vadAllFrames) > yAllFrames.shape[1]:
-        vadAllFrames = vadAllFrames[:yAllFrames.shape[1]]
-    Ryy = np.mean(np.einsum(
-        'ikj,ikl->ikjl',
-        yAllFrames[:, vadAllFrames.astype(bool), :],  # speech+noise VAD frames
-        yAllFrames[:, vadAllFrames.astype(bool), :].conj()
-    ), axis=1)
-    Rnn = np.mean(np.einsum(
-        'ikj,ikl->ikjl',
-        yAllFrames[:, ~vadAllFrames.astype(bool), :],  # noise-only VAD frames
-        yAllFrames[:, ~vadAllFrames.astype(bool), :].conj()
-    ), axis=1)
+    if vadAllFrames is None:  # no-VAD case
+        raise NotImplementedError('No-VAD case not implemented yet.')
+    else:
+        if len(vadAllFrames) > yAllFrames.shape[1]:
+            vadAllFrames = vadAllFrames[:yAllFrames.shape[1]]
+        Ryy = np.mean(np.einsum(
+            'ikj,ikl->ikjl',
+            yAllFrames[:, vadAllFrames.astype(bool), :],  # speech+noise VAD frames
+            yAllFrames[:, vadAllFrames.astype(bool), :].conj()
+        ), axis=1)
+        Rnn = np.mean(np.einsum(
+            'ikj,ikl->ikjl',
+            yAllFrames[:, ~vadAllFrames.astype(bool), :],  # noise-only VAD frames
+            yAllFrames[:, ~vadAllFrames.astype(bool), :].conj()
+        ), axis=1)
     return Ryy, Rnn
 
 

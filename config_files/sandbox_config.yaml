@@ -55,11 +55,11 @@ danseParams:
   # startComputeMetricsAt: after_5s
   # startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
-  startComputeMetricsAt: after_20s
-  # startComputeMetricsAt: after_200ms
+  # startComputeMetricsAt: after_20s
+  startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
-  # broadcastType: wholeChunk
-  broadcastType: fewSamples
+  broadcastType: wholeChunk
+  # broadcastType: fewSamples
   broadcastLength: 1   # for Ns=512, possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
   # broadcastLength: 2
   efficientSpSBC: true
@@ -98,7 +98,7 @@ wasnParams:
   minDistToWalls: 0.5
   # interSensorDist: 0.0
   interSensorDist: 0.05
-  sigDur: 25  # [s]
+  sigDur: 10  # [s]
   # selfnoiseSNR: 999999999  # [dB]
   # selfnoiseSNR: 99  # [dB]
   # selfnoiseSNR: 60  # [dB]
@@ -129,8 +129,8 @@ wasnParams:
   # SROperNode: '[0, 200]'  # [PPM]
   # SROperNode: '[0, 100, 200]'  # [PPM]
   #
-  signalType: random
-  # signalType: from_file
+  # signalType: random
+  signalType: from_file
   desiredSignalFile:
   - .\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
