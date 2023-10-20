@@ -39,21 +39,17 @@ def build_scenario(p: classes.WASNparameters):
     
     # Get raw source signals
     dRaw, nRaw = get_raw_source_signals(p, irs_d, irs_n)
-    
-    # Get wet speech and compute VAD
-    vad, wetSpeeches = get_vad(
-        irs_d,
-        dRaw,
-        p
-    )
+    # Get wet signals for each sensor of each node, for each raw source signals
+    wetSpeeches = get_wet_source_signals(irs_d, dRaw)
+    # If necessary, compute node- and source-specific VADs
+    if p.signalType == 'from_file' or (p.signalType == 'random' and p.randSignalsParams.pauseType != 'none'):
+        vad = get_vad(wetSpeeches, p)
+    # Sum wet signals over sources
+    wetSpeeches = [np.sum(wetsig, axis=-1) for wetsig in wetSpeeches]
+
     if p.nNoiseSources > 0:
-        # Get wet noise
-        _, wetNoises = get_vad(
-            irs_n,
-            nRaw,
-            p,
-            bypassVADcomputation=True  # save computation time
-        )
+        wetNoises = get_wet_source_signals(irs_n, nRaw)
+        wetNoises = [np.sum(wetsig, axis=-1) for wetsig in wetNoises]
         if 'mic' in p.snrBasis:
             # Verify that correct SNR is obtained at reference mic
             #  -- NB: computation only valid for a single noise source.  # TODO: generalize
@@ -831,14 +827,12 @@ def plot_asc_3d(
     ax.set_title('Room layout (3D)')
 
 
-def get_vad(
+def get_wet_source_signals(
         rirs,
         xdry: np.ndarray,
-        p: classes.WASNparameters,
-        bypassVADcomputation=False
     ):
     """
-    Compute all node- and desired-source-specific VADs.
+    Compute the wet signals given the dry signals and the RIRs.
 
     Parameters
     ----------
@@ -848,20 +842,12 @@ def get_vad(
         and each source.
     xdry : [N x Nsources] np.ndarray (float)
         Dry (latent) source signals.
-    p : WASNparameters object
-        WASN parameters.
-    bypassVADcomputation : bool
-        If True, bypass VAD computation and return None instead of `vad`.
 
     Returns
     -------
-    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
-        VAD per sample, per node, and per speech source.
     wetsigs : [K x 1] list of [Nsensor[k] x N] np.ndarray (float)
         Wet (RIR-affected) speech (or noise) signal at each sensor of each node.
     """
-
-    vad = np.zeros((xdry.shape[0], len(rirs), len(rirs[0][0])))
     wetsigs = [np.zeros((len(rirs[k]), xdry.shape[0], len(rirs[k][0])))\
         for k in range(len(rirs))]
 
@@ -871,26 +857,50 @@ def get_vad(
                 # Compute wet desired-only signal
                 wetsig = sig.fftconvolve(xdry[:, ii], rirs[k][m][ii], axes=0)
                 wetsigs[k][m, :, ii] = wetsig[:xdry.shape[0]]  # truncate
-
-        for ii in range(len(rirs[k][p.referenceSensor])):  # for each desired source
-            if bypassVADcomputation:
-                vad = None
-            else:
-                # Inform user
-                print(f'VAD for node {k + 1}/{len(rirs)} and desired source {ii + 1}/{len(rirs[k][p.referenceSensor])}...')
-                vad[:, k, ii] = get_or_load_vad(
-                    x=wetsigs[k][p.referenceSensor, :, ii],
-                    eFact=p.VADenergyFactor,
-                    Nw=p.VADwinLength,
-                    fs=p.fs,
-                    loadIfPossible=p.enableVADloadFromFile,
-                    vadFilesFolder=p.vadFilesFolder
-                )
     
-    # Sum wet signals over sources
-    wetsigs = [np.sum(wetsig, axis=-1) for wetsig in wetsigs]
+    return wetsigs
 
-    return vad, wetsigs
+def get_vad(
+        wetsigs: np.ndarray,
+        p: classes.WASNparameters
+    ):
+    """
+    Compute all node- and desired-source-specific VADs.
+
+    Parameters
+    ----------
+    wetsigs : [K x 1] list of [Nsensor[k] x Nsamples x Nsources] np.ndarray (float)
+        Wet (RIR-affected) speech (or noise) signal at each sensor of each node,
+        for each sound source.
+    p : WASNparameters object
+        WASN parameters.
+
+    Returns
+    -------
+    vad : [N x Nnodes x Nsources] np.ndarray (bool or int [0 or 1])
+        VAD per sample, per node, and per speech source.
+    """
+
+    nNodes = len(wetsigs)
+    nSamples = wetsigs[0].shape[1]
+    nSources = wetsigs[0].shape[2]
+
+    # Initialize VAD
+    vad = np.zeros((nSamples, nNodes, nSources))
+    for k in range(nNodes):  # for each node
+        for ii in range(nSources):  # for each desired source
+            # Inform user
+            print(f'VAD for node {k + 1}/{nNodes} and desired source {ii + 1}/{nSources}...')
+            vad[:, k, ii] = get_or_load_vad(
+                x=wetsigs[k][p.referenceSensor, :, ii],
+                eFact=p.VADenergyFactor,
+                Nw=p.VADwinLength,
+                fs=p.fs,
+                loadIfPossible=p.enableVADloadFromFile,
+                vadFilesFolder=p.vadFilesFolder
+            )
+
+    return vad
 
 
 def get_or_load_vad(x, eFact, Nw, fs, loadIfPossible=True, vadFilesFolder='.'):
