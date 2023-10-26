@@ -12,14 +12,13 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-DATA_FOLDER = './danse/out/battery20231013_perf_asfctofSelfNoise_wReverb'
+DATA_FOLDER = './danse/out/battery20231013_perf_asfctofSelfNoise'
 METRICS_TO_PLOT = [
     # 'stoi',
     'sisnr',
 ]
 
-# METRICS_COMPUTATION_SEGMENT_DUR = 5  # s
-METRICS_COMPUTATION_SEGMENT_DUR = None  # s
+METRICS_COMPUTATION_SEGMENT_DUR = 5  # s
 
 def main(dataFolder: str=DATA_FOLDER):
     """Main function (called by default when running script)."""
@@ -30,12 +29,8 @@ def main(dataFolder: str=DATA_FOLDER):
     fig, _ = plot_data(data)
 
     # Export
-    if METRICS_COMPUTATION_SEGMENT_DUR is None:
-        suffix = 'full'
-    else:
-        suffix = f'dur{METRICS_COMPUTATION_SEGMENT_DUR}s'
-    fig.savefig(f'{dataFolder}/combined_metrics_{suffix}.pdf', bbox_inches='tight')
-    fig.savefig(f'{dataFolder}/combined_metrics_{suffix}.png', dpi=300, bbox_inches='tight')
+    fig.savefig(f'{dataFolder}/combined_metrics.pdf', bbox_inches='tight')
+    fig.savefig(f'{dataFolder}/combined_metrics.png', dpi=300, bbox_inches='tight')
 
     print('Done.')
 
@@ -99,10 +94,7 @@ def load_data(dataFolder: str) -> dict:
             params['snsnr'].append(currSNSNR)
         
         # Define "further post-processing" subfolder
-        if METRICS_COMPUTATION_SEGMENT_DUR is not None:
-            furtherPPpath = f'{subfolder}/further_pp/dur{METRICS_COMPUTATION_SEGMENT_DUR}s'
-        else:
-            furtherPPpath = f'{subfolder}/further_pp/full'
+        furtherPPpath = f'{subfolder}/further_pp/dur{METRICS_COMPUTATION_SEGMENT_DUR}s'
         # List all subfolders of "further post-processing" subfolder
         subss = [f for f in Path(furtherPPpath).iterdir() if f.is_dir()]
         out[subfolderName]['metrics'] = {}  # init
@@ -131,12 +123,12 @@ def plot_data(data: dict[dict[pd.DataFrame]]):
     metricStartInstants = list(data[nodes[0]][metrics[0]][snSNRs[0]].columns)
 
     cmap = matplotlib.cm.get_cmap('Spectral')
-    snSNRtoInclude = [0, 5, 10, 20, 30, 40, 50]
+    snSNRtoInclude = [0, 5, 10, 20, 30, 40]
 
     nCols = len(nodes)   # danse vs. centralized
     nRows = len(metrics)
     fig, axes = plt.subplots(nRows, nCols, sharex=True, sharey='row')
-    fig.set_size_inches(5 * nCols, 4 * nRows)
+    fig.set_size_inches(5 * nRows, 3 * nCols)
     for ii, metric in enumerate(METRICS_TO_PLOT):
         for k, node in enumerate(nodes):  # for each node
             # Select subplot

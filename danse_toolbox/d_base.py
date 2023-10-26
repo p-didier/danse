@@ -116,8 +116,6 @@ class Hyperparameters:
         # sample broadcast by adapting the DANSE-events creation mechanism.
     # Other
     bypassUpdates: bool = False   # if True, do not update filters.
-    stopUpdatesAfter: int = None  # [iter] stop updates after this many
-        # iterations. If None, do not stop.
 
 @dataclass
 class PrintoutsAndPlotting:
@@ -188,6 +186,7 @@ class DANSEparameters(Hyperparameters):
         # (used iff `simType == 'online'`)
     WOLAovlp: float = .5    # WOLA window overlap [*100%]
         # (used iff `simType == 'online'`)
+    updateEvery: int = 1    # update DANSE filters every `updateEvery` frames
     nodeUpdating: str = 'seq'   # node-updating strategy
         # - "seq": round-robin updating [1]
         # - "sim": simultaneous updating [2]
@@ -324,7 +323,7 @@ class DANSEparameters(Hyperparameters):
     # ---- Debugging
     saveConditionNumber: bool = False   # if True, save condition numbers of
         # relevant covariance matrices.
-    saveConditionNumberEvery: int = 999    # [iter] bw. condition number saves.
+    saveConditionNumberEvery: int = 1    # [iter] bw. condition number saves.
     wasnInfoInitiated: bool = False     # if True, the WASN info has been
         # initiated (i.e. the WASN has been created).
     startUpdatesAfterAtLeast: float = 0.   # [s] min. time before starting
@@ -565,7 +564,8 @@ def initialize_events(
         re_t=prepOutput['reInstants'],
         tr_t=prepOutput['trInstantsArranged'],
         leafToRootOrderings=prepOutput['leafToRootOrderings'],
-        firstUpdatingNode=p.seqUpdateStartNodeIdx
+        firstUpdatingNode=p.seqUpdateStartNodeIdx,
+        minNumFramesBwUpdates=p.updateEvery
     )
 
     return outputEvents, fs, prepOutput['wasnObjList']
@@ -674,8 +674,9 @@ def prep_evmat_build(
     out : dict
     """
     
-    # Expected number of DANSE update per node over total signal length
-    numUpInTtot = np.floor(Ttot * fs / p.Ns)
+    # Expected number of potential DANSE update per node over
+    # total signal length
+    numPotentialUpInTtot = np.floor(Ttot * fs / p.Ns)
     # Expected number of broadcasts per node over total signal length
     numBcInTtot = np.floor(Ttot * fs / p.broadcastLength)
 
@@ -708,7 +709,7 @@ def prep_evmat_build(
             upInstants = generate_aligned_instants(
                 startIdx=np.ceil(2 * p.DFTsize / p.Ns),  # we only start updating when we have enough samples
                 eventSep=p.Ns,
-                nEventTotal=numUpInTtot,
+                nEventTotal=numPotentialUpInTtot,
                 nNodes=nNodes,
                 wasnObj=wasnObj
             )
@@ -729,7 +730,7 @@ def prep_evmat_build(
             upInstants = generate_aligned_instants(
                 startIdx=np.ceil(p.DFTsize / p.Ns),  # we only start fusing when we have enough samples
                 eventSep=p.Ns,
-                nEventTotal=numUpInTtot,
+                nEventTotal=numPotentialUpInTtot,
                 nNodes=nNodes,
                 wasnObj=wasnObj
             )
@@ -803,8 +804,8 @@ def prep_evmat_build(
         if 'wholeChunk' in p.broadcastType:
             # Expected DANSE broadcast instants
             bcInstants = generate_aligned_instants(
-                startIdx=p.DFTsize/p.broadcastLength,
-                eventSep=p.broadcastLength,
+                startIdx=p.DFTsize / p.broadcastLength,
+                eventSep=p.Ns,
                 nEventTotal=numBcInTtot,
                 nNodes=nNodes,
                 wasnObj=wasnObj
@@ -813,9 +814,10 @@ def prep_evmat_build(
             # samples to perform compression.
             # Expected DANSE update instants
             upInstants = generate_aligned_instants(
-                startIdx=np.ceil((p.DFTsize + p.DFTsize) / p.Ns),  # we only start fusing when we have enough samples
+                # startIdx=np.ceil((p.DFTsize + p.DFTsize) / p.Ns),  # we only start fusing when we have enough samples
+                startIdx=np.ceil(p.DFTsize / p.Ns),  # we only start fusing when we have enough samples
                 eventSep=p.Ns,
-                nEventTotal=numUpInTtot,
+                nEventTotal=numPotentialUpInTtot,
                 nNodes=nNodes,
                 wasnObj=wasnObj
             )
@@ -828,7 +830,7 @@ def prep_evmat_build(
             upInstants = generate_aligned_instants(
                 startIdx=np.ceil(p.DFTsize / p.Ns),  # we only start fusing when we have enough samples
                 eventSep=p.Ns,
-                nEventTotal=numUpInTtot,
+                nEventTotal=numPotentialUpInTtot,
                 nNodes=nNodes,
                 wasnObj=wasnObj
             )
@@ -966,7 +968,8 @@ def build_events_matrix(
         re_t=[],
         tr_t=np.array([]),
         leafToRootOrderings=[],
-        firstUpdatingNode=0
+        firstUpdatingNode=0,
+        minNumFramesBwUpdates=0
     ):
     """
     Builds the DANSE events matrix from the update and broadcast instants.
@@ -996,6 +999,8 @@ def build_events_matrix(
         Nodes that live on the same tree depth are groupped in lists.
     firstUpdatingNode : int
         Index of the first updating node (only used if `'seq' in nodeUpdating`).
+    minNumFramesBwUpdates : int
+        Minimum number of frames between two filter updates.
 
     Returns
     -------
@@ -1059,14 +1064,6 @@ def build_events_matrix(
         ('up', [3, 'us']),  # 4) update node-specific filter estimates.
     ])
 
-    # Make sure the event codes dictionary is correctly ordered
-    if not [eventsCodesDict[list(eventsCodesDict.keys())[ii]] <\
-        eventsCodesDict[list(eventsCodesDict.keys())[ii + 1]]\
-        for ii in range(len(list(eventsCodesDict.keys())) - 1)]:
-        raise ValueError(
-            'The events code dictionary is not correclty ordered.'
-        )
-
     # Useful variables
     nNodes = len(up_t)  # number of nodes in WASN
     reversedEventsCodingDict = dict(
@@ -1110,6 +1107,9 @@ def build_events_matrix(
     lastUpNode = firstUpdatingNode - 1     # index of latest updating node
     # ^^^ init. at `firstUpdatingNode - 1` so that, first,
     #       `lastUpNode + 1 == firstUpdatingNode`.
+    nFramesSinceLastUpdate = 0
+    # ^^^ counter for the number of frames since the last update
+    # for each node.
     treeFormationCounter = -1
     # ^^^ init. at -1 so that `treeFormationIdx + 1 == 0`
     lastTreeFormationInstant = None
@@ -1157,20 +1157,34 @@ def build_events_matrix(
         # types = ['bc' if ii == 0 else 'up' for ii in eventTypesConcerned]
         types = [reversedEventsCodingDict[ii] for ii in evTypesConcerned]
 
-        # Address node-updating strategy
-        bypassUpdate = [None for _ in types]  # default: no bypass
-        if 'up' in types and 'seq' in nodeUpdating:
-            lastUpNodeUpdated = lastUpNode
+        # Address update bypassing
+        bypassUpdate = [False for _ in types]  # default: no bypass
+        if 'up' in types:  # if we hit an update instant (i.e., a new WOLA frame)
+            # Increment counter for the number of frames since the last update
+            nFramesSinceLastUpdate += 1
+            # By default, don't change the index of the last updating node
+            lastUpNodeUpdated = copy.deepcopy(lastUpNode)
             for ii in range(len(types)):
                 if types[ii] == 'up':
-                    if nodesConcerned[ii] == np.mod(lastUpNode + 1, nNodes):
-                        # Increment last updating node index
-                        lastUpNodeUpdated = nodesConcerned[ii]
-                        bypassUpdate[ii] = False
-                    else:
-                        # Bypass update in other nodes
+                    if nFramesSinceLastUpdate < minNumFramesBwUpdates:
+                        # Bypass update if not enough frames have passed
                         bypassUpdate[ii] = True
-            lastUpNode = lastUpNodeUpdated
+                    else:
+                        # Address sequential update bypassing
+                        if 'seq' in nodeUpdating:
+                            # If enough frames have passed but we are in a sequential
+                            # update scheme, we only update the node if it is the
+                            # next node in the sequence.
+                            if nodesConcerned[ii] == np.mod(lastUpNode + 1, nNodes):
+                                # Increment last updating node index
+                                lastUpNodeUpdated = nodesConcerned[ii]
+                            else:
+                                # Bypass update in other nodes
+                                bypassUpdate[ii] = True
+            if not all(np.array(bypassUpdate)[np.array(types) == 'up']):
+                nFramesSinceLastUpdate = 0  # if at least one update is
+                    # not bypassed, reset counter.
+            lastUpNode = copy.deepcopy(lastUpNodeUpdated)
 
         # Build events matrix
         outputInstants.append(DANSEeventInstant(
@@ -2486,9 +2500,9 @@ def get_y_tilde_batch(
                 else:
                     fusionFilter = wTildeExt[idxNode][:, i[idxNode], :]
                 # TI-DANSE fusion vector
-                # p = fusionFilter[:, :nSensorPerNode[idxNode]] /\
-                #     fusionFilter[:, -1:]
-                p = fusionFilter[:, :nSensorPerNode[idxNode]]
+                p = fusionFilter[:, :nSensorPerNode[idxNode]] /\
+                    fusionFilter[:, -1:]
+                # p = fusionFilter[:, :nSensorPerNode[idxNode]]
                 # Compute sum
                 etaMkBatch += np.einsum(   # <-- `+=` is important
                     'ij,ikj->ik',

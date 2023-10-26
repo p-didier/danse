@@ -129,10 +129,7 @@ class BatchDANSEvariables(DANSEvariables):
         Update the DANSE spatial covariance matrices in batch mode,
         using the latest filters.
         """
-        self.yTildeBatch[k] = self.get_y_tilde_batch(
-            k,
-            computeSpeechAndNoiseOnly=True,
-        )
+        self.yTildeBatch[k] = self.get_y_tilde_batch(k)
         
         self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
             self.yTildeBatch[k],
@@ -221,6 +218,22 @@ class BatchTIDANSEvariables(BatchDANSEvariables):
         # `batch_update_danse_covmats` works for TI-DANSE too,
         # as it detects presence of field `eta` and acts accordingly.
         self.batch_update_danse_covmats(k)
+        stop = 1
 
     def init_for_adhoc_topology(self):
         TIDANSEvariables.init_for_adhoc_topology(self)
+
+    def update_up_downstream_neighbors(
+            self,
+            wasnObj: WASN,
+            newRootIdx=0
+        ):
+        # Generate new WASN object
+        updatingWasnObj = base.prune_wasn_to_tree(
+            wasnObj,
+            forcedRoot=newRootIdx
+        )
+        TIDANSEvariables.update_up_downstream_neighbors(
+            self,
+            newWasnObj=updatingWasnObj
+        )

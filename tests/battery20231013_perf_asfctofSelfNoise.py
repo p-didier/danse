@@ -14,9 +14,9 @@ from .sandbox import main as sandbox_main
 from danse_toolbox.d_classes import TestParameters
 
 # General parameters
-EXPORT_FOLDER = f'./danse/out/{Path(__file__).stem}_wReverb'
+EXPORT_FOLDER = f'./danse/out/{Path(__file__).stem}'
 MK = [2, 3]  # number of sensors per node
-BASE_CONFIG_FILE = './danse/config_files/sandbox_config_battery20231013.yaml'
+BASE_CONFIG_FILE = './danse/config_files/sandbox_config.yaml'
 
 # SROs to test
 SN_SNR_TO_TEST = np.linspace(start=0, stop=50, num=11)  # [PPM]

@@ -120,40 +120,44 @@ def danse_it_up(
     else:  # Ad-hoc WASN topology case
         print(f'Running {p.danseParams.simType} TI-DANSE... (verbose: {p.danseParams.printoutsAndPlotting.verbose}, GEVD: {p.danseParams.performGEVD})')
         if p.danseParams.simType == 'batch':  # true batch mode
-            raise NotImplementedError('Batch mode not implemented / tested yet.')
-            # danse_function = core.tidanse_batch
+            # raise NotImplementedError('Batch mode not implemented / tested yet.')
+            danse_function = core.tidanse_batch
         else:
             danse_function = core.tidanse
+    
     # Launch DANSE
     dv, wasnObj = danse_function(*args)
-    # If asked, compute best possible performance (centralized, no SROs, batch)
-    if p.exportParams.bestPerfReference:
-        outBP = core.get_best_perf(*args)
 
-    # Compute signals for SNR computation
-    sigsSnr = core.generate_signals_for_snr_computation(
-        p.danseParams,
-        dv,
-        wasnObj,
-        danse_function,
-        p.exportParams.bestPerfReference,
-        wCentrBatch=outBP.wCentr if p.exportParams.bestPerfReference else None
-    )
-    
-    # Format the output for post-processing
-    out, wasnUpdated = core.format_output(
-        p.danseParams,
-        dv,
-        wasnObj,
-        sigsSnr=sigsSnr
-    )
+    # For online processing...
+    if p.danseParams.simType != 'batch':
+        # ...if asked, compute best possible performance
+        # (centralized, no SROs, batch)
+        if p.exportParams.bestPerfReference:
+            outBP = core.get_best_perf(*args)
+        # Compute signals for SNR computation
+        sigsSnr = core.generate_signals_for_snr_computation(
+            p.danseParams,
+            dv,
+            wasnObj,
+            danse_function,
+            p.exportParams.bestPerfReference,
+            wCentrBatch=outBP.wCentr if p.exportParams.bestPerfReference else None
+        )
+        # Format the output for post-processing (also updating the WASN object)
+        out, wasnObj = core.format_output(
+            p.danseParams,
+            dv,
+            wasnObj,
+            sigsSnr=sigsSnr
+        )
+        # Add best possible performance data to output
+        if p.exportParams.bestPerfReference:
+            out.include_best_perf_data(outBP, sigsSnr)
+    else:
+        out = dv  # no need to format, just return the `DANSEoutputs` object
     print('DANSE run complete.')
 
-    # Add best possible performance data to output
-    if p.exportParams.bestPerfReference:
-        out.include_best_perf_data(outBP, sigsSnr)
-
-    return out, wasnUpdated
+    return out, wasnObj
 
 def postprocess(
         out: pp.DANSEoutputs,

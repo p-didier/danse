@@ -400,9 +400,10 @@ def tidanse_batch(
                 print(f'[seq] Batch update {ii + 1}/{p.maxBatchUpdates}... (updating node: {upNodeIdx + 1})')
             # Loop over nodes
             # New tree formation: update up-/downstream neighbors lists
-            # btidv.update_up_downstream_neighbors(
-            #     wasnObjList[tidv.treeFormationCounter]  # <-- TODO: TODO: TODO: TODO: WE ARE MISSING THIS
-            # )
+            btidv.update_up_downstream_neighbors(
+                wasnObj,
+                newRootIdx=upNodeIdx
+            )
             for k in range(btidv.nNodes):
                 # Filter updates and desired signal estimates event
                 btidv.batch_update_tidanse_covmats(k)
@@ -448,7 +449,6 @@ def tidanse_batch(
     print(f'(Real-time processing factor: {np.round(np.amax(btidv.timeInstants) / dur, 4)})')
 
     # Build output
-    # out = BatchDANSEoutputs()
     out = DANSEoutputs()
     out.import_params(p)
     out.from_variables(btidv)
@@ -483,10 +483,27 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
         WASN under consideration (updated).
     """
     def _get_beta_from_t50p(t50p, fs, Ns):
+        """
+        Returns exponential averaging factor from 50% rise time.
+
+        Parameters
+        ----------
+        t50p : float
+            50% rise time.
+        fs : float
+            Sampling frequency.
+        Ns : int
+            Number of samples.
+
+        Returns
+        -------
+        beta : float
+            Exponential averaging factor.
+        """
         return np.exp(np.log(0.5) / (t50p * fs / Ns))
 
-    # Set exponential averaging factor for `Ryy` and `Rnn` updates
     for k in range(p.wasnParams.nNodes):  # for each node
+        # Set exponential averaging factor for `Ryy` and `Rnn` updates
         params = (wasnObj.wasn[k].fs, p.danseParams.Ns)
         if p.danseParams.forcedBeta is None:
             wasnObj.wasn[k].beta = _get_beta_from_t50p(
@@ -504,7 +521,7 @@ def prep_for_danse(p: TestParameters, wasnObj: WASN):
     
     # If random-noise (unusable) signals have been added...
     if any(p.wasnParams.addedNoiseSignalsPerNode > 0):
-        # Copy base `nSensorPerNode` and `sensorToNodeIndices` for ASC plots.
+        # Coopy base `nSensorPerNode` and `sensorToNodeIndices` for ASC plots.
         p.wasnParams.nSensorPerNodeASC =\
             copy.deepcopy(p.wasnParams.nSensorPerNode)
         p.wasnParams.sensorToNodeIndicesASC =\

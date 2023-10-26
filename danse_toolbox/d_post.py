@@ -308,6 +308,8 @@ class DANSEoutputs(DANSEparameters):
         axes.grid()
         axes.set_xlabel('DANSE iteration $i$')
         axes.set_ylabel('MMSE cost $E\{ | d - \hat{d} |^2 \}$')
+        # Ensure the x-ticks are integers
+        axes.set_xticks(np.arange(self.mmseCost.shape[0] + 1))
         axes.legend(loc='upper right')
         axes.set_yscale('log')  # logarithmic scale for better visualization
         fig.tight_layout()
@@ -2414,7 +2416,7 @@ def compute_netwide_danse_filts(
                         # In TI-DANSE, they span the entire dimension of `wTilde`.
                         # Here, then should stand `filtersEXT[q][:, 1:, :-1]` or
                         # `filtersEXT[q][:, 1:, :-1]/filtersEXT[q][:, 1:, -1]`
-                        filtersEXT[q][:, 1:, :-1] / filtersEXT[q][:, 1:, [-1]] *\
+                        filtersEXT[q][:, 1:, :-1] *\
                             filters[k][:, :-1, [idxGkq]],
                         axis=0
                     )
@@ -2478,12 +2480,12 @@ def export_danse_outputs(
         if p.danseParams.simType == 'batch':
             fig = out.plot_mmse_cost()
             fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.png', dpi=300)
-            # fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.pdf')
+            fig.savefig(f'{p.exportParams.exportFolder}/mmse_cost.pdf')
             plt.close(fig)
         elif p.danseParams.simType == 'online' and p.exportParams.mseBatchPerfPlot:
             fig = out.plot_batch_cost_at_each_update()
             fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.png', dpi=300)
-            # fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.pdf')
+            fig.savefig(f'{p.exportParams.exportFolder}/batch_cost.pdf')
 
         # Export filter coefficients
         if p.exportParams.filters:
@@ -2542,7 +2544,7 @@ def export_danse_outputs(
                 xaxistype='both'  # "both" == iterations & instants
             )
             fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.png', dpi=300)
-            fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.pdf')
+            # fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.pdf')
 
     # Compute performance metrics (+ export if needed)
     if p.exportParams.metricsPlot:
