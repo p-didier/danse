@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231026_tests/tidanse/test12_trialWithDeNormalization
+  exportFolder: .\danse\out/20231027_tests/tidanse/test3
   metricsInPlots:
   - snr
   - sisnr

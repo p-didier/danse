@@ -827,7 +827,7 @@ class DANSEvariables(base.DANSEparameters):
         self.phaseShiftFactorThroughTime = np.zeros((self.nIter))
         # self.lastBroadcastInstant = np.full(self.nNodes, fill_value=-1, dtype=float)
         self.lastBroadcastInstant = np.zeros(self.nNodes)
-        self.lastUpdateInstant = np.zeros(self.nNodes)
+        self.lastUpdateInstant = np.full(self.nNodes, fill_value=-1, dtype=float)
         self.lastTDfilterUp = np.zeros(self.nNodes)
         self.Rnncentr = Rnncentr
         self.Ryycentr = Ryycentr
@@ -1644,7 +1644,7 @@ class DANSEvariables(base.DANSEparameters):
 
         if tiDANSEflag:
             currWTilde = self.wTilde[k][:, self.i[k] + 1, :]
-            currWTilde[:, -1] /= np.linalg.norm(self.eta[k])
+            # currWTilde[:, -1] /= self.normFactGk[k]  # <-- defined in `TIDANSEvariables` class
         else:
             currWTilde = self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
 
@@ -2747,6 +2747,10 @@ class TIDANSEvariables(DANSEvariables):
         #
         self.treeFormationCounter = 0  # counting the number of tree-formations
         self.currentWasnTreeObj = None  # current tree WASN object
+        #
+        self.normFactGk = [None for _ in range(self.nNodes)] # normalisation
+            # factor for in-network sum, avoiding divergence (regularization
+            # term). Defined in inner functions. 
         # ------- SRO compensation variables -------
         if self.compensationStrategy == 'network-wide':
             self.localSROwrtRoot = np.zeros(self.nNodes)
@@ -2885,7 +2889,7 @@ class TIDANSEvariables(DANSEvariables):
         if self.currentWasnTreeObj.rootIdx == k:
             self.eta[k] = copy.deepcopy(self.zLocal[k])
             self.etaMk[k] = self.eta[k] - self.zLocalPrime[k]
-            self.etaMk[k] /= np.linalg.norm(self.eta[k])  # /!\ debug purposes 23/10/202
+            # self.etaMk[k] /= np.linalg.norm(self.eta[k])  # /!\ debug purposes 23/10/202
             # self.etaMk[k] /= 100  # /!\ debug purposes 23/10/202
 
     def ti_relay_innetwork_sum_upstream(self, k):
@@ -2903,7 +2907,7 @@ class TIDANSEvariables(DANSEvariables):
                 self.etaMk[l] = self.eta[l] - self.zLocalPrime[l]  # $\eta_{-l}$
             else:   # <-- case where $\eta$ has not yet been computed, e.g., due to SROs
                 self.etaMk[l] = np.array([])
-            self.etaMk[l] /= np.linalg.norm(self.eta[l])  # /!\ debug purposes 23/10/202
+            # self.etaMk[l] /= np.linalg.norm(self.eta[l])  # /!\ debug purposes 23/10/202
             # self.etaMk[l] /= 100  # /!\ debug purposes 23/10/202
 
     def ti_update_and_estimate(self, k, tCurr, fs, bypassUpdateEventMat=False):
@@ -2925,20 +2929,15 @@ class TIDANSEvariables(DANSEvariables):
         """
         if self.firstDANSEupdateRefSensor is None and\
             self.nInternalFilterUps[k] == 0:
-            # Save first update instant (for, e.g., SRO plot)
-            self.firstDANSEupdateRefSensor = tCurr
+            self.firstDANSEupdateRefSensor = tCurr  # save first update instant (for, e.g., SRO plot)
 
-        # Process buffers
-        # self.ti_process_incoming_signals_buffers(k, tCurr)
-
-        # Construct `\tilde{y}_k` in frequency domain
-        self.ti_build_ytilde(tCurr, fs, k)
+        self.ti_build_ytilde(tCurr, fs, k)  # construct `\tilde{y}_k` in frequency domain
         # Consider local / centralised estimation(s)
         if self.computeCentralised:
             self.process_incoming_signals_buffers_centr(k, tCurr)
             self.build_ycentr(tCurr, fs, k)
             self.wipe_buffers_centr(k)  # wipe buffers for next iteration
-        if self.computeLocal:  # extract local info (most easily: from `\tilde{y}_k`)
+        if self.computeLocal:   # extract local info (most easily: from `\tilde{y}_k`)
             self.build_ylocal(k)
 
         # Compensate for SROs
@@ -2955,6 +2954,7 @@ class TIDANSEvariables(DANSEvariables):
             if not bypassUpdateEventMat:# and not skipUpdate:
                 self.perform_update(k)
                 # ^^^ !! depends on outcome of `check_covariance_matrices()` !!
+                self.lastUpdateInstant[k] = tCurr  # update last update instant
             else:
                 # Do not update the filter coefficients
                 self.wTilde[k][:, self.i[k] + 1, :] = self.wTilde[k][:, self.i[k], :]
@@ -2969,6 +2969,12 @@ class TIDANSEvariables(DANSEvariables):
 
             # Update external filters (for broadcasting)
             self.update_external_filters(k, tCurr, tiDANSEflag=True)
+
+            if 'seq' in self.nodeUpdating and bypassUpdateEventMat:
+                # We are currently looking at a node that does not update at 
+                # this time frame. We need to normalize its filter coefficients
+                # to avoid divergence.
+                self.normalize_filter_coefficients(k)
         
         # # Update SRO estimates
         # self.update_sro_estimates(k, fs)
@@ -2980,6 +2986,16 @@ class TIDANSEvariables(DANSEvariables):
         # Update iteration index
         self.i[k] += 1
     
+    def normalize_filter_coefficients(self, k):
+        """Normalize the filter coefficients of node k appropriately
+        to avoid divergence in TI-DANSE."""
+        # Determine node that has updated most recently
+        q = self.lastUpdateInstant.argmax()
+        # Normalize filter coefficients
+        self.wTildeExt[k][:, self.i[k] + 1, -1] /=\
+            np.abs(self.wTilde[q][:, self.i[q], -1]) /\
+            np.abs(self.wTildeExt[k][:, self.i[k] + 1, -1])
+
     def estimate_local_clock_drift(self, k, tCurr, fs):
         """
         Estimates the local clock drift w.r.t. the tree root.
@@ -3081,6 +3097,10 @@ class TIDANSEvariables(DANSEvariables):
         ) / np.sqrt(self.Ns)
         # Keep only positive frequencies
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
+        # Normalize the last element (`g_k`) by ||\eta||, for each frequency
+        # line separately.
+        self.normFactGk[k] = np.abs(self.yTildeHat[k][:, self.i[k], -1])
+        # self.yTildeHat[k][:, self.i[k], -1] /= self.normFactGk[k]
 
     def ti_compression_whole_chunk(
             self,
