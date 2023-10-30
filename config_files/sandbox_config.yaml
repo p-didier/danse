@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231030_tests/tidanse/base_tests/test8_as7_newPlot
+  exportFolder: .\danse\out/20231030_tests/tidanse/base_tests/test12_as7_norm_forNode1s
   metricsInPlots:
   - snr
   - sisnr
@@ -42,7 +42,7 @@ danseParams:
   DFTsize: 1024
   t_expAvg50p: 1
   t_expAvg50pExternalFilters: 1
-  # forcedBeta: 0.98  # <-- if uncommented, bypasses `t_expAvg50p`
+  # forcedBeta: 0.0  # <-- if uncommented, bypasses `t_expAvg50p`
   forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`. If == 0, no exp. averaging.
   timeBtwExternalFiltUpdates: 0.
   onlyBroadcastRefSensorSigs: false # /!\ /!\ /!\ /!\

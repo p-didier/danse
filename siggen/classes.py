@@ -185,7 +185,7 @@ class TopologyParameters:
                 raise ValueError('The provided "user-defined" adjacency matrix corresponds to an unconnected graph.')
             # If fully connected, adapt fields
             if (self.userDefinedTopo == 1).all():
-                print('WARNING: User-defined topology is fully connected but field is "topologyType" to "fully-connected".')
+                print('WARNING: User-defined topology is fully connected but field is "topologyType".')
                 time.sleep(0.2)  # let user read...
                 # inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
                 # while inp not in ['y', 'n', 'Y', 'N']:

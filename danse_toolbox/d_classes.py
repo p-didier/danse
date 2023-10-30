@@ -2977,7 +2977,7 @@ class TIDANSEvariables(DANSEvariables):
                 print('!! User-forced bypass of filter coefficients updates !!')
 
             # Normalize the filter coefficients (to avoid divergence)
-            # self.normalize_filter_coeff(k, bypassUpdateEventMat, tCurr)
+            self.normalize_filter_coeff(k, bypassUpdateEventMat, tCurr)
 
             # Update external filters (for broadcasting)
             self.update_external_filters(k, tCurr, tiDANSEflag=True)
@@ -2994,15 +2994,15 @@ class TIDANSEvariables(DANSEvariables):
 
     def normalize_filter_coeff(self, k, bypassUpdateEventMat, tCurr):
         if 'seq' in self.nodeUpdating:
-            if not bypassUpdateEventMat and\
-                tCurr - self.lastNormFactGkUpdate >= self.normFactGkUpdateEvery:
-                # This is the updating node -> the normalization factors
-                # are the current $g_k$ filter coefficients.
-                self.normFactGk = self.wTilde[k][:, self.i[k] + 1, -1]
-                self.lastNormFactGkUpdate = tCurr
-        # Normalize the filter entries
-        # self.wTilde[k][:, self.i[k] + 1, -1] /= self.normFactGk
-        self.wTilde[k][:, self.i[k] + 1, -1] /= 100
+            if k == 0:
+                if not bypassUpdateEventMat and\
+                    tCurr - self.lastNormFactGkUpdate >= self.normFactGkUpdateEvery:
+                    # This is the updating node -> the normalization factors
+                    # are the current $g_k$ filter coefficients.
+                    self.normFactGk = self.wTilde[k][:, self.i[k] + 1, -1]
+                    self.lastNormFactGkUpdate = tCurr
+                    # Normalize the filter entries=
+                    self.wTilde[k][:, self.i[k] + 1, -1] /= self.normFactGk
     
     def normalize_scm_entries(self, k, bypassUpdateEventMat, tCurr):
         """Normalize the SCM entries of node k appropriately
@@ -3171,7 +3171,7 @@ class TIDANSEvariables(DANSEvariables):
             # transform by the inverse of the part of the estimator
             # corresponding to the in-network sum.
             p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]] /\
-                self.wTildeExt[k][:, self.i[k], -1:]
+                self.wTildeExt[k][:, self.i[k], [-1]]
             # p = self.wTildeExt[k][:, self.i[k], :yq.shape[-1]]
         # Apply linear combination to form compressed signal.
         zqHat = np.einsum('ij,ij->i', p.conj(), yqHat)
