@@ -216,9 +216,9 @@ def tidanse(
                     fs[k],
                     bypassUpdate
                 )
-                if k == tidv.currentWasnTreeObj.rootIdx and\
-                    bypassUpdate:
-                    raise ValueError()
+                # if k == tidv.currentWasnTreeObj.rootIdx and\
+                #     bypassUpdate:
+                #     raise ValueError()
             elif evType == 'tr':
                 # New tree formation: update up-/downstream neighbors lists
                 tidv.update_up_downstream_neighbors(

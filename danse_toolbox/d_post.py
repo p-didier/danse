@@ -2167,8 +2167,7 @@ def plot_filters(
             [maxNorm, minNorm],
             refSensorIdx,
             figPrefix,
-            bestPerfData,
-            tiDANSEflag=tiDANSEflag
+            bestPerfData
         )
         figs += figs3
         dataFigs += dataFigs_c
@@ -2312,8 +2311,7 @@ def plot_centr_filts(
         maxminNorm,
         refSensorIdx,
         figPrefix='filters',
-        bestPerfData=None,
-        tiDANSEflag=False
+        bestPerfData=None
     ):
     # Get number of nodes in WASN
     nNodes = len(filtersCentr)
@@ -2415,12 +2413,14 @@ def compute_netwide_danse_filts(
                         # vvv NB: need to pay attention to dimension of `filtersEXT`
                         # In TI-DANSE, they span the entire dimension of `wTilde`.
                         # Here, then should stand `filtersEXT[q][:, 1:, :-1]` or
-                        # `filtersEXT[q][:, 1:, :-1]/filtersEXT[q][:, 1:, -1]`
-                        filtersEXT[q][:, 1:, :-1] *\
+                        # `filtersEXT[q][:, 1:, :-1]/filtersEXT[q][:, 1:, [-1]]`
+                        # before `* filters[k][:, :-1, [idxGkq]]`.
+                        filtersEXT[q][:, 1:, :-1] / filtersEXT[q][:, 1:, [-1]] *\
                             filters[k][:, :-1, [idxGkq]],
                         axis=0
                     )
                 else:
+                    # Fully connected (regular) DANSE case
                     for m in range(nSensorsPerNode[q]):
                         legendNetwide.append(f'$w_{{qq,{m + 1}}}\\cdot g_{{kq}}$ ($q={q + 1}$)')
                     idxGkq = nSensorsPerNode[k] + neighborCount

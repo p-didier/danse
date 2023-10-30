@@ -2748,9 +2748,13 @@ class TIDANSEvariables(DANSEvariables):
         self.treeFormationCounter = 0  # counting the number of tree-formations
         self.currentWasnTreeObj = None  # current tree WASN object
         #
-        self.normFactGk = [None for _ in range(self.nNodes)] # normalisation
-            # factor for in-network sum, avoiding divergence (regularization
-            # term). Defined in inner functions. 
+        # self.normFactGk = [None for _ in range(self.nNodes)] # normalisation
+        self.normFactGk = np.ones((self.nPosFreqs,), dtype=complex)
+            # ^^^ normalisation factor for in-network sum, avoiding divergence
+            # (regularization term). Defined in inner functions.
+        self.lastNormFactGkUpdate = 1.0  # last time instant when `normFactGk`
+            # was updated.
+        self.normFactGkUpdateEvery = 0.0  # update `normFactGk` every 0.1 s.
         # ------- SRO compensation variables -------
         if self.compensationStrategy == 'network-wide':
             self.localSROwrtRoot = np.zeros(self.nNodes)
@@ -2822,6 +2826,9 @@ class TIDANSEvariables(DANSEvariables):
                 ykFrame,
                 zForSynthesis=self.zLocalPrimeBuffer[k]
             )
+            # # Transform to random numbers
+            # self.zLocalPrimeBuffer[k] =\
+            #     2 * np.random.rand(len(self.zLocalPrimeBuffer[k])) - 1
         else:
             # Only update filter every so often
             updateBroadcastFilter = False
@@ -2946,6 +2953,8 @@ class TIDANSEvariables(DANSEvariables):
         if self.preGivenFilters.active:
             self.update_using_pregiven_filters(k)
         else:
+            # TI-DANSE-specific: normalization to avoid divergence
+            # self.normalize_scm_entries(k, bypassUpdateEventMat, tCurr)
             # Ryy and Rnn updates (including centralised / local, if needed)
             self.spatial_covariance_matrix_update(k)
             # Check quality of covariance matrix estimates 
@@ -2967,14 +2976,11 @@ class TIDANSEvariables(DANSEvariables):
             if self.bypassUpdates:
                 print('!! User-forced bypass of filter coefficients updates !!')
 
+            # Normalize the filter coefficients (to avoid divergence)
+            # self.normalize_filter_coeff(k, bypassUpdateEventMat, tCurr)
+
             # Update external filters (for broadcasting)
             self.update_external_filters(k, tCurr, tiDANSEflag=True)
-
-            if 'seq' in self.nodeUpdating and bypassUpdateEventMat:
-                # We are currently looking at a node that does not update at 
-                # this time frame. We need to normalize its filter coefficients
-                # to avoid divergence.
-                self.normalize_filter_coefficients(k)
         
         # # Update SRO estimates
         # self.update_sro_estimates(k, fs)
@@ -2985,16 +2991,36 @@ class TIDANSEvariables(DANSEvariables):
         self.get_desired_signal(k)
         # Update iteration index
         self.i[k] += 1
+
+    def normalize_filter_coeff(self, k, bypassUpdateEventMat, tCurr):
+        if 'seq' in self.nodeUpdating:
+            if not bypassUpdateEventMat and\
+                tCurr - self.lastNormFactGkUpdate >= self.normFactGkUpdateEvery:
+                # This is the updating node -> the normalization factors
+                # are the current $g_k$ filter coefficients.
+                self.normFactGk = self.wTilde[k][:, self.i[k] + 1, -1]
+                self.lastNormFactGkUpdate = tCurr
+        # Normalize the filter entries
+        # self.wTilde[k][:, self.i[k] + 1, -1] /= self.normFactGk
+        self.wTilde[k][:, self.i[k] + 1, -1] /= 100
     
-    def normalize_filter_coefficients(self, k):
-        """Normalize the filter coefficients of node k appropriately
+    def normalize_scm_entries(self, k, bypassUpdateEventMat, tCurr):
+        """Normalize the SCM entries of node k appropriately
         to avoid divergence in TI-DANSE."""
-        # Determine node that has updated most recently
-        q = self.lastUpdateInstant.argmax()
-        # Normalize filter coefficients
-        self.wTildeExt[k][:, self.i[k] + 1, -1] /=\
-            np.abs(self.wTilde[q][:, self.i[q], -1]) /\
-            np.abs(self.wTildeExt[k][:, self.i[k] + 1, -1])
+        if 'seq' in self.nodeUpdating:
+            if not bypassUpdateEventMat and\
+                tCurr - self.lastNormFactGkUpdate >= self.normFactGkUpdateEvery:
+                # This is the updating node -> the normalization factors
+                # are the current $g_k$ filter coefficients.
+                self.normFactGk = self.wTilde[k][:, self.i[k] + 1, -1]
+                self.lastNormFactGkUpdate = tCurr
+
+        # Normalize the SCM entries
+        for kappa in range(self.nPosFreqs):
+            Nmat = np.eye(self.dimYTilde[k], dtype=np.complex128)
+            Nmat[-1, -1] = self.normFactGk[kappa]  # normalization factor
+            self.Ryytilde[k][kappa, :, :] =\
+                Nmat @ self.Ryytilde[k][kappa, :, :] @ Nmat.conj().T  # N * Ryy * N^H
 
     def estimate_local_clock_drift(self, k, tCurr, fs):
         """
@@ -3099,7 +3125,7 @@ class TIDANSEvariables(DANSEvariables):
         self.yTildeHat[k][:, self.i[k], :] = yTildeHatCurr[:self.nPosFreqs, :]
         # Normalize the last element (`g_k`) by ||\eta||, for each frequency
         # line separately.
-        self.normFactGk[k] = np.abs(self.yTildeHat[k][:, self.i[k], -1])
+        # self.normFactGk[k] = np.abs(self.yTildeHat[k][:, self.i[k], -1])
         # self.yTildeHat[k][:, self.i[k], -1] /= self.normFactGk[k]
 
     def ti_compression_whole_chunk(

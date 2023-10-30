@@ -1,7 +1,7 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20231027_tests/tidanse/test3
+  exportFolder: .\danse\out/20231030_tests/tidanse/base_tests/test8_as7_newPlot
   metricsInPlots:
   - snr
   - sisnr
@@ -53,10 +53,10 @@ danseParams:
     printout_externalFilterUpdate: false
   # vvvvvvvvv Metrics vvvvvvvvv
   # startComputeMetricsAt: after_5s
-  startComputeMetricsAt: after_10s
+  # startComputeMetricsAt: after_10s
   # startComputeMetricsAt: after_15s
   # startComputeMetricsAt: after_20s
-  # startComputeMetricsAt: after_200ms
+  startComputeMetricsAt: after_200ms
   # vvvvvvvvv SRO-related vvvvvvvvv
   broadcastType: wholeChunk
   # broadcastType: fewSamples
@@ -112,10 +112,10 @@ wasnParams:
   # nSensorPerNode: '[1, 3, 2, 5]'
   # nSensorPerNode: '[2,2,2,2,2]'
   # nSensorPerNode: '[2, 1]'
-  # nSensorPerNode: '[1, 1]'
+  nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
-  nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[1, 2, 3]'
   # nSensorPerNode: '[1, 2, 3, 4]'
   # nSensorPerNode: '[2, 2, 2, 2]'
   #
@@ -129,6 +129,7 @@ wasnParams:
   #
   signalType: from_file
   desiredSignalFile:
+  # - .\danse\tests\sigs\01_speech\speech2_16000Hz_shortPauses.wav
   - .\danse\tests\sigs\01_speech\speech2_16000Hz.wav
   nDesiredSources: 1
   nNoiseSources: 1
@@ -145,5 +146,6 @@ wasnParams:
     commDistance: 4.0
     plotTopo: false
     seed: 12348
-    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'
+    userDefinedTopo: '[[1, 1], [1, 1]]'
+    # userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'
     # userDefinedTopo: '[[1, 1, 0, 0], [1, 1, 1, 0], [0, 1, 1, 1], [0, 0, 1, 1]]'

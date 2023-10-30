@@ -1,5 +1,5 @@
 
-import copy
+import time
 import itertools
 import numpy as np
 from pathlib import Path
@@ -185,14 +185,16 @@ class TopologyParameters:
                 raise ValueError('The provided "user-defined" adjacency matrix corresponds to an unconnected graph.')
             # If fully connected, adapt fields
             if (self.userDefinedTopo == 1).all():
-                inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
-                while inp not in ['y', 'n', 'Y', 'N']:
-                    inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
-                if inp in ['y', 'Y']:
-                    print('Setting field "topologyType" to "fully-connected" -> will compute DANSE (not TI-DANSE)')
-                    self.topologyType = 'fully-connected'
-                else:
-                    print(f'Keeping field "topologyType" as is ("{self.topologyType}").')
+                print('WARNING: User-defined topology is fully connected but field is "topologyType" to "fully-connected".')
+                time.sleep(0.2)  # let user read...
+                # inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
+                # while inp not in ['y', 'n', 'Y', 'N']:
+                #     inp = input('User-defined topology is fully connected. Change field "topologyType" to "fully-connected"? [y/[n]]  ')
+                # if inp in ['y', 'Y']:
+                #     print('Setting field "topologyType" to "fully-connected" -> will compute DANSE (not TI-DANSE)')
+                #     self.topologyType = 'fully-connected'
+                # else:
+                #     print(f'Keeping field "topologyType" as is ("{self.topologyType}").')
 
 @dataclass
 class WASNparameters(AcousticScenarioParameters):
