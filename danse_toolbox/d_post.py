@@ -1252,7 +1252,7 @@ def export_sounds(
                 )
             elif out.broadcastType != 'wholeChunk':
                 print(f'Node {k+1}: Fused signals not exported (not yet implemented for per-sample broadcasting).')
-            elif not fullyConnected:
+            elif not fullyConnected and out.simType != 'batch':
                 subfolder = f'{folder}/wav/fused_ti'
                 if not Path(subfolder).is_dir():
                     Path(subfolder).mkdir()
@@ -2547,7 +2547,7 @@ def export_danse_outputs(
             # fig.savefig(f'{p.exportParams.exportFolder}/sroEvolution.pdf')
 
     # Compute performance metrics (+ export if needed)
-    if p.exportParams.metricsPlot:
+    if p.exportParams.metricsPlot and p.danseParams.simType != 'batch':
         if p.exportParams.bypassAllExports:
             exportFolder = None
         else:
@@ -2567,7 +2567,7 @@ def export_danse_outputs(
         # Save `DANSEoutputs` object after metrics computation
         if p.exportParams.danseOutputsFile:
             out.save(foldername=p.exportParams.exportFolder, light=True)
-        if p.exportParams.metricsFile:
+        if p.exportParams.metricsFile and p.danseParams.simType != 'batch':
             # Save just metrics (for faster loading in post-processing scripts)
             out.save_metrics(foldername=p.exportParams.exportFolder)
         # Save `TestParameters` object
