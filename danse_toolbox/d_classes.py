@@ -807,7 +807,7 @@ class DANSEvariables(base.DANSEparameters):
             for node in wasn]
         self.expAvgBeta = [node.beta for node in wasn]
         self.expAvgBetaWext = [node.betaWext for node in wasn]
-        self.firstDANSEupdateRefSensor = None  # init
+        self.firstDANSEupdateRefSensor = 0.  # init
         self.flagIterations = [[] for _ in range(self.nNodes)]
         self.flagInstants = [[] for _ in range(self.nNodes)]
         self.fullVAD = [node.vadCombined for node in wasn]
@@ -1267,8 +1267,7 @@ class DANSEvariables(base.DANSEparameters):
             (but still compute the desired signal estimate!)
         """
 
-        if k == self.referenceSensor and\
-            self.nInternalFilterUps[k] == 0:
+        if k == self.referenceSensor and self.nInternalFilterUps[k] == 0:
             # Save first update instant (for, e.g., SRO plot)
             self.firstDANSEupdateRefSensor = tCurr
 
@@ -1329,12 +1328,6 @@ class DANSEvariables(base.DANSEparameters):
         # Update iteration index
         self.i[k] += 1
 
-
-        # if not np.allclose(self.wCentr[k], self.wSSBC[k]):
-        #     print('!! dCentr != dSSBC !!')
-        # if not np.allclose(self.dCentr, self.dSSBC):
-        #     print('!! dCentr != dSSBC !!')
-
     def update_using_pregiven_filters(self, k):
         """Update filters using pre-given coefficients."""
         self.wTilde[k][:, self.i[k] + 1, :] =\
@@ -1371,14 +1364,7 @@ class DANSEvariables(base.DANSEparameters):
             for q in allNodeIndices if q != k]
 
     def compute_batch_mse_cost(self, k):
-        """
-        Compute the batch MSE cost based on the current filter estimate.
-
-        Parameters
-        ----------
-        k : int
-            Node index.
-        """
+        """Compute the batch MSE cost based on the current filter estimate."""
         # Compute batch-filtered signals
         dhatSTFT = np.einsum(
             'ik,ijk->ij',
@@ -1438,11 +1424,6 @@ class DANSEvariables(base.DANSEparameters):
         covariance matrices. 
         >> Addition on 13.12.2022:
         -If GEVD is to be performed: explicitly check full-rank property.
-
-        Parameters
-        ----------
-        k : int
-            Node index.
         """
         def _is_hermitian_and_posdef(x):
             """Finds out whether 3D complex matrix `x` is Hermitian along 
@@ -1648,10 +1629,6 @@ class DANSEvariables(base.DANSEparameters):
         else:
             currWTilde = self.wTilde[k][:, self.i[k] + 1, :self.nLocalMic[k]]
 
-        # self.wTildeExt[k][:, self.i[k] + 1, :] =\
-        #     self.wTildeExt[k][:, self.i[k], :]  
-
-        # return 0
         if self.onlyBroadcastRefSensorSigs:
             # Ensure that only the reference signal of each node is
             # broadcasted (overrides every other related parameters).
@@ -1669,14 +1646,13 @@ class DANSEvariables(base.DANSEparameters):
                 self.wTildeExt[k][:, self.i[k] + 1, :] =\
                     self.wTildeExt[k][:, self.i[k], :]
             else:
-                if self.noExternalFilterRelaxation or 'seq' in self.nodeUpdating:
+                if self.noExternalFilterRelaxation:# or 'seq' in self.nodeUpdating:
                     # No relaxation (i.e., no "external" filters)
                     self.wTildeExt[k][:, self.i[k] + 1, :] = currWTilde
                 else:   # Simultaneous or asynchronous node-updating
                     self.wTildeExt[k][:, self.i[k] + 1, :] =\
                         self.expAvgBetaWext[k] * self.wTildeExt[k][:, self.i[k], :] +\
                         (1 - self.expAvgBetaWext[k]) * self.wTildeExtTarget[k]
-                    
                     if t is None:
                         updateFlag = True  # update regardless of time elapsed
                     else:   
@@ -1724,11 +1700,6 @@ class DANSEvariables(base.DANSEparameters):
 
         # Initialise flags vector (overflow: >0; underflow: <0; or none: ==0)
         bufferFlags = np.zeros(len(self.neighbors[k]))
-
-        # if tiFlag:
-        #     buf = self.
-        # else:
-        #     buf = self.zBuffer[k]
 
         for idxq in range(len(self.neighbors[k])):
 
@@ -2083,7 +2054,7 @@ class DANSEvariables(base.DANSEparameters):
                 Current outer product.
             """
             # Outer product and mean
-            yyH = 1 / y.shape[1] * np.einsum('ij,ik->ijk', y, y.conj())
+            yyH = np.einsum('ij,ik->ijk', y, y.conj())
             if vad:
                 Ryy = beta * Ryy + (1 - beta) * yyH
             else:
@@ -2109,10 +2080,6 @@ class DANSEvariables(base.DANSEparameters):
             )
             # Save
             self.yyH[k][self.i[k], :, :, :] = yyHcurr
-
-            if k == 0 and currVad:
-                stop = 1
-
             # Conditional updating of Ryy and Rnn
             self.conditional_scm_updating(
                 k, currVad, RyyCurr, RnnCurr, yyHcurr, 'danse'
@@ -2318,6 +2285,9 @@ class DANSEvariables(base.DANSEparameters):
                     rank=rank
                 )
                 self.nInternalFilterUps[k] += 1
+            else:
+                self.wTilde[k][:, self.i[k] + 1, :] =\
+                    self.wTilde[k][:, self.i[k], :]
             # Update centralised filter
             if self.computeCentralised and self.startUpdatesCentr[k] and\
                 self.simType != 'batch':
@@ -2337,29 +2307,35 @@ class DANSEvariables(base.DANSEparameters):
                     self.wCentr[k][:, self.i[k] + 1, :] =\
                         self.wCentr[k][:, self.i[k], :]
             # Update local filter
-            if self.computeLocal and self.startUpdatesLocal[k] and\
-                self.simType != 'batch':
-                # Do not update in "batch" mode --> this is done separately
-                # in the `BatchDANSEvariables` class.
-                self.wLocal[k][:, self.i[k] + 1, :] = filter_update_fcn(
-                    self.Ryylocal[k],
-                    self.Rnnlocal[k],
-                    refSensorIdx=self.referenceSensor,
-                    rank=rank
-                )
-                self.nLocalFilterUps[k] += 1
+            if self.computeLocal:
+                if self.startUpdatesLocal[k] and self.simType != 'batch':
+                    # Do not update in "batch" mode --> this is done separately
+                    # in the `BatchDANSEvariables` class.
+                    self.wLocal[k][:, self.i[k] + 1, :] = filter_update_fcn(
+                        self.Ryylocal[k],
+                        self.Rnnlocal[k],
+                        refSensorIdx=self.referenceSensor,
+                        rank=rank
+                    )
+                    self.nLocalFilterUps[k] += 1
+                else:
+                    self.wLocal[k][:, self.i[k] + 1, :] =\
+                        self.wLocal[k][:, self.i[k], :]
             # Update single-sensor broadcast filter
-            if self.computeSingleSensorBroadcast and self.startUpdatesSSBC[k] and\
-                self.simType != 'batch':
-                # Do not update in "batch" mode --> this is done separately
-                # in the `BatchDANSEvariables` class.
-                self.wSSBC[k][:, self.i[k] + 1, :] = filter_update_fcn(
-                    self.RyySSBC[k],
-                    self.RnnSSBC[k],
-                    refSensorIdx=self.referenceSensor,
-                    rank=rank
-                )
-                self.nSSBCFilterUps[k] += 1
+            if self.computeSingleSensorBroadcast:
+                if self.startUpdatesSSBC[k] and self.simType != 'batch':
+                    # Do not update in "batch" mode --> this is done separately
+                    # in the `BatchDANSEvariables` class.
+                    self.wSSBC[k][:, self.i[k] + 1, :] = filter_update_fcn(
+                        self.RyySSBC[k],
+                        self.RnnSSBC[k],
+                        refSensorIdx=self.referenceSensor,
+                        rank=rank
+                    )
+                    self.nSSBCFilterUps[k] += 1
+                else:
+                    self.wSSBC[k][:, self.i[k] + 1, :] =\
+                        self.wSSBC[k][:, self.i[k], :]
 
     def update_sro_estimates(self, k, fs):
         """
@@ -2752,7 +2728,7 @@ class TIDANSEvariables(DANSEvariables):
         self.normFactGk = np.ones((self.nPosFreqs,), dtype=complex)
             # ^^^ normalisation factor for in-network sum, avoiding divergence
             # (regularization term). Defined in inner functions.
-        self.lastNormFactGkUpdate = 1.0  # last time instant when `normFactGk`
+        self.lastNormFactGkUpdate = 0.0  # last time instant when `normFactGk`
             # was updated.
         self.normFactGkUpdateEvery = 0.0  # update `normFactGk` every 0.1 s.
         # ------- SRO compensation variables -------
@@ -2950,11 +2926,15 @@ class TIDANSEvariables(DANSEvariables):
         # Compensate for SROs
         # skipUpdate = self.ti_compensate_sros(k, tCurr)
 
+        if not self.oVADframes[k][self.i[k]]:
+            stop = 1
+
         if self.preGivenFilters.active:
             self.update_using_pregiven_filters(k)
         else:
             # TI-DANSE-specific: normalization to avoid divergence
             # self.normalize_scm_entries(k, bypassUpdateEventMat, tCurr)
+            self.normalize_etaMk_entries(k)
             # Ryy and Rnn updates (including centralised / local, if needed)
             self.spatial_covariance_matrix_update(k)
             # Check quality of covariance matrix estimates 
@@ -2977,7 +2957,7 @@ class TIDANSEvariables(DANSEvariables):
                 print('!! User-forced bypass of filter coefficients updates !!')
 
             # Normalize the filter coefficients (to avoid divergence)
-            self.normalize_filter_coeff(k, bypassUpdateEventMat, tCurr)
+            # self.normalize_filter_coeff(k, bypassUpdateEventMat, tCurr)
 
             # Update external filters (for broadcasting)
             self.update_external_filters(k, tCurr, tiDANSEflag=True)
@@ -2994,16 +2974,29 @@ class TIDANSEvariables(DANSEvariables):
 
     def normalize_filter_coeff(self, k, bypassUpdateEventMat, tCurr):
         if 'seq' in self.nodeUpdating:
-            if k == 0:
-                if not bypassUpdateEventMat and\
-                    tCurr - self.lastNormFactGkUpdate >= self.normFactGkUpdateEvery:
-                    # This is the updating node -> the normalization factors
-                    # are the current $g_k$ filter coefficients.
-                    self.normFactGk = self.wTilde[k][:, self.i[k] + 1, -1]
-                    self.lastNormFactGkUpdate = tCurr
-                    # Normalize the filter entries=
-                    self.wTilde[k][:, self.i[k] + 1, -1] /= self.normFactGk
-    
+            if not bypassUpdateEventMat and\
+                tCurr - self.lastNormFactGkUpdate >= self.normFactGkUpdateEvery:
+                # This is the updating node -> the normalization factors
+                # are the current $g_k$ filter coefficients.
+                self.normFactGk = self.wTilde[k][:, self.i[k] + 1, -1]
+                self.lastNormFactGkUpdate = tCurr
+        # Normalize the filter entries
+        # self.wTilde[k][:, self.i[k] + 1, -1] /= self.normFactGk
+        self.wTilde[k][:, self.i[k] + 1, -1] /= 100
+
+    def normalize_etaMk_entries(self, k):
+        """Normalize the entries of $\eta_{-k}$."""
+        if not self.oVADframes[k][self.i[k]]:  # noise-only period
+            etaHat = np.fft.fft(
+                self.eta[k] * self.winWOLAanalysis,
+                self.DFTsize,
+                axis=0
+            ) / np.sqrt(self.Ns)
+            # Normalize the entries of `yTilde`
+            for kappa in range(self.nPosFreqs):
+                normFact = np.abs(etaHat[kappa])
+                self.yTildeHat[k][kappa, self.i[k], -1] /= normFact
+        
     def normalize_scm_entries(self, k, bypassUpdateEventMat, tCurr):
         """Normalize the SCM entries of node k appropriately
         to avoid divergence in TI-DANSE."""

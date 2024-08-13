@@ -130,7 +130,6 @@ class BatchDANSEvariables(DANSEvariables):
         using the latest filters.
         """
         self.yTildeBatch[k] = self.get_y_tilde_batch(k)
-        
         self.Ryytilde[k], self.Rnntilde[k] = update_covmats_batch(
             self.yTildeBatch[k],
             self.oVADframes[k]
@@ -218,7 +217,6 @@ class BatchTIDANSEvariables(BatchDANSEvariables):
         # `batch_update_danse_covmats` works for TI-DANSE too,
         # as it detects presence of field `eta` and acts accordingly.
         self.batch_update_danse_covmats(k)
-        stop = 1
 
     def init_for_adhoc_topology(self):
         TIDANSEvariables.init_for_adhoc_topology(self)

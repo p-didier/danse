@@ -2,6 +2,7 @@ import os
 import re
 import copy
 import yaml
+import tqdm
 import librosa
 import resampy
 import numpy as np
@@ -341,7 +342,7 @@ def build_room(p: classes.WASNparameters):
     # Create room
     room = pra.ShoeBox(
         p=p.rd,
-        fs=p.fs,
+        fs=int(p.fs),
         max_order=max_order,
         air_absorption=False,
         materials=pra.Material(e_absorption),
@@ -1120,7 +1121,7 @@ def oracleVAD(x, tw, thrs, Fs):
 
     # Compute VAD
     oVAD = np.zeros(n)
-    for ii in range(n):
+    for ii in tqdm(range(n)):
         # Extract chunk
         idxBeg = int(np.amax([ii - Nw // 2, 0]))
         idxEnd = int(np.amin([ii + Nw // 2, len(x)]))
