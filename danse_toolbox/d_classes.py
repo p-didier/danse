@@ -251,6 +251,8 @@ class TestParameters:
             else:
                 raise ValueError('Network-wide SRO compensation strategy not supported in fully-connected WASNs. Aborting.')
         # Export checks
+        if not self.exportParams.metricsPlot:
+            self.exportParams.metricsFile = False
         if self.danseParams.simType == 'batch':
             self.exportParams.filters = False
             self.exportParams.filterNormsPlot = False
@@ -1314,9 +1316,6 @@ class DANSEvariables(base.DANSEparameters):
                 print('!! User-forced bypass of filter coefficients updates !!')
             # Update external filters (for broadcasting)
             self.update_external_filters(k, tCurr)
-
-        if self.oVADframes[k][self.i[k]]:
-            stop = 1
 
         # Update SRO estimates
         self.update_sro_estimates(k, fs)
@@ -2647,7 +2646,8 @@ class DANSEvariables(base.DANSEparameters):
                 self.dCentr[self.idxEndChunk -\
                     self.Ns:self.idxEndChunk, k] = dChunk
                 
-            if self.i[k] > 70:
+            if self.i[k] > 62 and k == 0:
+            # if k == 0:
                 stop = 1
         
         if self.computeLocal:

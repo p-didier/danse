@@ -134,15 +134,29 @@ def danse_it_up(
         # (centralized, no SROs, batch)
         if p.exportParams.bestPerfReference:
             outBP = core.get_best_perf(*args)
-        # Compute signals for SNR computation
-        sigsSnr = core.generate_signals_for_snr_computation(
-            p.danseParams,
-            dv,
-            wasnObj,
-            danse_function,
-            p.exportParams.bestPerfReference,
-            wCentrBatch=outBP.wCentr if p.exportParams.bestPerfReference else None
-        )
+        if p.exportParams.metricsPlot:
+            # Compute signals for SNR computation
+            sigsSnr = core.generate_signals_for_snr_computation(
+                p.danseParams,
+                dv,
+                wasnObj,
+                danse_function,
+                p.exportParams.bestPerfReference,
+                wCentrBatch=outBP.wCentr if p.exportParams.bestPerfReference else None
+            )
+        else:
+            # Keep same format, but empty (save computation time)
+            sigsSnr = {}
+            sigsSnr['n'] = None
+            sigsSnr['n_c'] = None
+            sigsSnr['n_l'] = None
+            sigsSnr['n_ssbc'] = None
+            sigsSnr['s'] = None
+            sigsSnr['s_c'] = None
+            sigsSnr['s_l'] = None
+            sigsSnr['s_ssbc'] = None
+            sigsSnr['n_bp'] = None
+            sigsSnr['s_bp'] = None
         # Format the output for post-processing (also updating the WASN object)
         out, wasnObj = core.format_output(
             p.danseParams,

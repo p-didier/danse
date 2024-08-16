@@ -17,6 +17,7 @@ import tests.battery20231009_filtnorms_asfctofSROs
 import tests.battery20231009_pp
 import tests.battery20231013_perf_asfctofSelfNoise
 import tests.battery20231013_pp
+import tests.battery20240813_sro_demo_siggen
 
 CONFIG_FILES_FOLDER = f'{Path(__file__).parent}/config_files'
 
@@ -24,9 +25,9 @@ def main(configFilesFolder: str=CONFIG_FILES_FOLDER):
 
     t0 = time.time()
 
-    tests.sandbox.main(
-        cfgFilename=f'{configFilesFolder}/sandbox_config.yaml',
-    )
+    # tests.sandbox.main(
+    #     cfgFilename=f'{configFilesFolder}/sandbox_config.yaml',
+    # )
 
     # tests.battery20231013_perf_asfctofSelfNoise.main()
     # tests.battery20231013_pp.main()
@@ -45,6 +46,8 @@ def main(configFilesFolder: str=CONFIG_FILES_FOLDER):
     #     exportFolder='./danse/out/battery20230919_perf_asfctofL_v3_20s',
     # )
     # tests.battery20230919_pp.main(dataFolder='./danse/out/battery20230919_perf_asfctofL_v2')
+    
+    tests.battery20240813_sro_demo_siggen.main()
 
     print(f'\n\nTotal runtime: {str(datetime.timedelta(seconds=time.time() - t0))}.')
 

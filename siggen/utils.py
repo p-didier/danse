@@ -2,12 +2,12 @@ import os
 import re
 import copy
 import yaml
-import tqdm
 import librosa
 import resampy
 import numpy as np
 import pickle, gzip
 from . import classes
+from tqdm import tqdm
 from numba import njit
 import scipy.signal as sig
 import pyroomacoustics as pra

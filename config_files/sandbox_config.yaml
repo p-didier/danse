@@ -1,12 +1,12 @@
 seed: 0
 #
 exportParams:
-  exportFolder: .\danse\out/20240813_tests/test1
+  exportFolder: out/20240813_tests/test4_sros_2nodes
   metricsInPlots:
   - snr
   - sisnr
   - estoi
-  sroEstimPerfPlot: true
+  sroEstimPerfPlot: false
   conditionNumberPlot: false
   mseBatchPerfPlot: false
   bypassGlobalPickleExport: true  # if true, do not export the big outputs file for further post-processing
@@ -24,6 +24,7 @@ danseParams:
   # simType: batch
   # nodeUpdating: asy
   nodeUpdating: seq
+  # nodeUpdating: sim
   # noExternalFilterRelaxation: true
   noExternalFilterRelaxation: false
   computeLocal: true
@@ -115,10 +116,10 @@ wasnParams:
   # nSensorPerNode: '[1, 1, 1, 1]'
   # nSensorPerNode: '[5,5,5,5]'
   # nSensorPerNode: '[2, 3]'
-  nSensorPerNode: '[1, 3, 2, 5]'
+  # nSensorPerNode: '[1, 3, 2, 5]'
   # nSensorPerNode: '[2,2,2,2,2]'
   # nSensorPerNode: '[2, 1]'
-  # nSensorPerNode: '[1, 1]'
+  nSensorPerNode: '[1, 1]'
   # nSensorPerNode: '[1, 4]'
   # nSensorPerNode: '[2, 2, 1]'
   # nSensorPerNode: '[1, 2, 3]'
@@ -128,25 +129,25 @@ wasnParams:
   snrBasis: at_mic_0
   snr: 5
   #
-  SROperNode: '[0]'  # [PPM]
+  # SROperNode: '[0]'  # [PPM]
   # SROperNode: '[0, 40]'  # [PPM]
-  # SROperNode: '[0, 200]'  # [PPM]
-  # SROperNode: '[0, 100, 200]'  # [PPM]
+  SROperNode: '[0, 200]'  # [PPM]
+  # SROperNode: '[0, 100, 200, 400]'  # [PPM]
   #
   signalType: from_file
   desiredSignalFile:
   # - .\danse\tests\sigs\01_speech\speech2_16000Hz_shortPauses.wav
   # - .\danse\tests\sigs\01_speech\speech2_16000Hz_veryShortPauses.wav
-  - .\danse\tests\sigs\01_speech\speech2_16000Hz.wav
+  - tests\sigs\01_speech\speech2_16000Hz.wav
   # - .\danse\tests\sigs\01_speech\speech2_16000Hz_bigPause.wav
   nDesiredSources: 1
   nNoiseSources: 1
   # noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
   noiseSignalFile:
-  - .\\danse\\tests\\sigs\\02_noise\\ssn\\ssn_3729-6852-0026.wav
-  - .\\danse\\tests\\sigs\\02_noise\\ssn\\ssn_2830-3980-0002.wav
+  - tests\\sigs\\02_noise\\ssn\\ssn_3729-6852-0026.wav
+  - tests\\sigs\\02_noise\\ssn\\ssn_2830-3980-0002.wav
   referenceSensor: 0
-  vadFilesFolder: .\danse\vad_files
+  vadFilesFolder: vad_files
   #
   topologyParams:
     # topologyType: user-defined

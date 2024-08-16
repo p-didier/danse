@@ -1,0 +1,165 @@
+seed: 0
+#
+exportParams:
+  exportFolder: out/20240813_battery
+  metricsInPlots:
+  - snr
+  - sisnr
+  - estoi
+  sroEstimPerfPlot: false
+  conditionNumberPlot: false
+  mseBatchPerfPlot: false
+  filterNormsPlot: false
+  metricsPlot: false
+  convergencePlot: false
+  danseOutputsFile: false
+  bypassGlobalPickleExport: true  # if true, do not export the big outputs file for further post-processing
+danseParams:
+  updateEvery: 1  # update DANSE filter every `updateEvery` frames
+  # winWOLAanalysisType: rect
+  # winWOLAsynthesisType: rect
+  # noFusionAtSingleSensorNodes: true
+  noFusionAtSingleSensorNodes: false
+  startUpdatesAfterAtLeast: 0 # [s]
+  maxBatchUpdates: 20
+  performGEVD: true
+  # performGEVD: false
+  simType: online
+  # simType: batch
+  # nodeUpdating: asy
+  nodeUpdating: seq
+  # nodeUpdating: sim
+  # noExternalFilterRelaxation: true
+  noExternalFilterRelaxation: false
+  computeLocal: true
+  computeCentralised: true
+  computeSingleSensorBroadcast: false
+  # computeLocal: false
+  # computeCentralised: false
+  # filterInitType: selectFirstSensor
+  filterInitType: random
+  # filterInitType: fixedValue
+  # filterInitFixedValue: 1
+  # covMatRandomInitScaling: 0  # <-- init SCMs as zeros
+  # use1stFrameAsBasis: true  # <-- init SCMs using first available frame
+  use1stFrameAsBasis: false  # <-- init SCMs using first available frame
+  #
+  WOLAovlp: 0.5
+  DFTsize: 1024
+  t_expAvg50p: 1
+  t_expAvg50pExternalFilters: 1
+  # forcedBeta: 0.0  # <-- if uncommented, bypasses `t_expAvg50p`
+  # forcedBetaExternalFilters: 0.7  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`. If == 0, no exp. averaging.
+  forcedBetaExternalFilters: 0  # <-- if uncommented, bypasses `t_expAvg50pExternalFilters`. If == 0, no exp. averaging.
+  # timeBtwExternalFiltUpdates: 0.5  # [s]
+  timeBtwExternalFiltUpdates: 0.
+  # alphaExternalFilters: 1  # if == 1, no relaxation, `wTildeExtTarget == wTildeExt`.
+  alphaExternalFilters: 0.5  # if == 1, no relaxation, `wTildeExtTarget == wTildeExt`.
+  onlyBroadcastRefSensorSigs: false # /!\ /!\ /!\ /!\
+  covMatInitType: fully_random
+  printoutsAndPlotting:
+    printout_profiler: false
+    printout_externalFilterUpdate: true
+  # vvvvvvvvv Metrics vvvvvvvvv
+  # startComputeMetricsAt: after_5s
+  # startComputeMetricsAt: after_10s
+  # startComputeMetricsAt: after_15s
+  # startComputeMetricsAt: after_20s
+  startComputeMetricsAt: after_200ms
+  # vvvvvvvvv SRO-related vvvvvvvvv
+  # broadcastType: wholeChunk
+  broadcastType: fewSamples
+  # broadcastLength: 512   # for Ns, set 512. Other possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+  broadcastLength: 32   # for Ns, set 512. Other possible values: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+  # broadcastLength: 2
+  efficientSpSBC: true
+  # efficientSpSBC: false
+  upTDfilterEvery: 1.
+  #
+  # compensateSROs: true
+  compensateSROs: false
+  includeFSDflags: false
+  #
+  estimateSROs: Oracle
+  # estimateSROs: CohDrift
+  compensationStrategy: node-specific
+  cohDrift:
+    alpha: 0.95
+    segLength: 10
+    estEvery: 1
+    startAfterNups: 11
+    estimationMethod: gs
+    alphaRps: .05
+    loop: open  # `open` == as in OJSP paper
+referenceSensor: 0  # Python-index of reference sensor in DANSE
+wasnParams:
+  trueRoom: true
+  # Diffuse noise params
+  diffuseNoise: false
+  #
+  VADenergyDecrease_dB: 40
+  VADwinLength: 0.04  # [s]
+  vadMinProportionActive: 0.25
+  rd: '[5, 5, 5]'
+  # rd: '[.005, .005, .005]'
+  # minDistToWalls: 0
+  minDistToWalls: 0.5
+  # interSensorDist: 0.0
+  interSensorDist: 0.05
+  sigDur: 60  # [s]
+  # sigDur: 1  # [s]
+  # selfnoiseSNR: 999999999  # [dB]
+  # selfnoiseSNR: 99  # [dB]
+  # selfnoiseSNR: 60  # [dB]
+  selfnoiseSNR: 15  # [dB]
+  # selfnoiseSNR: 5  # [dB]
+  layoutType: random
+  # layoutType: all_nodes_in_center
+  # minDistToWalls: 0.5
+  t60: 0.0  # [s]
+  # nSensorPerNode: '[1, 1, 1]'
+  # nSensorPerNode: '[1, 1, 1, 1]'
+  # nSensorPerNode: '[5,5,5,5]'
+  # nSensorPerNode: '[2, 3]'
+  # nSensorPerNode: '[1, 3, 2, 5]'
+  # nSensorPerNode: '[2,2,2,2,2]'
+  # nSensorPerNode: '[2, 1]'
+  nSensorPerNode: '[1, 1]'
+  # nSensorPerNode: '[1, 4]'
+  # nSensorPerNode: '[2, 2, 1]'
+  # nSensorPerNode: '[1, 2, 3]'
+  # nSensorPerNode: '[1, 2, 3, 4]'
+  # nSensorPerNode: '[2, 2, 2, 2]'
+  #
+  snrBasis: at_mic_0
+  snr: 5
+  #
+  # SROperNode: '[0]'  # [PPM]
+  # SROperNode: '[0, 40]'  # [PPM]
+  SROperNode: '[0, 200]'  # [PPM]
+  # SROperNode: '[0, 100, 200, 400]'  # [PPM]
+  #
+  signalType: from_file
+  desiredSignalFile:
+  # - .\danse\tests\sigs\01_speech\speech2_16000Hz_shortPauses.wav
+  # - .\danse\tests\sigs\01_speech\speech2_16000Hz_veryShortPauses.wav
+  - tests\sigs\01_speech\speech2_16000Hz.wav
+  # - .\danse\tests\sigs\01_speech\speech2_16000Hz_bigPause.wav
+  nDesiredSources: 1
+  nNoiseSources: 1
+  # noiseSignalFile: loadfrom danse/tests/sigs/02_noise/ssn
+  noiseSignalFile:
+  - tests\\sigs\\02_noise\\ssn\\ssn_3729-6852-0026.wav
+  - tests\\sigs\\02_noise\\ssn\\ssn_2830-3980-0002.wav
+  referenceSensor: 0
+  vadFilesFolder: vad_files
+  #
+  topologyParams:
+    # topologyType: user-defined
+    topologyType: fully-connected
+    commDistance: 4.0
+    plotTopo: false
+    seed: 12348
+    # userDefinedTopo: '[[1, 1], [1, 1]]'
+    userDefinedTopo: '[[1, 1, 0], [1, 1, 1], [0, 1, 1]]'
+    # userDefinedTopo: '[[1, 1, 0, 0], [1, 1, 1, 0], [0, 1, 1, 1], [0, 0, 1, 1]]'
